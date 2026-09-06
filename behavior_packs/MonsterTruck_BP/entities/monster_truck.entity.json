@@ -30,6 +30,43 @@
         "value": 0.40,
         "max": 0.40
       },
+      "minecraft:movement.basic": {
+        "max_turn": 18.0
+      },
+      "minecraft:navigation.walk": {
+        "can_path_over_water": false,
+        "avoid_water": true,
+        "avoid_damage_blocks": true
+      },
+      "minecraft:rideable": {
+        "seat_count": 1,
+        "family_types": [
+          "player"
+        ],
+        "controlling_seat": 0,
+        "interact_text": "action.interact.ride.horse",
+        "dismount_mode": "default",
+        "seats": {
+          "position": [
+            0.0,
+            1.75,
+            0.20
+          ],
+          "third_person_camera_radius": 6.0
+        }
+      },
+      "minecraft:input_ground_controlled": {},
+      "minecraft:variable_max_auto_step": {
+        "base_value": 1.0,
+        "controlled_value": 1.0,
+        "jump_prevented_value": 0.5625
+      },
+      "minecraft:friction_modifier": {
+        "value": 1.15
+      },
+      "minecraft:knockback_resistance": {
+        "value": 1.0
+      },
       "minecraft:nameable": {}
     }
   }
