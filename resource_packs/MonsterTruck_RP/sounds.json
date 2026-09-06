@@ -1,0 +1,13 @@
+{
+  "entity_sounds": {
+    "entities": {
+      "blake:monster_truck": {
+        "volume": 1.0,
+        "pitch": 1.0,
+        "events": {
+          "ambient": "blake.monster_truck.idle"
+        }
+      }
+    }
+  }
+}

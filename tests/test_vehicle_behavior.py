@@ -13,11 +13,11 @@ def test_rideable_and_control_components():
     # Rideable
     assert "minecraft:rideable" in comps, "Entity must have minecraft:rideable"
     rideable = comps["minecraft:rideable"]
-    assert rideable["seat_count"] == 1
+    assert rideable["seat_count"] == 2
     assert rideable["controlling_seat"] == 0
     assert "player" in rideable["family_types"]
     assert isinstance(rideable["seats"], list), "seats must be a list of seat objects"
-    assert rideable["seats"][0]["position"] == [0.0, 1.75, 0.20]
+    assert rideable["seats"][0]["position"] == [-0.55, 1.75, 0.20]
     assert rideable["seats"][0]["third_person_camera_radius"] == 6.0
     
     # Direct ground control

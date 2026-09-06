@@ -1,0 +1,43 @@
+{
+  "format_version": "1.12.0",
+  "minecraft:recipe_shaped": {
+    "description": {
+      "identifier": "blake:monster_truck_recipe"
+    },
+    "tags": [
+      "crafting_table"
+    ],
+    "pattern": [
+      "IGI",
+      "MFS",
+      "CRC"
+    ],
+    "key": {
+      "I": {
+        "item": "minecraft:iron_block"
+      },
+      "G": {
+        "item": "minecraft:glass"
+      },
+      "M": {
+        "item": "minecraft:iron_ingot"
+      },
+      "F": {
+        "item": "minecraft:blast_furnace"
+      },
+      "S": {
+        "item": "minecraft:saddle"
+      },
+      "C": {
+        "item": "minecraft:coal_block"
+      },
+      "R": {
+        "item": "minecraft:redstone_block"
+      }
+    },
+    "result": {
+      "item": "blake:monster_truck_spawn_egg",
+      "count": 1
+    }
+  }
+}

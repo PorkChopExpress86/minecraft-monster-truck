@@ -1,0 +1,27 @@
+{
+  "format_version": "1.14.0",
+  "sound_definitions": {
+    "blake.monster_truck.idle": {
+      "category": "neutral",
+      "sounds": [
+        {
+          "name": "sounds/monster_truck/engine_idle",
+          "volume": 0.6,
+          "pitch": 1.0,
+          "stream": false
+        }
+      ]
+    },
+    "blake.monster_truck.drive": {
+      "category": "neutral",
+      "sounds": [
+        {
+          "name": "sounds/monster_truck/engine_drive",
+          "volume": 0.85,
+          "pitch": 1.0,
+          "stream": false
+        }
+      ]
+    }
+  }
+}

@@ -9,14 +9,14 @@
     "client_entity_format_version": "1.26.0"
   },
   "vehicle": {
-    "seat_count": 1,
+    "seat_count": 2,
     "movement_speed": 0.40,
     "max_turn_degrees_per_tick": 18.0,
     "collision_width_blocks": 2.25,
     "collision_height_blocks": 2.15,
     "auto_step_blocks": 1.0,
     "friction_modifier": 1.15,
-    "health": 60
+    "health": 250
   },
   "art": {
     "texture_width": 256,
