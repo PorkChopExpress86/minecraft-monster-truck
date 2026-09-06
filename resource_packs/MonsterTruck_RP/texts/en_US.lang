@@ -1,0 +1,3 @@
+entity.blake:monster_truck.name=Monster Truck
+item.spawn_egg.entity.blake:monster_truck.name=Spawn Monster Truck
+action.interact.ride.horse=Drive

@@ -1,0 +1,36 @@
+{
+  "format_version": "1.26.20",
+  "minecraft:entity": {
+    "description": {
+      "identifier": "blake:monster_truck",
+      "is_spawnable": true,
+      "is_summonable": true,
+      "is_experimental": false
+    },
+    "components": {
+      "minecraft:type_family": {
+        "family": [
+          "monster_truck",
+          "vehicle"
+        ]
+      },
+      "minecraft:health": {
+        "value": 60,
+        "max": 60
+      },
+      "minecraft:collision_box": {
+        "width": 2.25,
+        "height": 2.15
+      },
+      "minecraft:physics": {
+        "has_collision": true,
+        "has_gravity": true
+      },
+      "minecraft:movement": {
+        "value": 0.40,
+        "max": 0.40
+      },
+      "minecraft:nameable": {}
+    }
+  }
+}

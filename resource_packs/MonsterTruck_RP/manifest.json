@@ -1,0 +1,17 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Monster Truck Resources",
+    "description": "Resources for the Monster Truck vehicle add-on",
+    "uuid": "f6fc3675-bf88-45bd-9348-2c75d1e8573e",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 26, 40]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "4be18afc-d847-44a0-a51c-99f91b84db21",
+      "version": [1, 0, 0]
+    }
+  ]
+}

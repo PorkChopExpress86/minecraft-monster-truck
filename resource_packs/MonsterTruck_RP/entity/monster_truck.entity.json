@@ -1,0 +1,20 @@
+{
+  "format_version": "1.26.0",
+  "minecraft:client_entity": {
+    "description": {
+      "identifier": "blake:monster_truck",
+      "materials": {
+        "default": "entity_alphatest"
+      },
+      "textures": {
+        "default": "textures/entity/monster_truck"
+      },
+      "geometry": {
+        "default": "geometry.blake.monster_truck"
+      },
+      "render_controllers": [
+        "controller.render.blake.monster_truck"
+      ]
+    }
+  }
+}

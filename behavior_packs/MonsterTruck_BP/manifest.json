@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Monster Truck Behavior",
+    "description": "Behavior for the Monster Truck vehicle add-on",
+    "uuid": "bc617e1c-0c92-4f91-ab9b-241d7ef141d0",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 26, 40]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "a2ddad8e-bdc5-473e-84f7-c698811e89bf",
+      "version": [1, 0, 0]
+    }
+  ],
+  "dependencies": [
+    {
+      "uuid": "f6fc3675-bf88-45bd-9348-2c75d1e8573e",
+      "version": [1, 0, 0]
+    }
+  ]
+}
