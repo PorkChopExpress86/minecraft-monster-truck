@@ -46,14 +46,16 @@
         "controlling_seat": 0,
         "interact_text": "action.interact.ride.horse",
         "dismount_mode": "default",
-        "seats": {
-          "position": [
-            0.0,
-            1.75,
-            0.20
-          ],
-          "third_person_camera_radius": 6.0
-        }
+        "seats": [
+          {
+            "position": [
+              0.0,
+              1.75,
+              0.20
+            ],
+            "third_person_camera_radius": 6.0
+          }
+        ]
       },
       "minecraft:input_ground_controlled": {},
       "minecraft:variable_max_auto_step": {

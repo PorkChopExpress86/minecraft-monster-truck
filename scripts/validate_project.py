@@ -97,24 +97,51 @@ class ProjectValidator:
             desc = bp_entity.get("minecraft:entity", {}).get("description", {})
             if desc.get("identifier") != identifier:
                 self.log_error(f"BP entity identifier mismatch: expected {identifier}, got {desc.get('identifier')}")
+            # Validate seats format
+            comps = bp_entity.get("minecraft:entity", {}).get("components", {})
+            if "minecraft:rideable" in comps:
+                seats = comps["minecraft:rideable"].get("seats")
+                if not isinstance(seats, list):
+                    self.log_error(f"minecraft:rideable.seats must be a list/array, got {type(seats).__name__}")
                 
         if rp_entity:
             desc = rp_entity.get("minecraft:client_entity", {}).get("description", {})
             if desc.get("identifier") != identifier:
                 self.log_error(f"RP client entity identifier mismatch: expected {identifier}, got {desc.get('identifier')}")
 
-    def validate_images(self):
+    def validate_animations_and_geometry(self):
+        geo_path = self.repo_root / "resource_packs" / "MonsterTruck_RP" / "models" / "entity" / "monster_truck.geo.json"
+        anim_path = self.repo_root / "resource_packs" / "MonsterTruck_RP" / "animations" / "monster_truck.animation.json"
+        
+        geo = self.load_json(geo_path)
+        anim = self.load_json(anim_path)
+        
+        if geo and anim:
+            geo_bones = {b["name"] for b in geo.get("minecraft:geometry", [{}])[0].get("bones", [])}
+            for anim_name, a_data in anim.get("animations", {}).items():
+                for bone_name in a_data.get("bones", {}).keys():
+                    if bone_name not in geo_bones:
+                        self.log_error(f"Animated bone '{bone_name}' in {anim_name} not found in geometry bones")
+
+    def validate_images(self, config):
         try:
             from PIL import Image
         except ImportError:
             self.log_warning("Pillow not installed; skipping image dimension verification")
             return
             
+        tex_w = config.get("art", {}).get("texture_width", 256) if config else 256
+        tex_h = config.get("art", {}).get("texture_height", 256) if config else 256
+        egg_w = config.get("art", {}).get("spawn_egg_width", 16) if config else 16
+        egg_h = config.get("art", {}).get("spawn_egg_height", 16) if config else 16
+        icon_w = config.get("art", {}).get("pack_icon_width", 64) if config else 64
+        icon_h = config.get("art", {}).get("pack_icon_height", 64) if config else 64
+        
         image_expectations = [
-            (self.repo_root / "resource_packs" / "MonsterTruck_RP" / "textures" / "entity" / "monster_truck.png", (256, 256)),
-            (self.repo_root / "resource_packs" / "MonsterTruck_RP" / "textures" / "items" / "monster_truck_spawn_egg.png", (16, 16)),
-            (self.repo_root / "behavior_packs" / "MonsterTruck_BP" / "pack_icon.png", (64, 64)),
-            (self.repo_root / "resource_packs" / "MonsterTruck_RP" / "pack_icon.png", (64, 64)),
+            (self.repo_root / "resource_packs" / "MonsterTruck_RP" / "textures" / "entity" / "monster_truck.png", (tex_w, tex_h)),
+            (self.repo_root / "resource_packs" / "MonsterTruck_RP" / "textures" / "items" / "monster_truck_spawn_egg.png", (egg_w, egg_h)),
+            (self.repo_root / "behavior_packs" / "MonsterTruck_BP" / "pack_icon.png", (icon_w, icon_h)),
+            (self.repo_root / "resource_packs" / "MonsterTruck_RP" / "pack_icon.png", (icon_w, icon_h)),
         ]
         
         for path, expected_size in image_expectations:
@@ -133,7 +160,8 @@ class ProjectValidator:
         config = self.validate_config()
         self.validate_manifests()
         self.validate_entities(config)
-        self.validate_images()
+        self.validate_animations_and_geometry()
+        self.validate_images(config)
         
         return self.errors
 
