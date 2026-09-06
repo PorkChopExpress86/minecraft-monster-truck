@@ -1,0 +1,33 @@
+{
+  "namespace": "blake",
+  "entity_id": "monster_truck",
+  "display_name": "Monster Truck",
+  "target": {
+    "edition": "bedrock",
+    "min_engine_version": [1, 26, 40],
+    "behavior_format_version": "1.26.20",
+    "client_entity_format_version": "1.26.0"
+  },
+  "vehicle": {
+    "seat_count": 1,
+    "movement_speed": 0.40,
+    "max_turn_degrees_per_tick": 18.0,
+    "collision_width_blocks": 2.25,
+    "collision_height_blocks": 2.15,
+    "auto_step_blocks": 1.0,
+    "friction_modifier": 1.15,
+    "health": 60
+  },
+  "art": {
+    "texture_width": 256,
+    "texture_height": 256,
+    "spawn_egg_width": 16,
+    "spawn_egg_height": 16,
+    "pack_icon_width": 64,
+    "pack_icon_height": 64
+  },
+  "spawn": {
+    "creative_spawn_egg": true,
+    "natural_spawn_rules": false
+  }
+}
