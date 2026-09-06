@@ -1,0 +1,30 @@
+{
+  "format_version": "1.17.30",
+  "animation_controllers": {
+    "controller.animation.blake.monster_truck.drive": {
+      "initial_state": "idle",
+      "states": {
+        "idle": {
+          "transitions": [
+            {
+              "moving": "query.modified_move_speed > 0.01"
+            }
+          ]
+        },
+        "moving": {
+          "animations": [
+            "wheel_spin",
+            {
+              "body_bob": "query.modified_move_speed > 0.15"
+            }
+          ],
+          "transitions": [
+            {
+              "idle": "query.modified_move_speed <= 0.01"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -12,6 +12,16 @@
       "geometry": {
         "default": "geometry.blake.monster_truck"
       },
+      "animations": {
+        "wheel_spin": "animation.blake.monster_truck.wheel_spin",
+        "body_bob": "animation.blake.monster_truck.body_bob",
+        "drive_controller": "controller.animation.blake.monster_truck.drive"
+      },
+      "scripts": {
+        "animate": [
+          "drive_controller"
+        ]
+      },
       "render_controllers": [
         "controller.render.blake.monster_truck"
       ]
