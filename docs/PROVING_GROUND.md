@@ -4,6 +4,7 @@ This guide documents the verification protocol for testing the Monster Truck Add
 
 ## 1. Installation & World Setup
 
+### Manual Setup
 1. Run the packaging build:
    ```powershell
    python scripts/package_addon.py
@@ -16,6 +17,18 @@ This guide documents the verification protocol for testing the Monster Truck Add
 5. In World Settings:
    - Go to **Behavior Packs** → Activate **Monster Truck Behavior**.
    - Confirm that **Monster Truck Resources** is automatically activated under Resource Packs (linked via dependency UUID).
+
+### Automated In-Game Test Runner
+To automatically sync development files directly into `%LOCALAPPDATA%`, launch Minecraft, execute `/summon blake:monster_truck ~ ~ ~`, take a screenshot, and scan `content_log.txt`:
+```powershell
+# Full in-game test with automated summon and screenshot:
+python scripts/test_in_game.py
+
+# Dry-run verification (sync packs and scan content log without game input):
+python scripts/test_in_game.py --dry-run
+```
+Screenshots are saved automatically to `dist/in_game_tests/`.
+
 
 ## 2. In-Game Proving Ground Obstacle Course
 
@@ -36,7 +49,7 @@ Construct a small proving track with the following obstacles:
 | **1. Spawn Egg Item** | Open Creative inventory → Nature / Spawn Eggs. | Custom 16x16 monster truck silhouette egg appears named "Spawn Monster Truck". | [ ] |
 | **2. Egg Placement** | Right-click / use the spawn egg on a flat surface. | The monster truck entity spawns cleanly with correct geometry and textures. | [ ] |
 | **3. Slash Command** | Run `/summon blake:monster_truck` in chat. | Entity spawns at command coordinates without errors. | [ ] |
-| **4. Driver Mounting** | Approach truck and interact (Right-click / "Drive" prompt). | Player mounts into the cabin seat position [0.0, 1.75, 0.20]. | [ ] |
+| **4. Driver Mounting** | Approach truck and interact (Right-click / "Drive" prompt). | Player mounts into the Driver Seat position [-0.55, 1.75, 0.20] per ADR-0006. | [ ] |
 | **5. Third-Person View** | Switch camera to third-person back view (F5). | Camera is positioned at radius 6.0, showing the complete vehicle clearly. | [ ] |
 | **6. WASD Driving** | Press `W` (forward), `S` (reverse), `A` (steer left), `D` (steer right). | Vehicle moves smoothly with responsive turning capped at 18 deg/tick. | [ ] |
 | **7. 1-Block Auto-Step** | Drive directly forward into a 1-block high stone ledge without jumping. | Vehicle smoothly drives up the ledge via controlled auto-step. | [ ] |
