@@ -5,6 +5,9 @@
       "initial_state": "idle",
       "states": {
         "idle": {
+          "animations": [
+            "engine_idle"
+          ],
           "transitions": [
             {
               "moving": "query.modified_move_speed > 0.01"

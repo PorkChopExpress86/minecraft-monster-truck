@@ -1,6 +1,13 @@
 {
   "format_version": "1.8.0",
   "animations": {
+    "animation.blake.monster_truck.engine_idle": {
+      "loop": true,
+      "animation_length": 1.0,
+      "sound_effects": {
+        "0.0": "blake.monster_truck.idle"
+      }
+    },
     "animation.blake.monster_truck.wheel_spin": {
       "loop": true,
       "animation_length": 1.0,
@@ -37,9 +44,6 @@
     "animation.blake.monster_truck.body_bob": {
       "loop": true,
       "animation_length": 0.5,
-      "sound_effects": {
-        "0.0": "blake.monster_truck.idle"
-      },
       "bones": {
         "body": {
           "position": {
@@ -49,7 +53,7 @@
           },
           "rotation": {
             "0.0": [0, 0, -0.6],
-            "0.25": [0, 0.6],
+            "0.25": [0, 0, 0.6],
             "0.5": [0, 0, -0.6]
           }
         }

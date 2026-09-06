@@ -9,7 +9,7 @@
     ],
     "pattern": [
       "IGI",
-      "MFS",
+      "BFS",
       "CRC"
     ],
     "key": {
@@ -19,7 +19,7 @@
       "G": {
         "item": "minecraft:glass"
       },
-      "M": {
+      "B": {
         "item": "minecraft:iron_ingot"
       },
       "F": {

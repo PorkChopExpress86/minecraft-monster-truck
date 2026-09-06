@@ -51,6 +51,7 @@ def test_crafting_recipe():
     # Check key components
     assert "I" in key and key["I"]["item"] == "minecraft:iron_block"
     assert "G" in key and key["G"]["item"] == "minecraft:glass"
+    assert "B" in key and key["B"]["item"] == "minecraft:iron_ingot"
     assert "F" in key and key["F"]["item"] == "minecraft:blast_furnace"
     assert "S" in key and key["S"]["item"] == "minecraft:saddle"
     assert "C" in key and key["C"]["item"] == "minecraft:coal_block"

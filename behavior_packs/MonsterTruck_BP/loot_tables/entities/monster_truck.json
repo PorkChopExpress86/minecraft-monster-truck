@@ -2,6 +2,11 @@
   "pools": [
     {
       "rolls": 1,
+      "conditions": [
+        {
+          "condition": "killed_by_player"
+        }
+      ],
       "entries": [
         {
           "type": "item",
@@ -18,9 +23,15 @@
     },
     {
       "rolls": {
-        "min": 1,
-        "max": 3
+        "min": 2,
+        "max": 5
       },
+      "conditions": [
+        {
+          "condition": "killed_by_player",
+          "inverse": true
+        }
+      ],
       "entries": [
         {
           "type": "item",
