@@ -30,14 +30,14 @@ def test_stepping_and_movement_tuning():
         
     comps = data["minecraft:entity"]["components"]
     
-    # Auto step 1.0 for monster truck obstacle traversal
+    # Auto step 2.0 for monster truck obstacle traversal
     assert "minecraft:variable_max_auto_step" in comps, "Entity must have minecraft:variable_max_auto_step"
     step = comps["minecraft:variable_max_auto_step"]
-    assert step["controlled_value"] == 1.0
-    assert step["base_value"] == 1.0
+    assert step["controlled_value"] == 2.0
+    assert step["base_value"] == 2.0
     
     # Movement and turn rate
-    assert comps["minecraft:movement"]["value"] == 0.40
+    assert comps["minecraft:movement"]["value"] == 0.55
     assert comps["minecraft:movement.basic"]["max_turn"] == 18.0
     
     # Friction modifier

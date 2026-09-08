@@ -5,9 +5,162 @@
       "identifier": "blake:monster_truck",
       "is_spawnable": true,
       "is_summonable": true,
-      "is_experimental": false
+      "is_experimental": false,
+      "properties": {
+        "blake:color": {
+          "type": "int",
+          "range": [
+            0,
+            5
+          ],
+          "default": 0,
+          "client_sync": true
+        }
+      }
     },
     "components": {
+      "minecraft:interact": {
+        "interactions": [
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:red_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_red",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint red"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:blue_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_blue",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint blue"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:green_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_green",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint green"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:yellow_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_yellow",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint yellow"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:black_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_black",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint black"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:white_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_white",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint white"
+          }
+        ]
+      },
       "minecraft:type_family": {
         "family": [
           "monster_truck",
@@ -15,8 +168,8 @@
         ]
       },
       "minecraft:health": {
-        "value": 250,
-        "max": 250
+        "value": 1000,
+        "max": 1000
       },
       "minecraft:collision_box": {
         "width": 2.25,
@@ -27,8 +180,8 @@
         "has_gravity": true
       },
       "minecraft:movement": {
-        "value": 0.40,
-        "max": 0.40
+        "value": 0.55,
+        "max": 0.55
       },
       "minecraft:movement.basic": {
         "max_turn": 18.0
@@ -51,7 +204,7 @@
             "position": [
               -0.55,
               1.75,
-              0.20
+              0.2
             ],
             "third_person_camera_radius": 6.0
           },
@@ -59,7 +212,7 @@
             "position": [
               0.55,
               1.75,
-              0.20
+              0.2
             ],
             "third_person_camera_radius": 6.0
           }
@@ -67,8 +220,8 @@
       },
       "minecraft:input_ground_controlled": {},
       "minecraft:variable_max_auto_step": {
-        "base_value": 1.0,
-        "controlled_value": 1.0,
+        "base_value": 2.0,
+        "controlled_value": 2.0,
         "jump_prevented_value": 0.5625
       },
       "minecraft:friction_modifier": {
@@ -80,6 +233,104 @@
       "minecraft:nameable": {},
       "minecraft:loot": {
         "table": "loot_tables/entities/monster_truck.json"
+      },
+      "minecraft:damage_sensor": {
+        "triggers": [
+          {
+            "cause": "fall",
+            "deals_damage": "no"
+          },
+          {
+            "cause": "entity_attack",
+            "deals_damage": "yes",
+            "damage_multiplier": 0.25
+          },
+          {
+            "cause": "projectile",
+            "deals_damage": "yes",
+            "damage_multiplier": 0.25
+          },
+          {
+            "cause": "entity_explosion",
+            "deals_damage": "yes",
+            "damage_multiplier": 0.25
+          },
+          {
+            "cause": "block_explosion",
+            "deals_damage": "yes",
+            "damage_multiplier": 0.25
+          }
+        ]
+      },
+      "minecraft:area_attack": {
+        "cause": "entity_attack",
+        "damage_per_tick": 40,
+        "damage_cooldown": 0.5,
+        "damage_range": 0.35,
+        "play_attack_sound": false,
+        "entity_filter": {
+          "all_of": [
+            {
+              "test": "is_moving",
+              "subject": "self",
+              "value": true
+            },
+            {
+              "test": "is_family",
+              "subject": "other",
+              "value": "mob"
+            },
+            {
+              "test": "is_family",
+              "subject": "other",
+              "value": "player",
+              "operator": "!="
+            },
+            {
+              "test": "is_family",
+              "subject": "other",
+              "value": "vehicle",
+              "operator": "!="
+            },
+            {
+              "test": "is_tamed",
+              "subject": "other",
+              "value": false
+            }
+          ]
+        }
+      }
+    },
+    "events": {
+      "blake:paint_red": {
+        "set_property": {
+          "blake:color": 0
+        }
+      },
+      "blake:paint_blue": {
+        "set_property": {
+          "blake:color": 1
+        }
+      },
+      "blake:paint_green": {
+        "set_property": {
+          "blake:color": 2
+        }
+      },
+      "blake:paint_yellow": {
+        "set_property": {
+          "blake:color": 3
+        }
+      },
+      "blake:paint_black": {
+        "set_property": {
+          "blake:color": 4
+        }
+      },
+      "blake:paint_white": {
+        "set_property": {
+          "blake:color": 5
+        }
       }
     }
   }

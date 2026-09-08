@@ -5,14 +5,14 @@
       "loop": true,
       "animation_length": 1.0,
       "sound_effects": {
-        "0.0": "blake.monster_truck.idle"
+        "0.0": { "effect": "engine_idle" }
       }
     },
     "animation.blake.monster_truck.wheel_spin": {
       "loop": true,
       "animation_length": 1.0,
       "sound_effects": {
-        "0.0": "blake.monster_truck.drive"
+        "0.0": { "effect": "engine_drive" }
       },
       "bones": {
         "wheel_fl": {

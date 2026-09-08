@@ -5,7 +5,7 @@ This domain encompasses the vehicle entities, player driving mechanics, audio sy
 ## Language
 
 **Monster Truck**:
-A high-clearance, two-seat ground vehicle entity (`blake:monster_truck`) capable of traversing 1-block stepped terrain with direct WASD player control.
+A high-clearance, two-seat ground vehicle entity (`blake:monster_truck`) capable of traversing 2-block stepped terrain with direct WASD player control.
 _Avoid_: Car, mob, mount, horse
 
 **Driver Seat**:
@@ -25,5 +25,9 @@ The raw metallic materials (such as iron ingots) dropped when a Monster Truck is
 _Avoid_: Junk, debris, trash
 
 **Controlled Auto-Step**:
-The vehicle's mechanical ability to climb full 1-block vertical obstacles while actively driven, without requiring player jump input.
+The vehicle's mechanical ability to climb full 2-block vertical obstacles while actively driven, without requiring player jump input.
 _Avoid_: Jumping, vaulting, flying
+
+**Dedicated Test World**:
+A disposable Minecraft Bedrock world reserved for repeatable verification of the Monster Truck add-on, separate from personal gameplay worlds.
+_Avoid_: Personal world, production world

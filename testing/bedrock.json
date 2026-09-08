@@ -1,0 +1,21 @@
+{
+  "name": "Monster Truck",
+  "entity_id": "blake:monster_truck",
+  "behavior_pack": "behavior_packs/MonsterTruck_BP",
+  "resource_pack": "resource_packs/MonsterTruck_RP",
+  "harness_uuid": "b06f3b8a-1a26-4f26-a3aa-76c2c480ad35",
+  "harness_module_uuid": "acf83677-0a76-42e8-bf6e-d84993212967",
+  "script_api_version": "2.0.0",
+  "required_components": ["minecraft:rideable", "minecraft:health"],
+  "expected_seat_count": 2,
+  "showcase": true,
+  "observe_seconds": 60,
+  "timeout_seconds": 120,
+  "settle_seconds": 5,
+  "static_timeout_seconds": 300,
+  "static_commands": [
+    ["{python}", "-m", "pytest", "-q", "--junitxml={report_dir}/pytest.xml"],
+    ["{python}", "scripts/validate_project.py"],
+    ["{python}", "scripts/package_addon.py"]
+  ]
+}

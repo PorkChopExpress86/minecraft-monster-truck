@@ -9,8 +9,20 @@
         }
       ],
       "textures": [
-        "Texture.default"
-      ]
+        "Array.colors[query.property('blake:color')]"
+      ],
+      "arrays": {
+        "textures": {
+          "Array.colors": [
+            "Texture.default",
+            "Texture.blue",
+            "Texture.green",
+            "Texture.yellow",
+            "Texture.black",
+            "Texture.white"
+          ]
+        }
+      }
     }
   }
 }

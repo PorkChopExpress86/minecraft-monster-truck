@@ -1,23 +1,19 @@
-# Monster Truck Texture UV Specification
+# Monster Truck model and texture source
 
-## Texture Dimensions
-- Resolution: 256x256 RGBA PNG
-- Target Path: `resource_packs/MonsterTruck_RP/textures/entity/monster_truck.png`
+Run `python scripts/make_truck_geometry.py` to rebuild the lifted pickup geometry. Run `python scripts/make_placeholder_textures.py` to rebuild its six 256 x 256 atlases and existing icons.
 
-## Atlas Regions & UV Coordinates
+The model uses explicit per-face 1 x 1 UV swatches, avoiding box-UV spill into unrelated atlas regions. Coordinates are Minecraft model units (16 per block).
 
-| Region | UV Origin [U, V] | Dimensions (Pixels) | Target Bones / Cubes | Description |
-|---|---|---|---|---|
-| Lower Chassis / Base | `[0, 0]` | 120 x 60 | `body` (lower cube) | Main chassis body and side panels |
-| Cab & Windows | `[0, 64]` | 90 x 56 | `body` (cab cube) | Driver cabin, windshield, side windows |
-| Hood & Front Grille | `[96, 64]` | 64 x 56 | `body` (hood cube) | Elevated hood, front grille, headlights |
-| Front Left Wheel | `[0, 144]` | 38 x 36 | `wheel_fl` | Tire tread, sidewall, yellow/gold hub |
-| Front Right Wheel | `[40, 144]` | 38 x 36 | `wheel_fr` | Tire tread, sidewall, yellow/gold hub |
-| Rear Left Wheel | `[80, 144]` | 38 x 36 | `wheel_rl` | Tire tread, sidewall, yellow/gold hub |
-| Rear Right Wheel | `[120, 144]` | 38 x 36 | `wheel_rr` | Tire tread, sidewall, yellow/gold hub |
-| Roll Cage & Metal Accents | `[0, 190]` | 60 x 50 | `roll_cage` | Tubular roll cage and roof bars |
+| Material | Atlas sample |
+|---|---|
+| Paint | 20, 20 |
+| Dark paint / graphics / hubs | 110, 80 |
+| Glass | 20, 80 |
+| Tire / bed / seats | 10, 155 |
+| Raised tread | 0, 144 |
+| Silver metal | 20, 205 |
+| Headlights | 40, 220 |
 
-## Guidelines for Pixel Artists
-1. Maintain sharp pixel edges with nearest-neighbor scaling (no antialiasing or bilinear blur).
-2. Transparent alpha is permitted on exterior decorative areas and roll cage gaps.
-3. Keep wheel hubs centered on the outer tire faces for authentic wheel spinning visuals.
+The four wheel bones retain their animation names and rotate around axle centers at height 12. Intersecting rotated cubes form octagonal tires with separate radial tread blocks and outer hubs. The raised body floor starts at height 24; the roof reaches 45. Cab side windows and the pickup bed remain open. Existing two-seat positions are retained above the cab floor.
+
+Red is the default atlas; blue, green, yellow, black and white use the same swatches and mesh. Color variants alter only the two paint regions. Metal and lamp swatches are shared across every color.

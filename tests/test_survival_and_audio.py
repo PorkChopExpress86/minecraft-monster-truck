@@ -27,8 +27,8 @@ def test_durability_and_loot():
         data = json.load(f)
         
     comps = data["minecraft:entity"]["components"]
-    assert comps["minecraft:health"]["value"] == 250, "Health must be 250 HP"
-    assert comps["minecraft:health"]["max"] == 250
+    assert comps["minecraft:health"]["value"] == 1000, "Health must be 1000 HP"
+    assert comps["minecraft:health"]["max"] == 1000
     
     loot_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "loot_tables" / "entities" / "monster_truck.json"
     assert loot_path.exists(), "Loot table for monster truck must exist"
@@ -77,4 +77,15 @@ def test_audio_pipeline_and_timeline():
     anim_path = REPO_ROOT / "resource_packs" / "MonsterTruck_RP" / "animations" / "monster_truck.animation.json"
     with open(anim_path, "r", encoding="utf-8") as f:
         anims = json.load(f)["animations"]
-    assert "sound_effects" in anims["animation.blake.monster_truck.wheel_spin"]
+    client_path = REPO_ROOT / "resource_packs" / "MonsterTruck_RP" / "entity" / "monster_truck.entity.json"
+    aliases = json.loads(client_path.read_text(encoding="utf-8"))["minecraft:client_entity"]["description"]["sound_effects"]
+    for animation, sound in (("engine_idle", "blake.monster_truck.idle"),
+                             ("wheel_spin", "blake.monster_truck.drive")):
+        event = anims["animation.blake.monster_truck." + animation]["sound_effects"]["0.0"]
+        assert isinstance(event, dict), "Animation sounds require an effect object"
+        assert aliases[event["effect"]] == sound
+        assert aliases[event["effect"]] in sound_defs["sound_definitions"]
+
+    events_path = REPO_ROOT / "resource_packs" / "MonsterTruck_RP" / "sounds.json"
+    events = json.loads(events_path.read_text(encoding="utf-8"))["entity_sounds"]["entities"]["blake:monster_truck"]["events"]
+    assert events == {"ambient": ""}, "Keep ambient audio silent; animation timelines drive engine audio"

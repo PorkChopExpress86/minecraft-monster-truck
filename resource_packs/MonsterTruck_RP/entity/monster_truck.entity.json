@@ -7,10 +7,19 @@
         "default": "entity_alphatest"
       },
       "textures": {
-        "default": "textures/entity/monster_truck"
+        "default": "textures/entity/monster_truck",
+        "blue": "textures/entity/monster_truck_blue",
+        "green": "textures/entity/monster_truck_green",
+        "yellow": "textures/entity/monster_truck_yellow",
+        "black": "textures/entity/monster_truck_black",
+        "white": "textures/entity/monster_truck_white"
       },
       "geometry": {
         "default": "geometry.blake.monster_truck"
+      },
+      "sound_effects": {
+        "engine_idle": "blake.monster_truck.idle",
+        "engine_drive": "blake.monster_truck.drive"
       },
       "animations": {
         "engine_idle": "animation.blake.monster_truck.engine_idle",

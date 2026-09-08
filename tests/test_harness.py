@@ -27,8 +27,8 @@ def test_config_files_exist_and_match():
     assert yaml_data["namespace"] == "blake"
     assert yaml_data["entity_id"] == "monster_truck"
     assert yaml_data["target"]["min_engine_version"] == [1, 26, 40]
-    assert yaml_data["vehicle"]["movement_speed"] == 0.40
-    assert yaml_data["vehicle"]["auto_step_blocks"] == 1.0
+    assert yaml_data["vehicle"]["movement_speed"] == 0.55
+    assert yaml_data["vehicle"]["auto_step_blocks"] == 2.0
 
 
 def test_validator_detects_missing_packs(tmp_path):

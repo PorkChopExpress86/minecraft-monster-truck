@@ -15,13 +15,13 @@ The simulation and animation system depends on exact bone names. Do NOT rename o
 - `root` (Position: [0, 0, 0])
 - `body` (Parent: `root`)
   - `roll_cage` (Parent: `body`)
-- `wheel_fl` (Parent: `root`, Pivot: [16.5, 9, -18])
-- `wheel_fr` (Parent: `root`, Pivot: [-16.5, 9, -18])
-- `wheel_rl` (Parent: `root`, Pivot: [16.5, 9, 18])
-- `wheel_rr` (Parent: `root`, Pivot: [-16.5, 9, 18])
+- `wheel_fl` (Parent: `root`, Pivot: [20, 12, -18])
+- `wheel_fr` (Parent: `root`, Pivot: [-20, 12, -18])
+- `wheel_rl` (Parent: `root`, Pivot: [20, 12, 18])
+- `wheel_rr` (Parent: `root`, Pivot: [-20, 12, 18])
 
 > [!IMPORTANT]
-> Wheel pivots must remain exactly at the center of each wheel cube so rotational animations spin on-center without wobbling.
+> Wheel pivots must remain exactly at the axle center of each wheel assembly so rotational animations spin on-center without wobbling.
 
 ## 3. Saving & Exporting
 - **Editable Source**: Save your working project as `sources/monster_truck.bbmodel`. Blockbench's `.bbmodel` stores layers, guides, and project settings.
@@ -29,3 +29,5 @@ The simulation and animation system depends on exact bone names. Do NOT rename o
   `resource_packs/MonsterTruck_RP/models/entity/monster_truck.geo.json`
 - **Texture Export**: Save your revised PNG to:
   `resource_packs/MonsterTruck_RP/textures/entity/monster_truck.png`
+
+The current procedural source is `scripts/make_truck_geometry.py`. Preserve changes there if regenerating the mesh; regeneration replaces the exported JSON. The mesh uses per-face UV swatches documented in `texture_uv_spec.md`.

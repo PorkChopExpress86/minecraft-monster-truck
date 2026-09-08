@@ -19,15 +19,15 @@ This guide documents the verification protocol for testing the Monster Truck Add
    - Confirm that **Monster Truck Resources** is automatically activated under Resource Packs (linked via dependency UUID).
 
 ### Automated In-Game Test Runner
-To automatically sync development files directly into `%LOCALAPPDATA%`, launch Minecraft, execute `/summon blake:monster_truck ~ ~ ~`, take a screenshot, and scan `content_log.txt`:
+Follow [Windows testing setup](WINDOWS_TESTING.md) once, then run the configured static checks and verified runtime smoke test:
 ```powershell
-# Full in-game test with automated summon and screenshot:
-python scripts/test_in_game.py
+# Static checks, packaging, and the dedicated test world:
+.\Test-Addon.ps1
 
-# Dry-run verification (sync packs and scan content log without game input):
-python scripts/test_in_game.py --dry-run
+# Read-only installation/world discovery:
+.\Test-Addon.ps1 -Mode Doctor
 ```
-Screenshots are saved automatically to `dist/in_game_tests/`.
+Reports, fresh content logs, and available game-window screenshots are saved to `dist/bedrock-tests/<run-id>/`. The separate test-only script pack verifies `/summon blake:monster_truck`'s equivalent spawn operation and required components; screenshots do not establish visual correctness. Continue the manual checks below for driving, appearance, and audio.
 
 
 ## 2. In-Game Proving Ground Obstacle Course
@@ -35,7 +35,7 @@ Screenshots are saved automatically to `dist/in_game_tests/`.
 Construct a small proving track with the following obstacles:
 - **Flat Pavement**: 20-block smooth stone straightaway.
 - **Single-Block Terraces**: 1-block stone steps leading up an incline.
-- **Two-Block Wall**: A 2-block tall barrier.
+- **Two-Block Ledge and Three-Block Wall**: A climbable ledge followed by a taller barrier.
 - **Slopes & Ramps**: Stairs and slabs.
 - **Passage**: A 3-block wide gateway.
 - **Water Trench**: 1-block deep water channel.
@@ -53,8 +53,14 @@ Construct a small proving track with the following obstacles:
 | **5. Third-Person View** | Switch camera to third-person back view (F5). | Camera is positioned at radius 6.0, showing the complete vehicle clearly. | [ ] |
 | **6. WASD Driving** | Press `W` (forward), `S` (reverse), `A` (steer left), `D` (steer right). | Vehicle moves smoothly with responsive turning capped at 18 deg/tick. | [ ] |
 | **7. 1-Block Auto-Step** | Drive directly forward into a 1-block high stone ledge without jumping. | Vehicle smoothly drives up the ledge via controlled auto-step. | [ ] |
-| **8. 2-Block Wall** | Drive directly into a 2-block high stone wall. | Vehicle is stopped by the wall and does not clip or jump over. | [ ] |
+| **8. 2-Block Ledge / 3-Block Wall** | Drive into two-block and then three-block obstacles. | Vehicle climbs the two-block ledge and stops at the three-block wall. | [ ] |
 | **9. Wheel Rotation** | Observe wheels while moving vs. stationary. | Wheels spin continuously during motion; wheels stop rotating at idle. | [ ] |
 | **10. Chassis Dynamics** | Drive at full speed across flat terrain. | Chassis subtly bobs while driving without visual jitter. | [ ] |
 | **11. Dismount** | Press Sneak / Shift to dismount. | Player exits cleanly onto adjacent solid ground without suffocating. | [ ] |
 | **12. Content Log** | Open Content Log history in Creator settings. | Zero schema errors, unresolved texture warnings, or missing animation errors. | [ ] |
+| **13. Paint Colors** | Sneak and interact with a truck while holding red, blue, green, yellow, black, or white dye. | Body and hood switch to the matching color; dye remains reusable. | [ ] |
+| **14. Mount After Painting** | Stop sneaking and interact normally after repainting. | Driver mounting and driving still work. | [ ] |
+
+## Heavy-duty driving checks
+
+Drive forward and backward through mobs; verify a stopped truck does not attack. Check that players and tamed pets are unaffected. Drive up one- and two-block ledges with sufficient overhead clearance, then verify three-block walls stop the truck. Test slopes, uneven ground, and descent with both seats occupied. Auto-step configuration and impulse-driven contact tests do not substitute for these player-control checks.

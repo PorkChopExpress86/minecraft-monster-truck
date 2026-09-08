@@ -2,19 +2,30 @@ import os
 from pathlib import Path
 from PIL import Image, ImageDraw
 
-def generate_entity_texture(output_path: Path):
+BODY_COLORS = {
+    "red": ((180, 30, 30), (120, 15, 15), (160, 25, 25), (100, 10, 10)),
+    "blue": ((35, 75, 190), (20, 40, 125), (25, 60, 170), (15, 30, 105)),
+    "green": ((40, 160, 55), (20, 100, 30), (30, 140, 45), (15, 80, 20)),
+    "yellow": ((235, 205, 30), (165, 135, 15), (215, 180, 25), (145, 115, 10)),
+    "black": ((40, 40, 45), (15, 15, 20), (30, 30, 35), (10, 10, 15)),
+    "white": ((235, 235, 240), (165, 165, 175), (215, 215, 225), (145, 145, 155)),
+}
+
+
+def generate_entity_texture(output_path: Path, color="red"):
+    body, body_outline, hood, hood_outline = BODY_COLORS[color]
     output_path.parent.mkdir(parents=True, exist_ok=True)
     img = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
     # Body lower chassis (UV [0, 0] to [120, 60])
-    draw.rectangle([0, 0, 120, 60], fill=(180, 30, 30, 255), outline=(120, 15, 15, 255))
+    draw.rectangle([0, 0, 120, 60], fill=(*body, 255), outline=(*body_outline, 255))
     
     # Cab / Windows (UV [0, 64] to [90, 120])
     draw.rectangle([0, 64, 90, 120], fill=(80, 150, 220, 220), outline=(40, 80, 140, 255))
     
     # Hood / Front (UV [96, 64] to [160, 120])
-    draw.rectangle([96, 64, 160, 120], fill=(160, 25, 25, 255), outline=(100, 10, 10, 255))
+    draw.rectangle([96, 64, 160, 120], fill=(*hood, 255), outline=(*hood_outline, 255))
     
     # Wheels FL, FR, RL, RR (UV around [0, 144] ... [160, 180])
     draw.rectangle([0, 144, 38, 180], fill=(30, 30, 30, 255), outline=(60, 60, 60, 255))
@@ -23,8 +34,9 @@ def generate_entity_texture(output_path: Path):
     draw.rectangle([120, 144, 158, 180], fill=(30, 30, 30, 255), outline=(60, 60, 60, 255))
     
     # Roll cage / Metal accents (UV [0, 190] to [60, 240])
-    draw.rectangle([0, 190, 60, 240], fill=(220, 180, 20, 255), outline=(150, 120, 10, 255))
+    draw.rectangle([0, 190, 60, 240], fill=(165, 175, 185, 255), outline=(80, 90, 100, 255))
     
+    draw.rectangle([40, 220, 45, 225], fill=(255, 240, 180, 255))
     img.save(output_path, "PNG")
     print(f"Generated entity texture: {output_path}")
 
@@ -97,6 +109,9 @@ def generate_all(repo_root=None):
     rp_root = root / "resource_packs" / "MonsterTruck_RP"
     
     generate_entity_texture(rp_textures / "entity" / "monster_truck.png")
+    for color in BODY_COLORS:
+        if color != "red":
+            generate_entity_texture(rp_textures / "entity" / f"monster_truck_{color}.png", color)
     generate_spawn_egg(rp_textures / "items" / "monster_truck_spawn_egg.png")
     generate_pack_icon(bp_root / "pack_icon.png", "BP")
     generate_pack_icon(rp_root / "pack_icon.png", "RP")

@@ -4,7 +4,9 @@
       "blake:monster_truck": {
         "volume": 1.0,
         "pitch": 1.0,
-        "events": {}
+        "events": {
+          "ambient": ""
+        }
       }
     }
   }
