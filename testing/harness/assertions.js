@@ -142,7 +142,34 @@ async function checkHeavyDuty(player, run, origin) {
       }
     }
     if (!climbed) throw new Error("Truck failed two-block terrain ledge: " + JSON.stringify(truck.location));
-    return ["two-block ledge traversed with horizontal impulses", "1000 health", "75% melee damage reduction", "fall damage immunity", "parked truck leaves mob unharmed", "moving truck kills mob"];
+
+    // Verify demolition: stationary preservation and momentum breaking
+    truck.teleport(location);
+    truck.clearVelocity();
+    const demoBlock = dimension.getBlock({ x: location.x + 2, y: location.y, z: location.z });
+    blocks.push([demoBlock, demoBlock.permutation]);
+    demoBlock.setType("minecraft:oak_planks");
+    await wait(5);
+    if (demoBlock.typeId !== "minecraft:oak_planks") {
+      throw new Error("Stationary truck demolished wood block");
+    }
+    for (let tick = 0; tick < 20 && demoBlock.typeId === "minecraft:oak_planks"; tick++) {
+      truck.applyImpulse({ x: 0.35, y: 0, z: 0 });
+      await wait(1);
+    }
+    if (demoBlock.typeId === "minecraft:oak_planks") {
+      throw new Error("Moving truck failed to demolish wood under momentum");
+    }
+
+    return [
+      "two-block ledge traversed with horizontal impulses",
+      "1000 health",
+      "75% melee damage reduction",
+      "fall damage immunity",
+      "parked truck leaves mob unharmed",
+      "moving truck kills mob",
+      "momentum-gated wood demolition clears path and preserves stationary wood"
+    ];
   } finally {
     for (const [block, permutation] of blocks) block.setPermutation(permutation);
     if (pig.isValid) pig.remove();

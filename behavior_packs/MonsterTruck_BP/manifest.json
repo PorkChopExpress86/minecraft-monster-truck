@@ -12,12 +12,23 @@
       "type": "data",
       "uuid": "a2ddad8e-bdc5-473e-84f7-c698811e89bf",
       "version": [1, 0, 0]
+    },
+    {
+      "description": "Monster Truck Script Module",
+      "type": "script",
+      "uuid": "4c8f2b8d-27d1-4cb5-b461-1e967a57eb01",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
     }
   ],
   "dependencies": [
     {
       "uuid": "f6fc3675-bf88-45bd-9348-2c75d1e8573e",
       "version": [1, 0, 0]
+    },
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.0.0"
     }
   ]
 }

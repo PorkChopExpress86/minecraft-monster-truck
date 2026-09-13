@@ -21,7 +21,7 @@ def test_manifests_and_linking():
     assert rp_manifest["header"]["min_engine_version"] == [1, 26, 40]
     
     rp_header_uuid = rp_manifest["header"]["uuid"]
-    bp_deps = [d["uuid"] for d in bp_manifest.get("dependencies", [])]
+    bp_deps = [d["uuid"] for d in bp_manifest.get("dependencies", []) if "uuid" in d]
     assert rp_header_uuid in bp_deps, "BP manifest must explicitly depend on RP header UUID"
 
 def test_minimal_behavior_entity():
