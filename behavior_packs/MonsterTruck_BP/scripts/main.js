@@ -4,7 +4,9 @@ import {
   calculateTrampleDamage,
   isInContactPerimeter,
   calculateKnockbackImpulse,
-  isProtectedTarget
+  isProtectedTarget,
+  isHeavyEntity,
+  resolveHeavyCollision
 } from "./trample.js";
 
 // Track state of each truck across ticks
@@ -114,32 +116,65 @@ function onTick() {
               if (currentTick - lastHit < 6) continue;
               entityHitCooldowns.set(target.id, currentTick);
 
-              const damage = calculateTrampleDamage(effectiveSpeed);
-              if (damage > 0) {
-                const impulse = calculateKnockbackImpulse(
-                  target.location,
-                  loc,
-                  effectiveSpeed
-                );
-                try {
-                  target.applyImpulse(impulse);
-                } catch {}
-
-                const damageOptions = {};
-                if (
-                  typeof EntityDamageCause !== "undefined" &&
-                  EntityDamageCause?.entityAttack
-                ) {
-                  damageOptions.cause = EntityDamageCause.entityAttack;
-                }
-                damageOptions.damagingEntity = truck;
-
-                try {
-                  target.applyDamage(damage, damageOptions);
-                } catch {
+              if (isHeavyEntity(target)) {
+                const heavyRes = resolveHeavyCollision(effectiveSpeed, { x: dirX, z: dirZ });
+                if (heavyRes.truckHalted) {
                   try {
-                    target.applyDamage(damage);
+                    truck.clearVelocity();
+                    truck.applyImpulse(heavyRes.truckPenaltyImpulse);
                   } catch {}
+                  state.prevX = loc.x;
+                  state.prevY = loc.y;
+                  state.prevZ = loc.z;
+                } else if (heavyRes.targetShoved) {
+                  try {
+                    target.applyImpulse(heavyRes.targetImpulse);
+                    truck.applyImpulse(heavyRes.truckPenaltyImpulse);
+                  } catch {}
+                }
+
+                const damage = heavyRes.damage;
+                if (damage > 0) {
+                  const damageOptions = {};
+                  if (typeof EntityDamageCause !== "undefined" && EntityDamageCause?.entityAttack) {
+                    damageOptions.cause = EntityDamageCause.entityAttack;
+                  }
+                  damageOptions.damagingEntity = truck;
+                  try {
+                    target.applyDamage(damage, damageOptions);
+                  } catch {
+                    try { target.applyDamage(damage); } catch {}
+                  }
+                }
+              } else {
+                // Regular trample knockback and damage without halting the truck
+                const damage = calculateTrampleDamage(effectiveSpeed);
+                if (damage > 0) {
+                  const impulse = calculateKnockbackImpulse(
+                    target.location,
+                    loc,
+                    effectiveSpeed
+                  );
+                  try {
+                    target.applyImpulse(impulse);
+                  } catch {}
+
+                  const damageOptions = {};
+                  if (
+                    typeof EntityDamageCause !== "undefined" &&
+                    EntityDamageCause?.entityAttack
+                  ) {
+                    damageOptions.cause = EntityDamageCause.entityAttack;
+                  }
+                  damageOptions.damagingEntity = truck;
+
+                  try {
+                    target.applyDamage(damage, damageOptions);
+                  } catch {
+                    try {
+                      target.applyDamage(damage);
+                    } catch {}
+                  }
                 }
               }
             }

@@ -123,3 +123,46 @@ export function isProtectedTarget(target, truck) {
 
   return false;
 }
+
+export function isHeavyEntity(target) {
+  if (!target) return false;
+  const typeId = target.typeId || "";
+  if (typeId === "minecraft:iron_golem" || typeId === "minecraft:warden") {
+    return true;
+  }
+  if (target.getComponent) {
+    try {
+      const kb = target.getComponent("minecraft:knockback_resistance");
+      if (kb && kb.value >= 1.0) return true;
+    } catch {}
+  }
+  return false;
+}
+
+export function resolveHeavyCollision(speed, heading = { x: 1, z: 0 }) {
+  const hDist = Math.hypot(heading.x, heading.z) || 1;
+  const dirX = heading.x / hDist;
+  const dirZ = heading.z / hDist;
+
+  // Top speed threshold: > 0.32 blocks/tick
+  if (speed > 0.32) {
+    return {
+      truckHalted: false,
+      targetShoved: true,
+      truckDecelerated: true,
+      damage: Math.max(50, Math.round(speed * 160)),
+      targetImpulse: { x: dirX * 0.7, y: 0.2, z: dirZ * 0.7 },
+      truckPenaltyImpulse: { x: -dirX * 0.18, y: 0, z: -dirZ * 0.18 },
+    };
+  }
+
+  // Low-to-medium speed: truck halted dead on impact
+  return {
+    truckHalted: true,
+    targetShoved: false,
+    truckDecelerated: false,
+    damage: calculateTrampleDamage(speed),
+    targetImpulse: { x: 0, y: 0, z: 0 },
+    truckPenaltyImpulse: { x: -dirX * 0.05, y: 0, z: -dirZ * 0.05 },
+  };
+}

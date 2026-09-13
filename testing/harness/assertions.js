@@ -161,6 +161,37 @@ async function checkHeavyDuty(player, run, origin) {
       throw new Error("Moving truck failed to demolish wood under momentum");
     }
 
+    // Verify heavy entity collision inertia (Iron Golem)
+    truck.teleport(location);
+    truck.clearVelocity();
+    let golem;
+    try {
+      golem = dimension.spawnEntity("minecraft:iron_golem", { ...location, x: location.x + 2.5 });
+      await wait(5);
+      // Low speed bump (<0.32) halts truck
+      truck.applyImpulse({ x: 0.15, y: 0, z: 0 });
+      await wait(8);
+      const lowSpeedMoved = truck.location.x - location.x;
+      if (lowSpeedMoved > 2.0) {
+        throw new Error("Truck failed to halt upon low-speed Iron Golem impact");
+      }
+      // Top speed ramming (>0.32) delivers heavy damage and shoves golem
+      const initialGolemHp = golem.getComponent("minecraft:health")?.currentValue || 100;
+      truck.teleport({ ...location, x: location.x - 3.0 });
+      truck.clearVelocity();
+      for (let tick = 0; tick < 15; tick++) {
+        truck.applyImpulse({ x: 0.45, y: 0, z: 0 });
+        await wait(1);
+      }
+      await wait(5);
+      const currentGolemHp = golem.isValid ? (golem.getComponent("minecraft:health")?.currentValue || 0) : 0;
+      if (golem.isValid && currentGolemHp >= initialGolemHp) {
+        throw new Error("Top-speed ramming failed to damage Iron Golem");
+      }
+    } finally {
+      if (golem && golem.isValid) golem.remove();
+    }
+
     return [
       "two-block ledge traversed with horizontal impulses",
       "1000 health",
@@ -168,7 +199,8 @@ async function checkHeavyDuty(player, run, origin) {
       "fall damage immunity",
       "parked truck leaves mob unharmed",
       "moving truck kills mob",
-      "momentum-gated wood demolition clears path and preserves stationary wood"
+      "momentum-gated wood demolition clears path and preserves stationary wood",
+      "heavy entity collision halts low-speed truck and shoves with damage at top speed"
     ];
   } finally {
     for (const [block, permutation] of blocks) block.setPermutation(permutation);
