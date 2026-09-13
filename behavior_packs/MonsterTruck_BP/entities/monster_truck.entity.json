@@ -256,6 +256,18 @@
             "deals_damage": "no"
           },
           {
+            "cause": "fire",
+            "deals_damage": "no"
+          },
+          {
+            "cause": "fire_tick",
+            "deals_damage": "no"
+          },
+          {
+            "cause": "lava",
+            "deals_damage": "no"
+          },
+          {
             "cause": "entity_attack",
             "deals_damage": "yes",
             "damage_multiplier": 0.25

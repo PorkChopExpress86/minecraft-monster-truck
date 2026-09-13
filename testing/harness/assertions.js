@@ -113,6 +113,12 @@ async function checkHeavyDuty(player, run, origin) {
     truck.applyDamage(40, { cause: EntityDamageCause.fall });
     await wait(2);
     if (health.currentValue !== 990) throw new Error("Fall protection failed");
+    truck.applyDamage(40, { cause: EntityDamageCause.lava });
+    await wait(2);
+    if (health.currentValue !== 990) throw new Error("Lava immunity failed");
+    truck.applyDamage(40, { cause: EntityDamageCause.fire });
+    await wait(2);
+    if (health.currentValue !== 990) throw new Error("Fire immunity failed");
     if (!pig.isValid || pig.getComponent("minecraft:health").currentValue !== 10) {
       throw new Error("Parked truck damaged a mob");
     }
@@ -198,6 +204,7 @@ async function checkHeavyDuty(player, run, origin) {
       "1000 health",
       "75% melee damage reduction",
       "fall damage immunity",
+      "fire and lava immunity",
       "parked truck leaves mob unharmed",
       "moving truck kills mob",
       "momentum-gated wood demolition clears path and preserves stationary wood",

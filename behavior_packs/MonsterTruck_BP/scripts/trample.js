@@ -166,3 +166,23 @@ export function resolveHeavyCollision(speed, heading = { x: 1, z: 0 }) {
     truckPenaltyImpulse: { x: -dirX * 0.05, y: 0, z: -dirZ * 0.05 },
   };
 }
+
+export function isLiquidBlock(typeId) {
+  if (!typeId) return false;
+  const id = typeId.replace("minecraft:", "").toLowerCase();
+  return id === "water" || id === "flowing_water" || id === "lava" || id === "flowing_lava";
+}
+
+export function getSafeDismountLocation(truckLoc, heading = { x: 1, z: 0 }) {
+  const hDist = Math.hypot(heading.x, heading.z) || 1;
+  const dirX = heading.x / hDist;
+  const dirZ = heading.z / hDist;
+
+  // Place rider safely on top of truck cab roof / rear flatbed
+  return {
+    x: truckLoc.x - dirX * 0.8,
+    y: truckLoc.y + 2.3,
+    z: truckLoc.z - dirZ * 0.8,
+  };
+}
+

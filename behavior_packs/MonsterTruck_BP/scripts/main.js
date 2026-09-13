@@ -6,7 +6,9 @@ import {
   calculateKnockbackImpulse,
   isProtectedTarget,
   isHeavyEntity,
-  resolveHeavyCollision
+  resolveHeavyCollision,
+  isLiquidBlock,
+  getSafeDismountLocation
 } from "./trample.js";
 
 // Track state of each truck across ticks
@@ -91,6 +93,48 @@ function onTick() {
       const perpX = -dirZ;
       const perpZ = dirX;
 
+      // Rider monitoring, thermal shielding, and safe dismount
+      const rideable = truck.getComponent ? truck.getComponent("minecraft:rideable") : undefined;
+      const currentRiders = rideable && rideable.getRiders ? rideable.getRiders() : [];
+      const prevRiders = state.riders || [];
+      state.riders = currentRiders.map((r) => r.id);
+
+      // Check if truck is in lava or water
+      let inLava = false;
+      let inWater = false;
+      try {
+        const block = dimension.getBlock(loc);
+        if (block) {
+          if (block.typeId === "minecraft:lava" || block.typeId === "minecraft:flowing_lava") inLava = true;
+          if (block.typeId === "minecraft:water" || block.typeId === "minecraft:flowing_water") inWater = true;
+        }
+      } catch {}
+
+      // Thermal shielding in lava: extinguish fire ticks on riders
+      if (inLava) {
+        state.moltenUntil = currentTick + 200; // 10s molten tire trample upon exiting lava
+        for (const rider of currentRiders) {
+          try {
+            if (rider.extinguishFire) rider.extinguishFire(false);
+          } catch {}
+        }
+      }
+
+      // Safe dismount over deep liquid
+      if ((inLava || inWater) && prevRiders.length > currentRiders.length) {
+        const currentRiderIds = new Set(currentRiders.map((r) => r.id));
+        const dismountedIds = prevRiders.filter((id) => !currentRiderIds.has(id));
+        const safePos = getSafeDismountLocation(loc, { x: dirX, z: dirZ });
+        for (const playerId of dismountedIds) {
+          try {
+            const player = world.getEntity(playerId);
+            if (player && player.isValid && player.typeId === "minecraft:player") {
+              player.teleport(safePos, { dimension });
+            }
+          } catch {}
+        }
+      }
+
       // Tire trample check (within 1.6 blocks contact perimeter)
       if (effectiveSpeed > 0.08) {
         try {
@@ -173,6 +217,13 @@ function onTick() {
                   } catch {
                     try {
                       target.applyDamage(damage);
+                    } catch {}
+                  }
+
+                  // Molten Tire Trample ignition
+                  if (state.moltenUntil && currentTick < state.moltenUntil) {
+                    try {
+                      target.setOnFire(6, true);
                     } catch {}
                   }
                 }
