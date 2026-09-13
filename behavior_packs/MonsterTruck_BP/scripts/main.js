@@ -71,8 +71,7 @@ function onTick() {
       } catch {}
 
       const effectiveSpeed = Math.max(horizontalDist, velSpeed);
-
-      currentTick++;
+      const tickNumber = typeof system.currentTick === "number" ? system.currentTick : currentTick++;
 
       // Compute heading vector
       let dirX = 0;
@@ -118,12 +117,31 @@ function onTick() {
 
       // Thermal shielding in lava: extinguish fire ticks on riders
       if (inLava) {
-        state.moltenUntil = currentTick + 200; // 10s molten tire trample upon exiting lava
+        state.moltenUntil = tickNumber + 200; // 10s molten tire trample upon exiting lava
         for (const rider of currentRiders) {
           try {
             if (rider.extinguishFire) rider.extinguishFire(false);
           } catch {}
         }
+      }
+
+      // Trailing liquid wake particles while moving across water or lava
+      if ((inWater || inLava) && effectiveSpeed > 0.08) {
+        try {
+          if (inWater) {
+            dimension.spawnParticle("minecraft:water_splash_particle", {
+              x: loc.x - dirX * 1.5,
+              y: loc.y + 0.3,
+              z: loc.z - dirZ * 1.5,
+            });
+          } else if (inLava) {
+            dimension.spawnParticle("minecraft:lava_particle", {
+              x: loc.x - dirX * 1.5,
+              y: loc.y + 0.3,
+              z: loc.z - dirZ * 1.5,
+            });
+          }
+        } catch {}
       }
 
       // Safe dismount over deep liquid
@@ -143,8 +161,8 @@ function onTick() {
 
       // Suspension Jump execution (Jump key input on driver seat)
       const driver = currentRiders.length > 0 ? currentRiders[0] : undefined;
-      if (driver && driver.isJumping && canTriggerJump(state.lastJumpTick, currentTick)) {
-        state.lastJumpTick = currentTick;
+      if (driver && driver.isJumping && canTriggerJump(state.lastJumpTick, tickNumber)) {
+        state.lastJumpTick = tickNumber;
         state.isAirborne = true;
         const jImpulse = calculateJumpImpulse(effectiveSpeed, { x: dirX, z: dirZ }, 0.82);
         try { truck.applyImpulse(jImpulse); } catch {}
@@ -173,7 +191,7 @@ function onTick() {
             y: Math.floor(loc.y - 0.1),
             z: Math.floor(loc.z)
           });
-          if (blockBelow && !blockBelow.isAir && blockBelow.typeId !== "minecraft:air" && !isLiquidBlock(blockBelow.typeId)) {
+          if (blockBelow && !blockBelow.isAir && blockBelow.typeId !== "minecraft:air") {
             hasLanded = true;
           }
         } catch {}
@@ -227,8 +245,8 @@ function onTick() {
               )
             ) {
               const lastHit = entityHitCooldowns.get(target.id) || 0;
-              if (currentTick - lastHit < 6) continue;
-              entityHitCooldowns.set(target.id, currentTick);
+              if (tickNumber - lastHit < 6) continue;
+              entityHitCooldowns.set(target.id, tickNumber);
 
               if (isHeavyEntity(target)) {
                 const heavyRes = resolveHeavyCollision(effectiveSpeed, { x: dirX, z: dirZ });
@@ -258,6 +276,13 @@ function onTick() {
                     target.applyDamage(damage, damageOptions);
                   } catch {
                     try { target.applyDamage(damage); } catch {}
+                  }
+
+                  // Molten Tire Trample ignition on heavy entity
+                  if (state.moltenUntil && tickNumber < state.moltenUntil) {
+                    try {
+                      target.setOnFire(6, true);
+                    } catch {}
                   }
                 }
               } else {
@@ -291,7 +316,7 @@ function onTick() {
                   }
 
                   // Molten Tire Trample ignition
-                  if (state.moltenUntil && currentTick < state.moltenUntil) {
+                  if (state.moltenUntil && tickNumber < state.moltenUntil) {
                     try {
                       target.setOnFire(6, true);
                     } catch {}
@@ -318,7 +343,8 @@ function onTick() {
           const px = Math.floor(loc.x + dirX * fwd + perpX * lat);
           const pz = Math.floor(loc.z + dirZ * fwd + perpZ * lat);
 
-          // Foliage cleared up to 5 blocks high (0..4), wood/glass up to 3 blocks high (0..2)
+          // Foliage cleared up to 5 blocks high (0..4), wood/glass up to 5 blocks high when airborne, 3 blocks high on ground
+          const maxWoodHeight = state.isAirborne ? 5 : 3;
           for (let h = 0; h < 5; h++) {
             const py = baseY + h;
             const key = `${px},${py},${pz}`;
@@ -336,7 +362,7 @@ function onTick() {
                 block.setType("minecraft:air");
               }
               // Structural wood & glass demolition (drops survival items, plays break sound/particles)
-              else if (h < 3 && isDestructibleWoodOrGlass(typeId)) {
+              else if (h < maxWoodHeight && isDestructibleWoodOrGlass(typeId)) {
                 dimension.runCommand(`setblock ${px} ${py} ${pz} air destroy`);
               }
             } catch {

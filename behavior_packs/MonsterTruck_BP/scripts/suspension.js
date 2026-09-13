@@ -12,8 +12,8 @@ export function calculateJumpImpulse(effectiveSpeed = 0, heading = { x: 1, z: 0 
   const dirX = heading.x / hDist;
   const dirZ = heading.z / hDist;
 
-  // Preserve and boost forward driving speed into airborne flight
-  const forwardBoost = Math.max(0.1, effectiveSpeed * 0.4);
+  // Preserve forward driving speed into airborne flight
+  const forwardBoost = effectiveSpeed > 0.05 ? effectiveSpeed * 0.4 : 0;
 
   return {
     x: dirX * forwardBoost,
