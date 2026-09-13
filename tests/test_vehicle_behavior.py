@@ -17,8 +17,15 @@ def test_rideable_and_control_components():
     assert rideable["controlling_seat"] == 0
     assert "player" in rideable["family_types"]
     assert isinstance(rideable["seats"], list), "seats must be a list of seat objects"
-    assert rideable["seats"][0]["position"] == [-0.55, 0.95, 0.20]
-    assert rideable["seats"][0]["third_person_camera_radius"] == 6.0
+    assert rideable["seats"][0]["position"] == [-0.45, 1.65, 0.15]
+    assert rideable["seats"][0]["third_person_camera_radius"] == 7.5
+    assert rideable["seats"][1]["position"] == [0.45, 1.65, 0.15]
+    assert rideable["seats"][1]["third_person_camera_radius"] == 7.5
+    
+    # Native Jump capability to prevent spacebar dismount
+    assert "minecraft:can_power_jump" in comps, "Entity must have minecraft:can_power_jump"
+    assert "minecraft:horse.jump_strength" in comps, "Entity must have minecraft:horse.jump_strength"
+    assert comps["minecraft:horse.jump_strength"]["value"] >= 0.8
     
     # Direct ground control
     assert "minecraft:input_ground_controlled" in comps, "Entity must have minecraft:input_ground_controlled"

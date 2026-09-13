@@ -27,6 +27,8 @@ VALID_BEDROCK_COMPONENTS = {
     "minecraft:loot",
     "minecraft:damage_sensor",
     "minecraft:area_attack",
+    "minecraft:can_power_jump",
+    "minecraft:horse.jump_strength",
 }
 
 

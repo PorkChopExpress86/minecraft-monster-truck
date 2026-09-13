@@ -220,11 +220,13 @@ function onTick() {
         }
       }
 
-      // Suspension Jump execution (Jump key input on driver seat)
-      if (driver && driver.isJumping && canTriggerJump(state.lastJumpTick, tickNumber)) {
+      // Suspension Jump execution (Native engine jump or driver jump key input)
+      const isAscending = dy > 0.22 || (vel && vel.y > 0.22);
+      const isJumpTriggered = (driver && driver.isJumping) || (driver && isAscending && !state.isAirborne);
+      if (isJumpTriggered && canTriggerJump(state.lastJumpTick, tickNumber)) {
         state.lastJumpTick = tickNumber;
         state.isAirborne = true;
-        const jImpulse = calculateJumpImpulse(effectiveSpeed, { x: dirX, z: dirZ }, 0.82);
+        const jImpulse = calculateJumpImpulse(effectiveSpeed, { x: dirX, z: dirZ }, 0.40);
         try { truck.applyImpulse(jImpulse); } catch {}
 
         // Audio & Particles

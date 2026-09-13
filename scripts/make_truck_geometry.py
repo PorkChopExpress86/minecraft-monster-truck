@@ -12,22 +12,27 @@ def cube(origin, size, material, **extra):
 def generate():
     body=[]
     def add(o,s,m='paint',**kw):body.append(cube(o,s,m,**kw))
-    # Raised floor, hood, cab doors, pillars and roof; open rear cargo bed.
-    add([-14,24,-26],[28,4,52]);add([-14,28,-26],[28,6,17])
+    # Raised floor, sloped hood, cab doors, pillars and elevated roof; open rear cargo bed.
+    add([-14,24,-26],[28,4,52])
+    # Sloped hood: lower nose (Z -26..-17, Y 28..31) and cowl (Z -17..-9, Y 28..33)
+    add([-14,28,-26],[28,3,9]);add([-14,28,-17],[28,5,8])
+    # Interior dashboard at cowl
+    add([-12,28,-9],[24,4,2],'rubber')
     add([-14,28,-9],[2,7,21]);add([12,28,-9],[2,7,21])
-    add([-14,43,-9],[28,2,21])
+    add([-14,44,-9],[28,2,21])
     for x in [-14,12]:
-        for z in [-9,10]:add([x,34,z],[2,9,2])
-    add([-12,35,-8.5],[24,8,0.5],'glass')
-    add([-12,35,10.5],[24,8,0.5],'glass')
+        for z in [-9,10]:add([x,34,z],[2,10,2])
+    add([-12,34,-8.5],[24,10,0.5],'glass')
+    add([-12,34,10.5],[24,10,0.5],'glass')
     # Side windows are open so riders remain visible.
     add([-14,28,12],[2,6,14]);add([12,28,12],[2,6,14]);add([-12,28,24],[24,6,2])
     add([-12,28,12],[24,1,12],'rubber')
-    add([-11,28,7],[9,7,3],'rubber');add([2,28,7],[9,7,3],'rubber')
-    # Grille, headlights, bumpers, rear lamps and running boards.
-    add([-9,28,-26.6],[18,5,1],'rubber')
-    for y in [29,31]:add([-8,y,-27],[16,0.5,0.5],'metal')
-    for x in [-13,9]:add([x,29,-27],[4,4,1],'lamp')
+    # Fitted seat cushions aligned with seat coordinate Y 1.65 (26.4 units)
+    add([-11,26,4],[9,3,6],'rubber');add([2,26,4],[9,3,6],'rubber')
+    # Grille, headlights, bumpers, rear lamps and running boards aligned with sloped nose.
+    add([-9,28,-26.6],[18,3,1],'rubber')
+    for y in [29,30]:add([-8,y,-27],[16,0.5,0.5],'metal')
+    for x in [-13,9]:add([x,28.5,-27],[4,2.5,1],'lamp')
     add([-16,23,-28],[32,3,3],'metal');add([-16,23,25],[32,3,3],'metal')
     for x in [-17,14]:add([x,23,-8],[3,2,20],'metal')
     # Bold stepped contrasting side graphics.

@@ -21,8 +21,8 @@ def generate_entity_texture(output_path: Path, color="red"):
     # Body lower chassis (UV [0, 0] to [120, 60])
     draw.rectangle([0, 0, 120, 60], fill=(*body, 255), outline=(*body_outline, 255))
     
-    # Cab / Windows (UV [0, 64] to [90, 120])
-    draw.rectangle([0, 64, 90, 120], fill=(80, 150, 220, 220), outline=(40, 80, 140, 255))
+    # Cab / Windows (UV [0, 64] to [90, 120]) - 100% transparent crystal clear windshield
+    draw.rectangle([0, 64, 90, 120], fill=(0, 0, 0, 0), outline=(50, 90, 150, 200))
     
     # Hood / Front (UV [96, 64] to [160, 120])
     draw.rectangle([96, 64, 160, 120], fill=(*hood, 255), outline=(*hood_outline, 255))

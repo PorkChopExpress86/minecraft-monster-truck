@@ -29,7 +29,7 @@ The vehicle's mechanical ability to climb full 2-block vertical obstacles while 
 _Avoid_: Jumping, vaulting, flying
 
 **Cab Interior View**:
-The in-cabin seated perspective positioning the rider's eye-line directly behind the windshield and window openings.
+The in-cabin seated perspective positioning the rider's eye-line directly level with the transparent windshield, providing an unobstructed forward sightline over the sloped hood.
 _Avoid_: Roof view, top view, external cam
 
 **Wood Demolition**:
