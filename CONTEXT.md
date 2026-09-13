@@ -33,8 +33,12 @@ The in-cabin seated perspective positioning the rider's eye-line directly behind
 _Avoid_: Roof view, top view, external cam
 
 **Wood Demolition**:
-The vehicle's passive capability to fracture and clear wooden blocks, structural furniture, glass, and foliage when driven forward at momentum.
+The vehicle's capability to fracture and clear wooden blocks, structural furniture, and glass when driven forward at momentum.
 _Avoid_: Mining, digging, block breaking
+
+**Foliage Shearing**:
+The vehicle's continuous contact clearing of leaves, vines, and canopy overhangs, active even at low or resting speeds to prevent vehicle entanglement under trees.
+_Avoid_: Tree cutting, trimming, defoliation
 
 **Tire Trample**:
 The speed-scaled impact damage and directional knockback exerted on non-allied entities by the vehicle's rolling wheels.
@@ -49,8 +53,12 @@ The active, driver-triggered vertical launch that propels the vehicle upward to 
 _Avoid_: Jumping, hop, rocket jump, bounce
 
 **Amphibious Flotation**:
-The vehicle's continuous passive buoyancy enabling it to float and maneuver across water and lava surfaces using giant tire displacement.
+The vehicle's continuous buoyancy and high-traction liquid propulsion enabling it to navigate and maneuver across water and lava surfaces at full overland cruising speed using giant tire displacement.
 _Avoid_: Boat mode, swimming, hydroplaning
+
+**Shoreline Step-Up**:
+The vehicle's automated liquid-to-land climbing transition that elevates the vehicle up onto shoreline banks from water or lava without halting or requiring manual jumps.
+_Avoid_: Hopping, beaching, docking
 
 **Molten Tire Trample**:
 The superheated offensive state triggered by traversing lava, causing the truck's wheels to ignite impacted mobs with fire tick damage alongside standard collision impact.

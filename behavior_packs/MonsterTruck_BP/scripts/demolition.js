@@ -42,3 +42,15 @@ export function isDestructibleWoodOrGlass(typeId) {
 
   return WOOD_KEYWORDS.some((kw) => id.includes(kw));
 }
+
+export const WOOD_MOMENTUM_THRESHOLD = 0.25;
+
+export function canDemolishWood(effectiveSpeed, isAirborne = false) {
+  return isAirborne || effectiveSpeed > WOOD_MOMENTUM_THRESHOLD;
+}
+
+export function canShearFoliage(hasDriver = true) {
+  return Boolean(hasDriver);
+}
+
+

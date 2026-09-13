@@ -81,8 +81,18 @@ assert.ok(!isDestructibleWoodOrGlass("minecraft:iron_block"));
 assert.ok(!isDestructibleWoodOrGlass("minecraft:cobblestone"));
 assert.ok(!isDestructibleWoodOrGlass("minecraft:obsidian"));
 assert.ok(!isDestructibleWoodOrGlass("minecraft:dirt"));
+
+// Threshold & Foliage Shearing contracts
+import { canDemolishWood, canShearFoliage, WOOD_MOMENTUM_THRESHOLD } from './behavior_packs/MonsterTruck_BP/scripts/demolition.js';
+assert.equal(WOOD_MOMENTUM_THRESHOLD, 0.25);
+assert.equal(canDemolishWood(0.10, false), false, "Wood must not demolish below 0.25 speed when grounded");
+assert.equal(canDemolishWood(0.30, false), true, "Wood must demolish above 0.25 speed");
+assert.equal(canDemolishWood(0.05, true), true, "Airborne canopy demolition active during jump");
+assert.equal(canShearFoliage(true), true, "Foliage shearing must trigger with driver");
+assert.equal(canShearFoliage(false), false, "Foliage shearing requires driver presence");
 '''
     res = subprocess.run([node_exe, "--input-type=module", "-e", script],
                          cwd=str(REPO_ROOT), capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
+
 

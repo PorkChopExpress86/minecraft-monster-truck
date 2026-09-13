@@ -46,3 +46,14 @@ def test_stepping_and_movement_tuning():
     
     # Behavior format version must be at least 1.26.20 for corrected friction semantics
     assert data["format_version"] >= "1.26.20"
+
+def test_canopy_clearance_collision_profile():
+    entity_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "entities" / "monster_truck.entity.json"
+    with open(entity_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    comps = data["minecraft:entity"]["components"]
+    
+    collision = comps["minecraft:collision_box"]
+    assert collision["height"] <= 1.95, "Collision box height must be <= 1.95 blocks to clear 2.0-block tree canopies"
+    assert collision["width"] == 2.25
+

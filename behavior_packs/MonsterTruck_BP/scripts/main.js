@@ -1,5 +1,11 @@
 import { system, world, EntityDamageCause } from "@minecraft/server";
-import { isFoliage, isDestructibleWoodOrGlass } from "./demolition.js";
+import { isFoliage, isDestructibleWoodOrGlass, canDemolishWood, canShearFoliage } from "./demolition.js";
+import {
+  calculateAquaticImpulse,
+  detectShorelineBank,
+  calculateShorelineStepImpulse,
+  CRUISING_AQUATIC_SPEED
+} from "./amphibious.js";
 import {
   calculateTrampleDamage,
   isInContactPerimeter,
@@ -125,21 +131,76 @@ function onTick() {
         }
       }
 
-      // Trailing liquid wake particles while moving across water or lava
+      const driver = currentRiders.length > 0 ? currentRiders[0] : undefined;
+
+      // Aquatic propulsion and Shoreline Step-Up
+      if ((inWater || inLava) && driver) {
+        const isNonAirNonLiquid = (b) => b && !b.isAir && b.typeId !== "minecraft:air" && !isLiquidBlock(b.typeId);
+        const baseY = Math.floor(loc.y);
+        let bankFound = null;
+
+        try {
+          const latOffsets = [0, -0.8, 0.8];
+          for (const lat of latOffsets) {
+            const checkX = Math.floor(loc.x + dirX * 1.5 + perpX * lat);
+            const checkZ = Math.floor(loc.z + dirZ * 1.5 + perpZ * lat);
+
+            const bAtWater = dimension.getBlock({ x: checkX, y: baseY, z: checkZ });
+            const bAbove1 = dimension.getBlock({ x: checkX, y: baseY + 1, z: checkZ });
+            const bAbove2 = dimension.getBlock({ x: checkX, y: baseY + 2, z: checkZ });
+            const bAbove3 = dimension.getBlock({ x: checkX, y: baseY + 3, z: checkZ });
+
+            const solid0 = isNonAirNonLiquid(bAtWater);
+            const solid1 = isNonAirNonLiquid(bAbove1);
+            const solid2 = isNonAirNonLiquid(bAbove2);
+            const solid3 = isNonAirNonLiquid(bAbove3);
+
+            // Sheer cliff >= 3 blocks requires intentional Suspension Jump
+            if (solid3 && solid2) continue;
+
+            const res = detectShorelineBank(true, solid0 || solid1, solid1 && !solid3);
+            if (res.isShoreline) {
+              bankFound = res;
+              break;
+            }
+          }
+
+          if (bankFound && (!state.lastShorelineStep || tickNumber - state.lastShorelineStep > 12)) {
+            state.lastShorelineStep = tickNumber;
+            const stepImpulse = calculateShorelineStepImpulse({ x: dirX, z: dirZ }, bankFound.stepHeight);
+            truck.applyImpulse(stepImpulse);
+          } else if (effectiveSpeed > 0.05 && !state.isAirborne) {
+            // Apply aquatic propulsion up to 0.55 cruising speed when moving/throttling
+            const curVel = vel || { x: dx, z: dz };
+            const aquaticImpulse = calculateAquaticImpulse(curVel, { x: dirX, z: dirZ }, CRUISING_AQUATIC_SPEED);
+            if (aquaticImpulse.x !== 0 || aquaticImpulse.z !== 0) {
+              truck.applyImpulse(aquaticImpulse);
+            }
+          }
+        } catch {}
+      }
+
+      // Dual rooster-tail liquid wake particles and churning audio while moving across water or lava
       if ((inWater || inLava) && effectiveSpeed > 0.08) {
         try {
+          const leftX = loc.x - dirX * 1.6 + perpX * 0.85;
+          const leftZ = loc.z - dirZ * 1.6 + perpZ * 0.85;
+          const rightX = loc.x - dirX * 1.6 - perpX * 0.85;
+          const rightZ = loc.z - dirZ * 1.6 - perpZ * 0.85;
+          const wakeY = loc.y + 0.35;
+
           if (inWater) {
-            dimension.spawnParticle("minecraft:water_splash_particle", {
-              x: loc.x - dirX * 1.5,
-              y: loc.y + 0.3,
-              z: loc.z - dirZ * 1.5,
-            });
+            dimension.spawnParticle("minecraft:water_splash_particle", { x: leftX, y: wakeY, z: leftZ });
+            dimension.spawnParticle("minecraft:water_splash_particle", { x: rightX, y: wakeY, z: rightZ });
+            if (tickNumber % 8 === 0) {
+              dimension.playSound("random.splash", loc, { volume: 0.8, pitch: 0.75 });
+            }
           } else if (inLava) {
-            dimension.spawnParticle("minecraft:lava_particle", {
-              x: loc.x - dirX * 1.5,
-              y: loc.y + 0.3,
-              z: loc.z - dirZ * 1.5,
-            });
+            dimension.spawnParticle("minecraft:lava_particle", { x: leftX, y: wakeY, z: leftZ });
+            dimension.spawnParticle("minecraft:lava_particle", { x: rightX, y: wakeY, z: rightZ });
+            if (tickNumber % 10 === 0) {
+              dimension.playSound("random.fizz", loc, { volume: 0.9, pitch: 0.65 });
+            }
           }
         } catch {}
       }
@@ -160,7 +221,6 @@ function onTick() {
       }
 
       // Suspension Jump execution (Jump key input on driver seat)
-      const driver = currentRiders.length > 0 ? currentRiders[0] : undefined;
       if (driver && driver.isJumping && canTriggerJump(state.lastJumpTick, tickNumber)) {
         state.lastJumpTick = tickNumber;
         state.isAirborne = true;
@@ -328,13 +388,17 @@ function onTick() {
         } catch {}
       }
 
-      // Momentum threshold for wood demolition: > 0.25 blocks/tick or airborne canopy demolition
-      if (effectiveSpeed <= 0.25 && !state.isAirborne) {
+      // Foliage shearing at any speed with driver; structural wood requires > 0.25 momentum
+      const hasDriver = Boolean(driver);
+      const canWood = canDemolishWood(effectiveSpeed, state.isAirborne);
+      const canFoliage = canShearFoliage(hasDriver);
+
+      if (!canWood && !canFoliage) {
         continue;
       }
 
       const sampledBlocks = new Set();
-      const forwardDistances = [1.2, 1.8, 2.5];
+      const forwardDistances = [0.0, 0.6, 1.2, 1.8, 2.5];
       const lateralOffsets = [-1.2, -0.6, 0.0, 0.6, 1.2];
       const baseY = Math.floor(loc.y + 0.05);
 
@@ -357,12 +421,12 @@ function onTick() {
 
               const typeId = block.typeId;
 
-              // Foliage vaporization (clean without item drops)
-              if (isFoliage(typeId)) {
+              // Foliage vaporization (clean without item drops - active at any speed with driver)
+              if (canFoliage && isFoliage(typeId)) {
                 block.setType("minecraft:air");
               }
               // Structural wood & glass demolition (drops survival items, plays break sound/particles)
-              else if (h < maxWoodHeight && isDestructibleWoodOrGlass(typeId)) {
+              else if (canWood && h < maxWoodHeight && isDestructibleWoodOrGlass(typeId)) {
                 dimension.runCommand(`setblock ${px} ${py} ${pz} air destroy`);
               }
             } catch {
