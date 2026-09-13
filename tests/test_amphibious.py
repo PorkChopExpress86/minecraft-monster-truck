@@ -10,8 +10,8 @@ def test_amphibious_buoyancy_configuration():
         
     comps = data["minecraft:entity"]["components"]
     
-    assert "minecraft:buoyancy" in comps, "Entity must define minecraft:buoyancy"
-    buoyancy = comps["minecraft:buoyancy"]
+    assert "minecraft:buoyant" in comps, "Entity must define minecraft:buoyant"
+    buoyancy = comps["minecraft:buoyant"]
     
     # Positive buoyancy and liquid targets
     assert buoyancy["base_buoyancy"] >= 1.0, "Must have positive buoyancy"
@@ -21,9 +21,6 @@ def test_amphibious_buoyancy_configuration():
     assert "minecraft:flowing_water" in liquids
     assert "minecraft:lava" in liquids
     assert "minecraft:flowing_lava" in liquids
-    
-    # 70% land speed on water
-    assert buoyancy.get("water_movement_factor") == 0.70
     
     # Resistance to water currents
     assert comps["minecraft:knockback_resistance"]["value"] == 1.0

@@ -28,7 +28,7 @@ def test_lava_damage_immunity_and_buoyancy():
     assert lava_trigger.get("deals_damage") == "no"
     
     # 2. Lava buoyancy
-    buoyancy = comps["minecraft:buoyancy"]
+    buoyancy = comps["minecraft:buoyant"]
     liquids = buoyancy["liquid_blocks"]
     assert "minecraft:lava" in liquids
     assert "minecraft:flowing_lava" in liquids

@@ -230,7 +230,7 @@
       "minecraft:knockback_resistance": {
         "value": 1.0
       },
-      "minecraft:buoyancy": {
+      "minecraft:buoyant": {
         "apply_gravity": true,
         "base_buoyancy": 1.0,
         "big_wave_probability": 0.0,
@@ -242,8 +242,7 @@
           "minecraft:lava",
           "minecraft:flowing_lava"
         ],
-        "simulate_waves": false,
-        "water_movement_factor": 0.70
+        "movement_type": "none"
       },
       "minecraft:nameable": {},
       "minecraft:loot": {
