@@ -1,8 +1,16 @@
-import { system, world } from "@minecraft/server";
+import { system, world, EntityDamageCause } from "@minecraft/server";
 import { isFoliage, isDestructibleWoodOrGlass } from "./demolition.js";
+import {
+  calculateTrampleDamage,
+  isInContactPerimeter,
+  calculateKnockbackImpulse,
+  isProtectedTarget
+} from "./trample.js";
 
 // Track state of each truck across ticks
 const truckStates = new Map();
+const entityHitCooldowns = new Map();
+let currentTick = 0;
 const DIMENSIONS = ["overworld", "nether", "the_end"];
 
 function onTick() {
@@ -54,10 +62,7 @@ function onTick() {
 
       const effectiveSpeed = Math.max(horizontalDist, velSpeed);
 
-      // Momentum threshold: > 0.25 blocks/tick
-      if (effectiveSpeed <= 0.25) {
-        continue;
-      }
+      currentTick++;
 
       // Compute heading vector
       let dirX = 0;
@@ -83,6 +88,69 @@ function onTick() {
       // Perpendicular vector for lateral width
       const perpX = -dirZ;
       const perpZ = dirX;
+
+      // Tire trample check (within 1.6 blocks contact perimeter)
+      if (effectiveSpeed > 0.08) {
+        try {
+          const nearbyEntities = dimension.getEntities({
+            location: loc,
+            maxDistance: 4.5,
+          });
+
+          for (const target of nearbyEntities) {
+            if (isProtectedTarget(target, truck)) continue;
+
+            if (
+              isInContactPerimeter(
+                target.location,
+                loc,
+                { x: dirX, z: dirZ },
+                2.25,
+                3.6,
+                1.6
+              )
+            ) {
+              const lastHit = entityHitCooldowns.get(target.id) || 0;
+              if (currentTick - lastHit < 6) continue;
+              entityHitCooldowns.set(target.id, currentTick);
+
+              const damage = calculateTrampleDamage(effectiveSpeed);
+              if (damage > 0) {
+                const impulse = calculateKnockbackImpulse(
+                  target.location,
+                  loc,
+                  effectiveSpeed
+                );
+                try {
+                  target.applyImpulse(impulse);
+                } catch {}
+
+                const damageOptions = {};
+                if (
+                  typeof EntityDamageCause !== "undefined" &&
+                  EntityDamageCause?.entityAttack
+                ) {
+                  damageOptions.cause = EntityDamageCause.entityAttack;
+                }
+                damageOptions.damagingEntity = truck;
+
+                try {
+                  target.applyDamage(damage, damageOptions);
+                } catch {
+                  try {
+                    target.applyDamage(damage);
+                  } catch {}
+                }
+              }
+            }
+          }
+        } catch {}
+      }
+
+      // Momentum threshold for wood demolition: > 0.25 blocks/tick
+      if (effectiveSpeed <= 0.25) {
+        continue;
+      }
 
       const sampledBlocks = new Set();
       const forwardDistances = [1.2, 1.8, 2.5];
