@@ -230,6 +230,21 @@
       "minecraft:knockback_resistance": {
         "value": 1.0
       },
+      "minecraft:buoyancy": {
+        "apply_gravity": true,
+        "base_buoyancy": 1.0,
+        "big_wave_probability": 0.0,
+        "big_wave_speed": 0.0,
+        "drag_down_on_buoyancy_removed": 0.0,
+        "liquid_blocks": [
+          "minecraft:water",
+          "minecraft:flowing_water",
+          "minecraft:lava",
+          "minecraft:flowing_lava"
+        ],
+        "simulate_waves": false,
+        "water_movement_factor": 0.70
+      },
       "minecraft:nameable": {},
       "minecraft:loot": {
         "table": "loot_tables/entities/monster_truck.json"

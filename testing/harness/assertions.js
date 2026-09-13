@@ -105,6 +105,7 @@ async function checkHeavyDuty(player, run, origin) {
     await wait(10);
     const health = truck.getComponent("minecraft:health");
     if (health.effectiveMax !== 1000) throw new Error("Truck must have 1000 health");
+    if (!truck.getComponent("minecraft:buoyancy")) throw new Error("Truck must have buoyancy component");
     truck.applyDamage(40, { cause: EntityDamageCause.entityAttack });
     await wait(2);
     if (health.currentValue !== 990) throw new Error("Combat armor failed: " + health.currentValue);
@@ -200,7 +201,8 @@ async function checkHeavyDuty(player, run, origin) {
       "parked truck leaves mob unharmed",
       "moving truck kills mob",
       "momentum-gated wood demolition clears path and preserves stationary wood",
-      "heavy entity collision halts low-speed truck and shoves with damage at top speed"
+      "heavy entity collision halts low-speed truck and shoves with damage at top speed",
+      "amphibious flotation buoyancy configured for water and lava"
     ];
   } finally {
     for (const [block, permutation] of blocks) block.setPermutation(permutation);
