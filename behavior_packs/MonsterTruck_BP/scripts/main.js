@@ -221,8 +221,10 @@ function onTick() {
       }
 
       // Suspension Jump execution (Native engine jump or driver jump key input)
-      const isAscending = dy > 0.22 || (vel && vel.y > 0.22);
-      const isJumpTriggered = (driver && driver.isJumping) || (driver && isAscending && !state.isAirborne);
+      const NATIVE_JUMP_ASCENT_THRESHOLD = 0.42;
+      const isAscending = (vel && vel.y > NATIVE_JUMP_ASCENT_THRESHOLD) || dy > NATIVE_JUMP_ASCENT_THRESHOLD;
+      const notStepping = !state.lastShorelineStep || (tickNumber - state.lastShorelineStep > 15);
+      const isJumpTriggered = (driver && driver.isJumping) || (driver && isAscending && notStepping && !state.isAirborne);
       if (isJumpTriggered && canTriggerJump(state.lastJumpTick, tickNumber)) {
         state.lastJumpTick = tickNumber;
         state.isAirborne = true;

@@ -24,8 +24,7 @@ def test_rideable_and_control_components():
     
     # Native Jump capability to prevent spacebar dismount
     assert "minecraft:can_power_jump" in comps, "Entity must have minecraft:can_power_jump"
-    assert "minecraft:horse.jump_strength" in comps, "Entity must have minecraft:horse.jump_strength"
-    assert comps["minecraft:horse.jump_strength"]["value"] >= 0.8
+    assert comps["minecraft:horse.jump_strength"]["value"] == 0.85, "Jump strength must be tuned to 0.85 for 3-block clearance"
     
     # Direct ground control
     assert "minecraft:input_ground_controlled" in comps, "Entity must have minecraft:input_ground_controlled"

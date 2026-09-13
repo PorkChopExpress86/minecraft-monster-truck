@@ -35,3 +35,27 @@ def test_art_documentation_and_texture_atlas():
     with Image.open(tex_path) as img:
         assert img.size == (256, 256)
         assert img.mode == "RGBA"
+
+def test_cab_geometry_sightlines_and_transparency():
+    """Verify sloped hood, elevated roof, and crystal clear windshield transparency."""
+    geo_path = REPO_ROOT / "resource_packs" / "MonsterTruck_RP" / "models" / "entity" / "monster_truck.geo.json"
+    with open(geo_path, "r", encoding="utf-8") as f:
+        geom = json.load(f)["minecraft:geometry"][0]
+    
+    body_bone = next(b for b in geom["bones"] if b["name"] == "body")
+    cubes = body_bone["cubes"]
+    
+    # Windshield cube exists and spans Y >= 34 to 44
+    windshields = [c for c in cubes if c.get("origin", [0,0,0])[2] == -8.5]
+    assert len(windshields) == 1, "Windshield cube must exist at Z=-8.5"
+    assert windshields[0]["size"][1] >= 9, "Windshield height must be at least 9 units for clear sightline"
+    
+    # Roof is elevated to Y >= 44
+    roofs = [c for c in cubes if c.get("origin", [0,0,0])[1] >= 44 and c.get("size", [0,0,0])[0] >= 28]
+    assert len(roofs) >= 1, "Roof must be elevated to Y>=44 for head clearance"
+    
+    # Texture at glass swatch (20, 80) is 100% transparent (alpha == 0)
+    tex_path = REPO_ROOT / "resource_packs" / "MonsterTruck_RP" / "textures" / "entity" / "monster_truck.png"
+    with Image.open(tex_path) as img:
+        pixel = img.getpixel((20, 80))
+        assert pixel[3] == 0, f"Glass swatch alpha must be 0 (100% transparent), got {pixel[3]}"
