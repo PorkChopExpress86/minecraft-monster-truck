@@ -199,6 +199,19 @@ async function checkHeavyDuty(player, run, origin) {
       if (golem && golem.isValid) golem.remove();
     }
 
+    // Verify Suspension Jump vertical clearance
+    truck.teleport(location);
+    truck.clearVelocity();
+    truck.applyImpulse({ x: 0, y: 0.82, z: 0 });
+    let peakY = location.y;
+    for (let tick = 0; tick < 15; tick++) {
+      await wait(1);
+      if (truck.location.y > peakY) peakY = truck.location.y;
+    }
+    if (peakY < location.y + 2.8) {
+      throw new Error("Suspension jump failed vertical clearance: " + peakY);
+    }
+
     return [
       "two-block ledge traversed with horizontal impulses",
       "1000 health",
@@ -209,7 +222,8 @@ async function checkHeavyDuty(player, run, origin) {
       "moving truck kills mob",
       "momentum-gated wood demolition clears path and preserves stationary wood",
       "heavy entity collision halts low-speed truck and shoves with damage at top speed",
-      "amphibious flotation buoyancy configured for water and lava"
+      "amphibious flotation buoyancy configured for water and lava",
+      "instant-tap suspension jump achieves vertical clearance"
     ];
   } finally {
     for (const [block, permutation] of blocks) block.setPermutation(permutation);

@@ -10,6 +10,12 @@ import {
   isLiquidBlock,
   getSafeDismountLocation
 } from "./trample.js";
+import {
+  calculateJumpImpulse,
+  canTriggerJump,
+  calculateCrushStompDamage,
+  calculateShockwaveImpulse
+} from "./suspension.js";
 
 // Track state of each truck across ticks
 const truckStates = new Map();
@@ -135,6 +141,70 @@ function onTick() {
         }
       }
 
+      // Suspension Jump execution (Jump key input on driver seat)
+      const driver = currentRiders.length > 0 ? currentRiders[0] : undefined;
+      if (driver && driver.isJumping && canTriggerJump(state.lastJumpTick, currentTick)) {
+        state.lastJumpTick = currentTick;
+        state.isAirborne = true;
+        const jImpulse = calculateJumpImpulse(effectiveSpeed, { x: dirX, z: dirZ }, 0.82);
+        try { truck.applyImpulse(jImpulse); } catch {}
+
+        // Audio & Particles
+        try {
+          dimension.playSound("random.fizz", loc, { volume: 1.0, pitch: 0.8 });
+          dimension.spawnParticle("minecraft:campfire_smoke_particle", { x: loc.x, y: loc.y + 0.2, z: loc.z });
+          if (inWater) {
+            dimension.playSound("random.splash", loc, { volume: 1.2, pitch: 0.9 });
+            dimension.spawnParticle("minecraft:water_splash_particle", { x: loc.x, y: loc.y + 0.5, z: loc.z });
+          } else if (inLava) {
+            dimension.playSound("random.fizz", loc, { volume: 1.2, pitch: 0.6 });
+            dimension.spawnParticle("minecraft:lava_particle", { x: loc.x, y: loc.y + 0.5, z: loc.z });
+            dimension.spawnParticle("minecraft:basic_flame_particle", { x: loc.x, y: loc.y + 0.5, z: loc.z });
+          }
+        } catch {}
+      }
+
+      // Crush Stomp Landing Detection
+      if (state.isAirborne && dy <= 0) {
+        let hasLanded = false;
+        try {
+          const blockBelow = dimension.getBlock({
+            x: Math.floor(loc.x),
+            y: Math.floor(loc.y - 0.1),
+            z: Math.floor(loc.z)
+          });
+          if (blockBelow && !blockBelow.isAir && blockBelow.typeId !== "minecraft:air" && !isLiquidBlock(blockBelow.typeId)) {
+            hasLanded = true;
+          }
+        } catch {}
+
+        if (hasLanded) {
+          state.isAirborne = false;
+          const crushDamage = calculateCrushStompDamage();
+          try {
+            const nearby = dimension.getEntities({ location: loc, maxDistance: 3.5 });
+            for (const target of nearby) {
+              if (isProtectedTarget(target, truck)) continue;
+
+              const shockImpulse = calculateShockwaveImpulse(target.location, loc, 1.5);
+              try { target.applyImpulse(shockImpulse); } catch {}
+
+              const damageOptions = {};
+              if (typeof EntityDamageCause !== "undefined" && EntityDamageCause?.contact) {
+                damageOptions.cause = EntityDamageCause.contact;
+              }
+              damageOptions.damagingEntity = truck;
+              try { target.applyDamage(crushDamage, damageOptions); } catch {
+                try { target.applyDamage(crushDamage); } catch {}
+              }
+            }
+
+            dimension.playSound("random.explode", loc, { volume: 0.8, pitch: 1.4 });
+            dimension.spawnParticle("minecraft:large_explosion", { x: loc.x, y: loc.y + 0.3, z: loc.z });
+          } catch {}
+        }
+      }
+
       // Tire trample check (within 1.6 blocks contact perimeter)
       if (effectiveSpeed > 0.08) {
         try {
@@ -233,8 +303,8 @@ function onTick() {
         } catch {}
       }
 
-      // Momentum threshold for wood demolition: > 0.25 blocks/tick
-      if (effectiveSpeed <= 0.25) {
+      // Momentum threshold for wood demolition: > 0.25 blocks/tick or airborne canopy demolition
+      if (effectiveSpeed <= 0.25 && !state.isAirborne) {
         continue;
       }
 
