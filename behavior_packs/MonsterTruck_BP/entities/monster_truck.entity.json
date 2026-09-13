@@ -221,7 +221,11 @@
       "minecraft:horse.jump_strength": {
         "value": 0.85
       },
-      "minecraft:input_ground_controlled": {},
+      "minecraft:is_tamed": {},
+      "minecraft:is_saddled": {},
+      "minecraft:behavior.player_ride_tamed": {
+        "priority": 0
+      },
       "minecraft:variable_max_auto_step": {
         "base_value": 2.0,
         "controlled_value": 2.0,
