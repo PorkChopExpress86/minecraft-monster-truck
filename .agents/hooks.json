@@ -1,0 +1,10 @@
+{
+  "minecraft-game-install-prompter": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "python ./scripts/hook_game_install.py"
+      }
+    ]
+  }
+}
