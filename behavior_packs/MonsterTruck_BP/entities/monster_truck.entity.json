@@ -203,7 +203,7 @@
           {
             "position": [
               -0.55,
-              1.75,
+              0.95,
               0.2
             ],
             "third_person_camera_radius": 6.0
@@ -211,7 +211,7 @@
           {
             "position": [
               0.55,
-              1.75,
+              0.95,
               0.2
             ],
             "third_person_camera_radius": 6.0

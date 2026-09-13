@@ -18,8 +18,8 @@ def test_two_seat_configuration():
     driver_seat = rideable["seats"][0]
     passenger_seat = rideable["seats"][1]
     
-    assert driver_seat["position"] == [-0.55, 1.75, 0.20], "Driver seat must be on the left"
-    assert passenger_seat["position"] == [0.55, 1.75, 0.20], "Passenger seat must be on the right"
+    assert driver_seat["position"] == [-0.55, 0.95, 0.20], "Driver seat must be on the left"
+    assert passenger_seat["position"] == [0.55, 0.95, 0.20], "Passenger seat must be on the right"
 
 def test_durability_and_loot():
     entity_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "entities" / "monster_truck.entity.json"
