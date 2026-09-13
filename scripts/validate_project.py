@@ -99,6 +99,19 @@ class ProjectValidator:
                 self.log_error(f"BP entity identifier mismatch: expected {identifier}, got {desc.get('identifier')}")
             # Validate seats format
             comps = bp_entity.get("minecraft:entity", {}).get("components", {})
+            if "minecraft:buoyancy" in comps:
+                self.log_error("Invalid component 'minecraft:buoyancy' found; Bedrock 1.26 schema requires 'minecraft:buoyant'")
+            if "minecraft:buoyant" in comps:
+                buoyant = comps["minecraft:buoyant"]
+                if not isinstance(buoyant, dict):
+                    self.log_error("minecraft:buoyant must be an object")
+                else:
+                    if "liquid_blocks" not in buoyant or not isinstance(buoyant["liquid_blocks"], list):
+                        self.log_error("minecraft:buoyant must define liquid_blocks as a list")
+                    if "simulate_waves" in buoyant:
+                        self.log_error("minecraft:buoyant contains deprecated 'simulate_waves'; use 'movement_type'")
+                    if "water_movement_factor" in buoyant:
+                        self.log_error("minecraft:buoyant contains unsupported property 'water_movement_factor'")
             if "minecraft:rideable" in comps:
                 seats = comps["minecraft:rideable"].get("seats")
                 if not isinstance(seats, list):
