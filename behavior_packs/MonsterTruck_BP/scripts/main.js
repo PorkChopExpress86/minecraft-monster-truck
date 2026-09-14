@@ -1,6 +1,11 @@
 import { system, world, EntityDamageCause } from "@minecraft/server";
 import { isFoliage, isDestructibleWoodOrGlass, canDemolishWood, canShearFoliage } from "./demolition.js";
 import {
+  calculateDynamicPitch,
+  calculateSteerAngle,
+  sampleGroundHeight
+} from "./kinematics.js";
+import {
   calculateAquaticImpulse,
   detectShorelineBank,
   calculateShorelineStepImpulse,
@@ -151,6 +156,50 @@ function onTick() {
       }
 
       const driver = currentRiders.length > 0 ? currentRiders[0] : undefined;
+
+      // Dynamic Incline Pitch and Coordinated Four-Wheel Steering updates
+      let currentYaw = 0;
+      try {
+        if (truck.getRotation) {
+          currentYaw = truck.getRotation().y;
+        }
+      } catch {}
+
+      const prevYaw = typeof state.prevYaw === "number" ? state.prevYaw : currentYaw;
+      let deltaYaw = ((currentYaw - prevYaw + 540) % 360) - 180;
+      state.prevYaw = currentYaw;
+
+      // Update steering angle and sync to property
+      state.steerAngle = calculateSteerAngle({
+        deltaYaw,
+        currentSteer: state.steerAngle || 0,
+        hasDriver: Boolean(driver)
+      });
+      try {
+        truck.setProperty("blake:steer_angle", state.steerAngle);
+      } catch {}
+
+      // Update dynamic pitch angle and sync to property
+      const frontX = loc.x + dirX * 1.125;
+      const frontZ = loc.z + dirZ * 1.125;
+      const rearX = loc.x - dirX * 1.125;
+      const rearZ = loc.z - dirZ * 1.125;
+
+      const frontHeight = sampleGroundHeight(dimension, frontX, loc.y, frontZ);
+      const rearHeight = sampleGroundHeight(dimension, rearX, loc.y, rearZ);
+      const vY = vel ? vel.y : dy;
+
+      state.pitchAngle = calculateDynamicPitch({
+        frontHeight,
+        rearHeight,
+        currentPitch: state.pitchAngle || 0,
+        isAirborne: Boolean(state.isAirborne),
+        inLiquid: inWater || inLava,
+        verticalVelocity: vY
+      });
+      try {
+        truck.setProperty("blake:pitch_angle", state.pitchAngle);
+      } catch {}
 
       // Aquatic propulsion and Shoreline Step-Up
       if ((inWater || inLava) && driver) {
