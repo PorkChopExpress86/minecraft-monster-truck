@@ -48,13 +48,15 @@ def generate():
     bones=[{'name':'root','pivot':[0,0,0]}, {'name':'body','parent':'root','pivot':[0,24,0],'cubes':body}, {'name':'roll_cage','parent':'body','pivot':[0,24,0]}, {'name':'suspension','parent':'root','pivot':[0,0,0],'cubes':frame}]
     for name,x,z in [('wheel_fl',20,-18),('wheel_fr',-20,-18),('wheel_rl',20,18),('wheel_rr',-20,18)]:
         pivot=[x,12,z];parts=[]
+        steer_name = name.replace('wheel_', 'steer_')
+        bones.append({'name':steer_name,'parent':'root','pivot':pivot})
         # Two intersecting squares form a chunky octagonal tire section.
         for angle in [0,45]:parts.append(cube([x-6,3.5,z-8.5],[12,17,17],'rubber',pivot=pivot,rotation=[angle,0,0]))
         for angle in range(0,360,30):parts.append(cube([x-6.5,22.5,z-2.5],[13,2,5],'tread',pivot=pivot,rotation=[angle,0,0]))
         outer=x+6 if x>0 else x-7
         parts.append(cube([outer,7,z-5],[1,10,10],'metal'))
         parts.append(cube([outer+(0.1 if x>0 else -0.1),9,z-3],[1,6,6],'shade'))
-        bones.append({'name':name,'parent':'root','pivot':pivot,'cubes':parts})
+        bones.append({'name':name,'parent':steer_name,'pivot':pivot,'cubes':parts})
     mesh={'format_version':'1.12.0','minecraft:geometry':[{'description':{'identifier':'geometry.blake.monster_truck','texture_width':256,'texture_height':256,'visible_bounds_width':6,'visible_bounds_height':5,'visible_bounds_offset':[0,2,0]},'bones':bones}]}
     (ROOT/'resource_packs/MonsterTruck_RP/models/entity/monster_truck.geo.json').write_text(json.dumps(mesh,indent=2)+'\n')
 

@@ -56,5 +56,41 @@ def test_client_entity_animation_wiring():
     assert "animations" in desc
     assert "wheel_spin" in desc["animations"]
     assert "drive_controller" in desc["animations"]
+    assert "pitch" in desc["animations"]
+    assert "steer" in desc["animations"]
     assert "scripts" in desc
-    assert "drive_controller" in desc["scripts"].get("animate", [])
+    animate = desc["scripts"].get("animate", [])
+    assert "drive_controller" in animate
+    assert "pitch" in animate
+    assert "steer" in animate
+
+def test_pitch_and_steering_animations_and_properties():
+    anim_path = REPO_ROOT / "resource_packs" / "MonsterTruck_RP" / "animations" / "monster_truck.animation.json"
+    bp_entity_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "entities" / "monster_truck.entity.json"
+    
+    with open(anim_path, "r", encoding="utf-8") as f:
+        anim_data = json.load(f)
+    with open(bp_entity_path, "r", encoding="utf-8") as f:
+        bp_data = json.load(f)
+        
+    props = bp_data["minecraft:entity"]["description"].get("properties", {})
+    assert "blake:pitch_angle" in props, "blake:pitch_angle property must exist in BP"
+    assert props["blake:pitch_angle"]["type"] == "int"
+    assert props["blake:pitch_angle"]["range"] == [-35, 35]
+    assert props["blake:pitch_angle"]["client_sync"] is True
+    
+    assert "blake:steer_angle" in props, "blake:steer_angle property must exist in BP"
+    assert props["blake:steer_angle"]["type"] == "int"
+    assert props["blake:steer_angle"]["range"] == [-26, 26]
+    assert props["blake:steer_angle"]["client_sync"] is True
+    
+    animations = anim_data.get("animations", {})
+    assert "animation.blake.monster_truck.pitch" in animations
+    pitch_anim = animations["animation.blake.monster_truck.pitch"]
+    assert "root" in pitch_anim.get("bones", {})
+    
+    assert "animation.blake.monster_truck.steer" in animations
+    steer_anim = animations["animation.blake.monster_truck.steer"]
+    steer_bones = steer_anim.get("bones", {})
+    for b in ["steer_fl", "steer_fr", "steer_rl", "steer_rr"]:
+        assert b in steer_bones, f"{b} must be animated in steer animation"

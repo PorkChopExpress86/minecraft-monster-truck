@@ -6,13 +6,17 @@ from PIL import Image
 from scripts.make_placeholder_textures import BODY_COLORS, generate_entity_texture
 
 ROOT = Path(__file__).resolve().parents[1]
-COLORS = ("red", "blue", "green", "yellow", "black", "white")
+COLORS = (
+    "red", "blue", "green", "yellow", "black", "white",
+    "orange", "magenta", "light_blue", "lime", "pink", "gray",
+    "light_gray", "cyan", "purple", "brown"
+)
 
 
 def test_color_property_events_and_render_textures():
     entity = json.loads((ROOT / "behavior_packs/MonsterTruck_BP/entities/monster_truck.entity.json").read_text())["minecraft:entity"]
     assert entity["description"]["properties"]["blake:color"] == {
-        "type": "int", "range": [0, 5], "default": 0, "client_sync": True,
+        "type": "int", "range": [0, 15], "default": 0, "client_sync": True,
     }
     client = json.loads((ROOT / "resource_packs/MonsterTruck_RP/entity/monster_truck.entity.json").read_text())["minecraft:client_entity"]["description"]
     controller = json.loads((ROOT / "resource_packs/MonsterTruck_RP/render_controllers/monster_truck.render_controllers.json").read_text())["render_controllers"]["controller.render.blake.monster_truck"]
@@ -24,6 +28,17 @@ def test_color_property_events_and_render_textures():
         alias = textures[index].split(".", 1)[1]
         texture = ROOT / "resource_packs/MonsterTruck_RP" / (client["textures"][alias] + ".png")
         assert texture.is_file()
+
+def test_randomized_spawn_egg_event():
+    entity = json.loads((ROOT / "behavior_packs/MonsterTruck_BP/entities/monster_truck.entity.json").read_text())["minecraft:entity"]
+    events = entity.get("events", {})
+    assert "blake:random_color_on_spawn" in events, "Must have blake:random_color_on_spawn event"
+    random_event = events["blake:random_color_on_spawn"]
+    assert "randomize" in random_event, "blake:random_color_on_spawn must randomize color"
+    random_branches = random_event["randomize"]
+    assert len(random_branches) == 16, f"Must have 16 randomize color branches, got {len(random_branches)}"
+    assert "minecraft:entity_spawned" in events, "Must have minecraft:entity_spawned event"
+    assert events["minecraft:entity_spawned"]["trigger"] == "blake:random_color_on_spawn"
 
 
 def test_generated_colors_preserve_red_and_non_body_pixels(tmp_path):
@@ -40,10 +55,13 @@ def test_generated_colors_preserve_red_and_non_body_pixels(tmp_path):
         with Image.open(asset) as source:
             assert image.tobytes() == source.convert("RGBA").tobytes()
         bodies.add(image.getpixel((20, 20)))
+        # Check color-matched wheel hub
+        assert image.getpixel((19, 162)) == image.getpixel((20, 20))
         for y in range(256):
             for x in range(256):
                 body_pixel = (0 <= x <= 120 and 0 <= y <= 60) or (96 <= x <= 160 and 64 <= y <= 120)
-                if not body_pixel or color == "red":
+                hub_pixel = ((14 <= x <= 24 or 54 <= x <= 64 or 94 <= x <= 104 or 134 <= x <= 144) and 157 <= y <= 167)
+                if (not body_pixel and not hub_pixel) or color == "red":
                     assert image.getpixel((x, y)) == red.getpixel((x, y))
     assert len(bodies) == len(COLORS)
     assert tuple(BODY_COLORS) == COLORS

@@ -3607,8 +3607,17 @@
           ]
         },
         {
-          "name": "wheel_fl",
+          "name": "steer_fl",
           "parent": "root",
+          "pivot": [
+            20,
+            12,
+            -18
+          ]
+        },
+        {
+          "name": "wheel_fl",
+          "parent": "steer_fl",
           "pivot": [
             20,
             12,
@@ -4942,8 +4951,17 @@
           ]
         },
         {
-          "name": "wheel_fr",
+          "name": "steer_fr",
           "parent": "root",
+          "pivot": [
+            -20,
+            12,
+            -18
+          ]
+        },
+        {
+          "name": "wheel_fr",
+          "parent": "steer_fr",
           "pivot": [
             -20,
             12,
@@ -6277,8 +6295,17 @@
           ]
         },
         {
-          "name": "wheel_rl",
+          "name": "steer_rl",
           "parent": "root",
+          "pivot": [
+            20,
+            12,
+            18
+          ]
+        },
+        {
+          "name": "wheel_rl",
+          "parent": "steer_rl",
           "pivot": [
             20,
             12,
@@ -7612,8 +7639,17 @@
           ]
         },
         {
-          "name": "wheel_rr",
+          "name": "steer_rr",
           "parent": "root",
+          "pivot": [
+            -20,
+            12,
+            18
+          ]
+        },
+        {
+          "name": "wheel_rr",
+          "parent": "steer_rr",
           "pivot": [
             -20,
             12,

@@ -58,6 +58,31 @@
           }
         }
       }
+    },
+    "animation.blake.monster_truck.pitch": {
+      "loop": true,
+      "bones": {
+        "root": {
+          "rotation": [ "-query.property('blake:pitch_angle')", 0, 0 ]
+        }
+      }
+    },
+    "animation.blake.monster_truck.steer": {
+      "loop": true,
+      "bones": {
+        "steer_fl": {
+          "rotation": [ 0, "query.property('blake:steer_angle')", 0 ]
+        },
+        "steer_fr": {
+          "rotation": [ 0, "query.property('blake:steer_angle')", 0 ]
+        },
+        "steer_rl": {
+          "rotation": [ 0, "-query.property('blake:steer_angle') * 0.6923", 0 ]
+        },
+        "steer_rr": {
+          "rotation": [ 0, "-query.property('blake:steer_angle') * 0.6923", 0 ]
+        }
+      }
     }
   }
 }

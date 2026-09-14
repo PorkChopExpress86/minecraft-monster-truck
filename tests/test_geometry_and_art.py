@@ -14,14 +14,19 @@ def test_geometry_structure_and_wheel_bones():
     geom = data["minecraft:geometry"][0]
     bone_names = {bone["name"] for bone in geom["bones"]}
     
-    expected_bones = {"root", "body", "wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr", "roll_cage"}
+    expected_bones = {"root", "body", "wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr", "roll_cage", "steer_fl", "steer_fr", "steer_rl", "steer_rr"}
     assert expected_bones.issubset(bone_names), f"Missing expected bones: {expected_bones - bone_names}"
     
-    # Assert wheel bones have pivots centered on wheels
     bone_dict = {b["name"]: b for b in geom["bones"]}
-    for wheel in ["wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr"]:
-        assert "pivot" in bone_dict[wheel], f"{wheel} must declare a pivot for rotational animation"
-        assert len(bone_dict[wheel].get("cubes", [])) > 0, f"{wheel} must have cube definition"
+    # Assert steering knuckle bones parent the wheel bones with matching pivots
+    for corner in ["fl", "fr", "rl", "rr"]:
+        steer_bone = f"steer_{corner}"
+        wheel_bone = f"wheel_{corner}"
+        assert steer_bone in bone_dict, f"{steer_bone} must exist in geometry"
+        assert bone_dict[steer_bone].get("parent") == "root", f"{steer_bone} must be parented to root"
+        assert bone_dict[wheel_bone].get("parent") == steer_bone, f"{wheel_bone} must be parented to {steer_bone}"
+        assert bone_dict[steer_bone].get("pivot") == bone_dict[wheel_bone].get("pivot"), f"{steer_bone} pivot must match {wheel_bone} pivot"
+        assert len(bone_dict[wheel_bone].get("cubes", [])) > 0, f"{wheel_bone} must have cube definition"
 
 def test_art_documentation_and_texture_atlas():
     uv_spec = REPO_ROOT / "sources" / "texture_uv_spec.md"

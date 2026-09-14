@@ -68,3 +68,15 @@ _Avoid_: Fire ram, flaming wheels, burn attack
 The high-impact downward kinetic force and radial knockback inflicted on entities beneath the vehicle when landing from a Suspension Jump.
 _Avoid_: Ground pound, butt slam, crash landing
 
+**Pneumatic Shock Absorption**:
+The complete kinetic dampening provided by the vehicle's massive tires and heavy-duty suspension, providing 100% fall damage immunity to both the vehicle and its seated riders upon high drops and jumps, accompanied by pneumatic venting audio and impact dust particles.
+_Avoid_: Fall damage negation, soft landing, cushioned fall
+
+**Dynamic Incline Pitch**:
+The dual-axle terrain-contour visual pitch tilt of the vehicle chassis and wheels conforming to hill climbs and descents with damped transitions and airborne trajectory alignment.
+_Avoid_: Tilt, lean, slope lock, pitch glitch
+
+**Coordinated Four-Wheel Steering**:
+The counter-phase lateral angular deflection of front and rear wheel assemblies driven by turning rate with dynamic hydraulic spring-return centering.
+_Avoid_: Wheel turning, car turn, crab steering
+

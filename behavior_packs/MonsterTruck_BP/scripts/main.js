@@ -20,14 +20,30 @@ import {
   calculateJumpImpulse,
   canTriggerJump,
   calculateCrushStompDamage,
-  calculateShockwaveImpulse
+  calculateShockwaveImpulse,
+  PNEUMATIC_VENT_SOUND,
+  PNEUMATIC_DUST_PARTICLE,
+  shouldAbsorbFallDamage,
+  isFallingOrAirborne,
+  calculateWheelContactOffsets
 } from "./suspension.js";
 
 // Track state of each truck across ticks
 const truckStates = new Map();
 const entityHitCooldowns = new Map();
+const recentRiders = new Map();
 let currentTick = 0;
 const DIMENSIONS = ["overworld", "nether", "the_end"];
+
+function getCurrentTick() {
+  return typeof system.currentTick === "number" ? system.currentTick : currentTick;
+}
+
+function isProtectedRider(entityId, tickNum) {
+  const lastTick = recentRiders.get(entityId);
+  if (lastTick === undefined) return false;
+  return (tickNum - lastTick) <= 40;
+}
 
 function onTick() {
   for (const dimName of DIMENSIONS) {
@@ -109,6 +125,9 @@ function onTick() {
       const currentRiders = rideable && rideable.getRiders ? rideable.getRiders() : [];
       const prevRiders = state.riders || [];
       state.riders = currentRiders.map((r) => r.id);
+      for (const rider of currentRiders) {
+        recentRiders.set(rider.id, tickNumber);
+      }
 
       // Check if truck is in lava or water
       let inLava = false;
@@ -253,8 +272,17 @@ function onTick() {
         } catch {}
       }
 
-      // Crush Stomp Landing Detection
-      if (state.isAirborne && dy <= 0) {
+      // Free-fall and airborne tracking
+      const velY = vel ? vel.y : dy;
+      const airborneOrFalling = isFallingOrAirborne(Boolean(state.isAirborne), dy, velY);
+      if (airborneOrFalling && !state.isAirborne) {
+        state.isFalling = true;
+      }
+
+
+
+      // Pneumatic Shock Absorption & Landing Detection
+      if ((state.isAirborne || state.isFalling) && dy <= 0) {
         let hasLanded = false;
         try {
           const blockBelow = dimension.getBlock({
@@ -268,29 +296,47 @@ function onTick() {
         } catch {}
 
         if (hasLanded) {
+          const wasJump = Boolean(state.isAirborne);
           state.isAirborne = false;
-          const crushDamage = calculateCrushStompDamage();
+          state.isFalling = false;
+
+          // Dissipate impact energy with pneumatic venting audio and quad wheel dust particles
           try {
-            const nearby = dimension.getEntities({ location: loc, maxDistance: 3.5 });
-            for (const target of nearby) {
-              if (isProtectedTarget(target, truck)) continue;
-
-              const shockImpulse = calculateShockwaveImpulse(target.location, loc, 1.5);
-              try { target.applyImpulse(shockImpulse); } catch {}
-
-              const damageOptions = {};
-              if (typeof EntityDamageCause !== "undefined" && EntityDamageCause?.contact) {
-                damageOptions.cause = EntityDamageCause.contact;
-              }
-              damageOptions.damagingEntity = truck;
-              try { target.applyDamage(crushDamage, damageOptions); } catch {
-                try { target.applyDamage(crushDamage); } catch {}
-              }
+            dimension.playSound(PNEUMATIC_VENT_SOUND, loc, { volume: 1.0, pitch: 0.85 });
+            const wheelOffsets = calculateWheelContactOffsets({ x: dirX, z: dirZ }, { x: perpX, z: perpZ });
+            for (const offset of wheelOffsets) {
+              dimension.spawnParticle(PNEUMATIC_DUST_PARTICLE, {
+                x: loc.x + offset.x,
+                y: loc.y + 0.15,
+                z: loc.z + offset.z
+              });
             }
-
-            dimension.playSound("random.explode", loc, { volume: 0.8, pitch: 1.4 });
-            dimension.spawnParticle("minecraft:large_explosion", { x: loc.x, y: loc.y + 0.3, z: loc.z });
           } catch {}
+
+          if (wasJump) {
+            const crushDamage = calculateCrushStompDamage();
+            try {
+              const nearby = dimension.getEntities({ location: loc, maxDistance: 3.5 });
+              for (const target of nearby) {
+                if (isProtectedTarget(target, truck)) continue;
+
+                const shockImpulse = calculateShockwaveImpulse(target.location, loc, 1.5);
+                try { target.applyImpulse(shockImpulse); } catch {}
+
+                const damageOptions = {};
+                if (typeof EntityDamageCause !== "undefined" && EntityDamageCause?.contact) {
+                  damageOptions.cause = EntityDamageCause.contact;
+                }
+                damageOptions.damagingEntity = truck;
+                try { target.applyDamage(crushDamage, damageOptions); } catch {
+                  try { target.applyDamage(crushDamage); } catch {}
+                }
+              }
+
+              dimension.playSound("random.explode", loc, { volume: 0.8, pitch: 1.4 });
+              dimension.spawnParticle("minecraft:large_explosion", { x: loc.x, y: loc.y + 0.3, z: loc.z });
+            } catch {}
+          }
         }
       }
 
@@ -452,3 +498,25 @@ function onTick() {
 
 // Subscribe tick loop
 system.runInterval(onTick, 1);
+
+// Pneumatic Shock Absorption event handling for vehicle and riders
+function isPneumaticallyProtectedFall(event) {
+  const cause = event.damageSource ? event.damageSource.cause : undefined;
+  const hurtEntity = event.hurtEntity;
+  if (!hurtEntity) return false;
+
+  const isTruck = hurtEntity.typeId === "blake:monster_truck";
+  const isRider = isProtectedRider(hurtEntity.id, getCurrentTick());
+  return shouldAbsorbFallDamage(cause, isTruck || isRider);
+}
+
+if (world.beforeEvents && world.beforeEvents.entityHurt) {
+  try {
+    world.beforeEvents.entityHurt.subscribe((event) => {
+      if (isPneumaticallyProtectedFall(event)) {
+        event.cancel = true;
+      }
+    });
+  } catch {}
+}
+

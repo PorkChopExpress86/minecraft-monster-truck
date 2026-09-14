@@ -19,7 +19,17 @@
             "Texture.green",
             "Texture.yellow",
             "Texture.black",
-            "Texture.white"
+            "Texture.white",
+            "Texture.orange",
+            "Texture.magenta",
+            "Texture.light_blue",
+            "Texture.lime",
+            "Texture.pink",
+            "Texture.gray",
+            "Texture.light_gray",
+            "Texture.cyan",
+            "Texture.purple",
+            "Texture.brown"
           ]
         }
       }

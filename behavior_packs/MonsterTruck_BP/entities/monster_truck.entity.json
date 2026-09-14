@@ -11,7 +11,25 @@
           "type": "int",
           "range": [
             0,
-            5
+            15
+          ],
+          "default": 0,
+          "client_sync": true
+        },
+        "blake:pitch_angle": {
+          "type": "int",
+          "range": [
+            -35,
+            35
+          ],
+          "default": 0,
+          "client_sync": true
+        },
+        "blake:steer_angle": {
+          "type": "int",
+          "range": [
+            -26,
+            26
           ],
           "default": 0,
           "client_sync": true
@@ -158,6 +176,236 @@
             },
             "use_item": false,
             "interact_text": "Paint white"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:orange_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_orange",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint orange"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:magenta_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_magenta",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint magenta"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:light_blue_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_light_blue",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint light blue"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:lime_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_lime",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint lime"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:pink_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_pink",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint pink"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:gray_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_gray",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint gray"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:light_gray_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_light_gray",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint light gray"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:cyan_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_cyan",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint cyan"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:purple_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_purple",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint purple"
+          },
+          {
+            "on_interact": {
+              "filters": {
+                "all_of": [
+                  {
+                    "test": "is_sneaking",
+                    "subject": "other",
+                    "value": true
+                  },
+                  {
+                    "test": "has_equipment",
+                    "subject": "other",
+                    "domain": "main_hand",
+                    "value": "minecraft:brown_dye"
+                  }
+                ]
+              },
+              "event": "blake:paint_brown",
+              "target": "self"
+            },
+            "use_item": false,
+            "interact_text": "Paint brown"
           }
         ]
       },
@@ -365,6 +613,159 @@
         "set_property": {
           "blake:color": 5
         }
+      },
+      "blake:paint_orange": {
+        "set_property": {
+          "blake:color": 6
+        }
+      },
+      "blake:paint_magenta": {
+        "set_property": {
+          "blake:color": 7
+        }
+      },
+      "blake:paint_light_blue": {
+        "set_property": {
+          "blake:color": 8
+        }
+      },
+      "blake:paint_lime": {
+        "set_property": {
+          "blake:color": 9
+        }
+      },
+      "blake:paint_pink": {
+        "set_property": {
+          "blake:color": 10
+        }
+      },
+      "blake:paint_gray": {
+        "set_property": {
+          "blake:color": 11
+        }
+      },
+      "blake:paint_light_gray": {
+        "set_property": {
+          "blake:color": 12
+        }
+      },
+      "blake:paint_cyan": {
+        "set_property": {
+          "blake:color": 13
+        }
+      },
+      "blake:paint_purple": {
+        "set_property": {
+          "blake:color": 14
+        }
+      },
+      "blake:paint_brown": {
+        "set_property": {
+          "blake:color": 15
+        }
+      },
+      "blake:spawn_red": {
+        "set_property": {
+          "blake:color": 0
+        }
+      },
+      "blake:spawn_blue": {
+        "set_property": {
+          "blake:color": 1
+        }
+      },
+      "blake:spawn_green": {
+        "set_property": {
+          "blake:color": 2
+        }
+      },
+      "blake:spawn_yellow": {
+        "set_property": {
+          "blake:color": 3
+        }
+      },
+      "blake:spawn_black": {
+        "set_property": {
+          "blake:color": 4
+        }
+      },
+      "blake:spawn_white": {
+        "set_property": {
+          "blake:color": 5
+        }
+      },
+      "blake:spawn_orange": {
+        "set_property": {
+          "blake:color": 6
+        }
+      },
+      "blake:spawn_magenta": {
+        "set_property": {
+          "blake:color": 7
+        }
+      },
+      "blake:spawn_light_blue": {
+        "set_property": {
+          "blake:color": 8
+        }
+      },
+      "blake:spawn_lime": {
+        "set_property": {
+          "blake:color": 9
+        }
+      },
+      "blake:spawn_pink": {
+        "set_property": {
+          "blake:color": 10
+        }
+      },
+      "blake:spawn_gray": {
+        "set_property": {
+          "blake:color": 11
+        }
+      },
+      "blake:spawn_light_gray": {
+        "set_property": {
+          "blake:color": 12
+        }
+      },
+      "blake:spawn_cyan": {
+        "set_property": {
+          "blake:color": 13
+        }
+      },
+      "blake:spawn_purple": {
+        "set_property": {
+          "blake:color": 14
+        }
+      },
+      "blake:spawn_brown": {
+        "set_property": {
+          "blake:color": 15
+        }
+      },
+      "blake:random_color_on_spawn": {
+        "randomize": [
+          { "weight": 1, "trigger": "blake:paint_red" },
+          { "weight": 1, "trigger": "blake:paint_blue" },
+          { "weight": 1, "trigger": "blake:paint_green" },
+          { "weight": 1, "trigger": "blake:paint_yellow" },
+          { "weight": 1, "trigger": "blake:paint_black" },
+          { "weight": 1, "trigger": "blake:paint_white" },
+          { "weight": 1, "trigger": "blake:paint_orange" },
+          { "weight": 1, "trigger": "blake:paint_magenta" },
+          { "weight": 1, "trigger": "blake:paint_light_blue" },
+          { "weight": 1, "trigger": "blake:paint_lime" },
+          { "weight": 1, "trigger": "blake:paint_pink" },
+          { "weight": 1, "trigger": "blake:paint_gray" },
+          { "weight": 1, "trigger": "blake:paint_light_gray" },
+          { "weight": 1, "trigger": "blake:paint_cyan" },
+          { "weight": 1, "trigger": "blake:paint_purple" },
+          { "weight": 1, "trigger": "blake:paint_brown" }
+        ]
+      },
+      "minecraft:entity_spawned": {
+        "trigger": "blake:random_color_on_spawn"
       }
     }
   }
