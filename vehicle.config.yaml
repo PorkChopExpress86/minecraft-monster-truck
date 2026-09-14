@@ -1,6 +1,7 @@
 namespace: blake
 entity_id: monster_truck
 display_name: "Monster Truck"
+version: [1, 0, 0]
 
 target:
   edition: bedrock

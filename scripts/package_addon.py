@@ -29,6 +29,17 @@ def build_addon(repo_root=None, dist_dir=None):
     rp_mcpack = dist / "MonsterTruck_RP.mcpack"
     mcaddon = dist / "MonsterTruck.mcaddon"
     
+    try:
+        from scripts.version_manager import get_repo_version, version_to_str
+        ver_str = version_to_str(get_repo_version(root))
+    except Exception:
+        try:
+            from version_manager import get_repo_version, version_to_str
+            ver_str = version_to_str(get_repo_version(root))
+        except Exception:
+            ver_str = "1.0.0"
+
+    print(f"Building Monster Truck add-on v{ver_str}...")
     print(f"Building {bp_mcpack.name}...")
     zip_directory(bp_dir, bp_mcpack)
     

@@ -82,6 +82,12 @@ class ProjectValidator:
         if not found_rp_dep:
             self.log_error(f"BP manifest dependencies does not contain RP header UUID ({rp_header_uuid})")
 
+        # Version consistency check
+        bp_ver = bp_manifest.get("header", {}).get("version")
+        rp_ver = rp_manifest.get("header", {}).get("version")
+        if bp_ver != rp_ver:
+            self.log_error(f"Version mismatch between manifests: BP has {bp_ver}, RP has {rp_ver}")
+
     def validate_entities(self, config):
         if not config:
             return
