@@ -4,7 +4,7 @@ display_name: Monster Truck
 version:
 - 1
 - 0
-- 1
+- 2
 target:
   edition: bedrock
   min_engine_version:
