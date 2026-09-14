@@ -19,16 +19,17 @@ def generate():
     # Interior dashboard at cowl
     add([-12,28,-9],[24,4,2],'rubber')
     add([-14,28,-9],[2,7,21]);add([12,28,-9],[2,7,21])
-    add([-14,44,-9],[28,2,21])
+    # Elevated roof at Y 46..48 ensuring full vertical headroom for seated riders
+    add([-14,46,-9],[28,2,21])
     for x in [-14,12]:
-        for z in [-9,10]:add([x,34,z],[2,10,2])
-    add([-12,34,-8.5],[24,10,0.5],'glass')
-    add([-12,34,10.5],[24,10,0.5],'glass')
+        for z in [-9,10]:add([x,34,z],[2,12,2])
+    add([-12,34,-8.5],[24,12,0.5],'glass')
+    add([-12,34,10.5],[24,12,0.5],'glass')
     # Side windows are open so riders remain visible.
     add([-14,28,12],[2,6,14]);add([12,28,12],[2,6,14]);add([-12,28,24],[24,6,2])
     add([-12,28,12],[24,1,12],'rubber')
-    # Fitted seat cushions aligned with seat coordinate Y 1.65 (26.4 units)
-    add([-11,26,4],[9,3,6],'rubber');add([2,26,4],[9,3,6],'rubber')
+    # Fitted seat cushions aligned with seat coordinate Y 1.15 (18.4 units) on floor
+    add([2,24,2],[9,3,7],'rubber');add([-11,24,2],[9,3,7],'rubber')
     # Grille, headlights, bumpers, rear lamps and running boards aligned with sloped nose.
     add([-9,28,-26.6],[18,3,1],'rubber')
     for y in [29,30]:add([-8,y,-27],[16,0.5,0.5],'metal')

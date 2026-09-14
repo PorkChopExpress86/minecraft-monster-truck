@@ -205,16 +205,23 @@ function onTick() {
         } catch {}
       }
 
-      // Safe dismount over deep liquid
-      if ((inLava || inWater) && prevRiders.length > currentRiders.length) {
+      // Rider dismount management: differentiate deliberate Sneak (Shift) from Spacebar jump ejection
+      if (prevRiders.length > currentRiders.length) {
         const currentRiderIds = new Set(currentRiders.map((r) => r.id));
         const dismountedIds = prevRiders.filter((id) => !currentRiderIds.has(id));
         const safePos = getSafeDismountLocation(loc, { x: dirX, z: dirZ });
+        const justJumped = state.lastJumpTick && (tickNumber - state.lastJumpTick <= 8);
         for (const playerId of dismountedIds) {
           try {
             const player = world.getEntity(playerId);
             if (player && player.isValid && player.typeId === "minecraft:player") {
-              player.teleport(safePos, { dimension });
+              if (justJumped && !player.isSneaking && rideable && rideable.addRider) {
+                // Involuntary Spacebar dismount: re-seat rider in vehicle
+                rideable.addRider(player);
+              } else if (inLava || inWater) {
+                // Deliberate sneak dismount over liquid: teleport to safe shoreline
+                player.teleport(safePos, { dimension });
+              }
             }
           } catch {}
         }

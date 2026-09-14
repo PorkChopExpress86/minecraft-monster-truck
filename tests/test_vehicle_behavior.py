@@ -17,18 +17,17 @@ def test_rideable_and_control_components():
     assert rideable["controlling_seat"] == 0
     assert "player" in rideable["family_types"]
     assert isinstance(rideable["seats"], list), "seats must be a list of seat objects"
-    assert rideable["seats"][0]["position"] == [-0.45, 1.65, 0.15]
+    assert rideable["seats"][0]["position"] == [0.45, 1.15, 0.15]
     assert rideable["seats"][0]["third_person_camera_radius"] == 7.5
-    assert rideable["seats"][1]["position"] == [0.45, 1.65, 0.15]
+    assert rideable["seats"][1]["position"] == [-0.45, 1.15, 0.15]
     assert rideable["seats"][1]["third_person_camera_radius"] == 7.5
     
-    # Native Mount control model (Spacebar = Jump, Left Shift = Dismount)
+    # Ground WASD driving authority and native suspension jump
+    assert "minecraft:input_ground_controlled" in comps, "Entity must use input_ground_controlled for responsive WASD driving"
     assert "minecraft:can_power_jump" in comps, "Entity must have minecraft:can_power_jump"
     assert comps["minecraft:horse.jump_strength"]["value"] == 0.85, "Jump strength must be tuned to 0.85 for 3-block clearance"
     assert "minecraft:is_tamed" in comps, "Entity must be pre-tamed for instant driving"
     assert "minecraft:is_saddled" in comps, "Entity must be pre-saddled for jump authority"
-    assert "minecraft:behavior.player_ride_tamed" in comps, "Entity must use player_ride_tamed for mount steering"
-    assert "minecraft:input_ground_controlled" not in comps, "Must not use input_ground_controlled which forces spacebar dismount"
 
 def test_stepping_and_movement_tuning():
     entity_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "entities" / "monster_truck.entity.json"

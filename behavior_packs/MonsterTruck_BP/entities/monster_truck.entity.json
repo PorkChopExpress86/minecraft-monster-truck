@@ -201,22 +201,23 @@
         "seats": [
           {
             "position": [
-              -0.45,
-              1.65,
+              0.45,
+              1.15,
               0.15
             ],
             "third_person_camera_radius": 7.5
           },
           {
             "position": [
-              0.45,
-              1.65,
+              -0.45,
+              1.15,
               0.15
             ],
             "third_person_camera_radius": 7.5
           }
         ]
       },
+      "minecraft:input_ground_controlled": {},
       "minecraft:can_power_jump": {},
       "minecraft:horse.jump_strength": {
         "value": 0.85

@@ -20,6 +20,12 @@ export async function assertAddon(player, run) {
         throw new Error("Unexpected seat count: " + rideable?.seatCount);
       }
       checks.push("seat count " + rideable.seatCount);
+      if (rideable?.controllingSeat !== undefined && rideable.controllingSeat !== 0) {
+        throw new Error("Controlling seat must be 0 (Driver Seat)");
+      }
+      if (rideable?.controllingSeat === 0) {
+        checks.push("controlling seat 0 verified");
+      }
     }
     return { checks, cleanup: () => entity.remove() };
   } catch (error) {
