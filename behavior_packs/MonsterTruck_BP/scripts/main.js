@@ -180,22 +180,28 @@ function onTick() {
       } catch {}
 
       // Update dynamic pitch angle and sync to property
-      const frontX = loc.x + dirX * 1.125;
-      const frontZ = loc.z + dirZ * 1.125;
-      const rearX = loc.x - dirX * 1.125;
-      const rearZ = loc.z - dirZ * 1.125;
+      const truckRot = truck.getRotation ? truck.getRotation() : { y: 0 };
+      const headRad = (truckRot.y + 90) * (Math.PI / 180);
+      const headX = Math.cos(headRad);
+      const headZ = Math.sin(headRad);
+
+      const frontX = loc.x + headX * 1.125;
+      const frontZ = loc.z + headZ * 1.125;
+      const rearX = loc.x - headX * 1.125;
+      const rearZ = loc.z - headZ * 1.125;
 
       const frontHeight = sampleGroundHeight(dimension, frontX, loc.y, frontZ);
       const rearHeight = sampleGroundHeight(dimension, rearX, loc.y, rearZ);
-      const vY = vel ? vel.y : dy;
+      const verticalVelocity = vel ? vel.y : dy;
 
       state.pitchAngle = calculateDynamicPitch({
         frontHeight,
         rearHeight,
         currentPitch: state.pitchAngle || 0,
-        isAirborne: Boolean(state.isAirborne),
+        isAirborne: Boolean(state.isAirborne || state.isFalling),
         inLiquid: inWater || inLava,
-        verticalVelocity: vY
+        verticalVelocity,
+        horizontalSpeed: effectiveSpeed
       });
       try {
         truck.setProperty("blake:pitch_angle", state.pitchAngle);

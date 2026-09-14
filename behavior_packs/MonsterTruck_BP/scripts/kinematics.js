@@ -13,6 +13,7 @@ export function calculateDynamicPitch({
   isAirborne = false,
   inLiquid = false,
   verticalVelocity = 0.0,
+  horizontalSpeed = 0.0,
   smoothingFactor = 0.20
 }) {
   let targetPitch = 0.0;
@@ -20,7 +21,10 @@ export function calculateDynamicPitch({
   if (inLiquid) {
     targetPitch = 0.0;
   } else if (isAirborne) {
-    if (verticalVelocity > 0.1) {
+    if (horizontalSpeed > 0.1) {
+      const trajAngle = Math.atan2(verticalVelocity, horizontalSpeed) * (180.0 / Math.PI);
+      targetPitch = Math.max(-MAX_PITCH_DEGREES, Math.min(MAX_PITCH_DEGREES, trajAngle));
+    } else if (verticalVelocity > 0.1) {
       targetPitch = Math.min(MAX_PITCH_DEGREES, verticalVelocity * 25.0);
     } else if (verticalVelocity < -0.1) {
       targetPitch = Math.max(-MAX_PITCH_DEGREES, verticalVelocity * 30.0);
