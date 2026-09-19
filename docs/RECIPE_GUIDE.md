@@ -41,8 +41,10 @@ Open a standard **Crafting Table** and place the items in this exact layout:
 
 ## 🏁 Vehicle Stats Card
 
-- **Max Speed**: 0.40 (Faster than horses and camels!)
-- **Auto-Step**: 1 Full Block (Drives straight up blocks without needing ramps or jumping!)
-- **Health**: 250 HP (Tough as an Iron Golem!)
-- **Seats**: 2 Players (1 Driver + 1 Passenger for buddy road trips!)
-- **Control**: Standard WASD keys or joystick to steer.
+- **Max Speed**: 0.55 (Heavy-duty cruising on land, water, and lava!)
+- **Auto-Step**: 2 Full Blocks (Controlled Auto-Step drives straight up ledges without jumping!)
+- **Health**: 1,000 HP (Armored monster chassis taking only 25% damage from attacks!)
+- **Fall Damage**: None (100% Pneumatic Shock Absorption on all drops and jumps!)
+- **Seats**: 2 Players (1 Driver in Seat 0 + 1 Passenger in Seat 1 for buddy road trips!)
+- **Abilities**: Controlled Auto-Step, Wood Demolition, Foliage Shearing, Suspension Jump, Amphibious Flotation, 16-Color Customization.
+- **Controls**: Standard WASD keys to drive, Spacebar for Suspension Jump, Left Shift (Sneak) to dismount.

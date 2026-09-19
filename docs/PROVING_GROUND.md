@@ -47,19 +47,29 @@ Construct a small proving track with the following obstacles:
 | Test Item | Verification Procedure | Expected Outcome | Status |
 |---|---|---|:---:|
 | **1. Spawn Egg Item** | Open Creative inventory → Nature / Spawn Eggs. | Custom 16x16 monster truck silhouette egg appears named "Spawn Monster Truck". | [ ] |
-| **2. Egg Placement** | Right-click / use the spawn egg on a flat surface. | The monster truck entity spawns cleanly with correct geometry and textures. | [ ] |
-| **3. Slash Command** | Run `/summon blake:monster_truck` in chat. | Entity spawns at command coordinates without errors. | [ ] |
-| **4. Driver Mounting** | Approach truck and interact (Right-click / "Drive" prompt). | Player mounts into the Driver Seat position [0.45, 1.15, 0.15] per ADR-0006. | [ ] |
+| **2. Egg Placement** | Right-click / use the spawn egg on a flat surface. | The monster truck entity spawns cleanly with randomized paint color and correct geometry. | [ ] |
+| **3. Slash Command** | Run `/summon blake:monster_truck` in chat. | Entity spawns at command coordinates in default red paint without errors. | [ ] |
+| **4. Driver Mounting** | Approach truck left door and interact (Right-click / "Drive" prompt). | Player mounts into the Driver Seat position [0.45, 1.15, 0.15] per ADR-0006 and ADR-0012. | [ ] |
 | **5. Third-Person View** | Switch camera to third-person back view (F5). | Camera is positioned at radius 7.5, providing an elevated chase camera over the roof and tailgate. | [ ] |
-| **6. WASD Driving** | Press `W` (forward), `S` (reverse), `A` (steer left), `D` (steer right). | Vehicle moves smoothly with responsive turning capped at 18 deg/tick. | [ ] |
-| **7. 1-Block Auto-Step** | Drive directly forward into a 1-block high stone ledge without jumping. | Vehicle smoothly drives up the ledge via controlled auto-step. | [ ] |
-| **8. 2-Block Ledge / 3-Block Wall** | Drive into two-block and then three-block obstacles. | Vehicle climbs the two-block ledge and stops at the three-block wall. | [ ] |
-| **9. Wheel Rotation** | Observe wheels while moving vs. stationary. | Wheels spin continuously during motion; wheels stop rotating at idle. | [ ] |
-| **10. Chassis Dynamics** | Drive at full speed across flat terrain. | Chassis subtly bobs while driving without visual jitter. | [ ] |
-| **11. Dismount** | Press Sneak / Shift to dismount. | Player exits cleanly onto adjacent solid ground without suffocating. | [ ] |
-| **12. Content Log** | Open Content Log history in Creator settings. | Zero schema errors, unresolved texture warnings, or missing animation errors. | [ ] |
-| **13. Paint Colors** | Sneak and interact with a truck while holding red, blue, green, yellow, black, or white dye. | Body and hood switch to the matching color; dye remains reusable. | [ ] |
-| **14. Mount After Painting** | Stop sneaking and interact normally after repainting. | Driver mounting and driving still work. | [ ] |
+| **6. Cab Interior View** | Switch camera to first-person view while seated in the driver seat. | Eye line is cleanly centered in the transparent windshield aperture ($Y \approx 40.8$) with clear forward sightline over the hood and $>5$ units of vertical roof headroom without roof clipping per ADR-0012. | [ ] |
+| **7. WASD Driving** | Press `W` (forward), `S` (reverse), `A` (steer left), `D` (steer right). | Vehicle moves smoothly with responsive ground control authority at 0.55 cruising speed. | [ ] |
+| **8. 1-Block Auto-Step** | Drive directly forward into a 1-block high stone ledge without jumping. | Vehicle smoothly drives up the ledge via controlled auto-step. | [ ] |
+| **9. 2-Block Ledge / 3-Block Wall** | Drive into two-block and then three-block obstacles. | Vehicle climbs the two-block ledge and stops at the three-block wall. | [ ] |
+| **10. Wheel Rotation & Dynamics**| Observe wheels while moving vs. stationary. | Wheels spin continuously during motion; wheels stop rotating at idle; chassis bobs subtly. | [ ] |
+| **11. Dynamic Incline Pitch** | Drive up and down natural hills, stairs, and 2-block terraces. | Chassis pitches up and down up to $\pm 35^\circ$ conforming to terrain slope gradients smoothly per ADR-0014. | [ ] |
+| **12. Coordinated 4WS** | Steer sharply left and right while moving forward and reversing. | Front steering knuckles deflect up to $\pm 26^\circ$ into turn; rear wheels counter-steer up to $\mp 18^\circ$ with hydraulic spring return per ADR-0014. | [ ] |
+| **13. Dismount** | Press Sneak / Left Shift to dismount. | Player exits cleanly onto adjacent solid ground or vehicle roof/flatbed without suffocating. | [ ] |
+| **14. Content Log** | Open Content Log history in Creator settings. | Zero schema errors, unresolved texture warnings, or missing animation errors. | [ ] |
+| **15. 16 Paint Colors** | Sneak and interact holding any of the 16 vanilla Minecraft dyes. | Body, hood, and wheel-hub accents switch to the matching color swatch; dye is reusable per ADR-0013. | [ ] |
+| **16. Mount After Painting** | Stop sneaking and interact normally after repainting. | Driver mounting and driving continue to function seamlessly. | [ ] |
+| **17. Suspension Jump** | While driving or stationary, tap Spacebar. | Truck executes an instant vertical launch clearing 3 blocks with pneumatic hiss audio (`random.fizz`) and dust particles; 1.2s cooldown gates re-triggering per ADR-0010. | [ ] |
+| **18. Crush Stomp Landing** | Land a high Suspension Jump directly onto hostile mobs. | Inflicts 60+ kinetic crush damage and outward radial knockback on surrounding entities per ADR-0010. | [ ] |
+| **19. Shock Absorption** | Drive off a 30+ block cliff onto solid stone. | Truck and seated riders take 0 fall damage (100% pneumatic immunity) with puff of smoke particles per ADR-0013. | [ ] |
+| **20. Amphibious Flotation** | Drive into deep ocean water or Nether lava lakes. | Truck floats stably at ~0.8-block waterline, cruises at overland speed with loose drift steering, and protects riders from heat per ADR-0010 & ADR-0011. | [ ] |
+| **21. Shoreline Step-Up** | Drive forward from water or lava into a 1- or 2-block shoreline bank. | Truck smoothly climbs up onto dry land without stalling or requiring manual jump inputs per ADR-0011. | [ ] |
+| **22. Molten Tire Trample** | Traverse lava, then ram hostile mobs on land within 10 seconds. | Wheels ignite impacted mobs with fire ticks in addition to collision impact damage per ADR-0010. | [ ] |
+| **23. Wood Demolition** | Drive forward into logs, planks, fences, or glass at speed ($\ge 0.25$). | Blocks shatter with standard breaking sounds and drop collectable survival items per ADR-0009. | [ ] |
+| **24. Foliage Shearing** | Drive into tree leaves or hanging vines at resting or low speed. | Foliage clears instantly on contact without item drops to prevent lag per ADR-0011. | [ ] |
 
 ## Heavy-duty driving checks
 

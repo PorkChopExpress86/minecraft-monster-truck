@@ -7,19 +7,19 @@ Requested price: free, subject to Marketplace approval and partner pricing rules
 
 **Proposed title:** Monster Truck Add-On
 
-**Short description:** Craft a rugged two-seat Monster Truck, choose from six paint colors, and take on stepped terrain in your Bedrock worlds.
+**Short description:** Craft a rugged two-seat Monster Truck, customize across sixteen paint colors, and conquer stepped terrain, waterways, and obstacles in your Bedrock worlds.
 
-**Long description:** Build a Monster Truck for your next survival adventure! This lifted pickup features oversized tires, exposed suspension, an open cargo bed, and room for a driver and passenger. Start in red, then repaint your truck with yellow, blue, green, black, or white dye. Craft your vehicle in Survival, or try it with the Creative spawn egg. Engine audio and animated wheels bring the truck to life, while its heavy-duty construction and controlled two-block auto-step help it handle rough terrain.
+**Long description:** Build an unstoppable Monster Truck for your next survival adventure! This lifted pickup features oversized octagonal tires, exposed suspension, an open cargo bed, and room for a driver and passenger. Repaint your truck on the fly using any of the 16 vanilla Minecraft dyes, or spawn random colors in Creative. Authentic engine audio and animated wheels bring the truck to life, while heavy-duty durability (1,000 HP), controlled two-block auto-stepping, dynamic incline pitch, coordinated four-wheel steering, suspension jumping, wood demolition, and amphibious liquid flotation empower you to conquer any terrain.
 
 Description is grounded in the current README and production assets. Player controls, audible playback, and two-player usability still need manual acceptance before these claims are submitted. Do not claim compatibility with every platform, every world, or every other add-on without evidence.
 
 ## Portfolio entry draft
 
-Monster Truck is a data-driven Minecraft Bedrock vehicle add-on combining a two-seat rideable entity, procedural vehicle geometry, six paint textures, synthesized engine sounds, crafting, and survival mechanics. The project includes automated static checks and a separate runtime assertion pack used only in a dedicated test world. The distributable behavior pack contains no Script API module.
+Monster Truck is an advanced Minecraft Bedrock vehicle add-on combining a two-seat rideable entity, procedural vehicle geometry, sixteen high-contrast paint textures, synthesized engine sounds, crafting, and survival mechanics. Production vehicle physics, demolition, kinematics, and amphibious traversal are powered by the Bedrock Script API (`@minecraft/server`). The project includes automated static checks and a separate runtime assertion pack used only in a dedicated test world.
 
 Representative media:
 
-- [Six-color lineup](../images/monster-truck-colors.png)
+- [Sixteen-color lineup](../images/monster-truck-colors.png)
 - [Vehicle close-up](../images/monster-truck-closeup.png)
 - [Player instructions and project showcase](../../README.md)
 
@@ -27,9 +27,9 @@ These local materials form one project entry. They do not establish a public por
 
 ## Partner application narrative draft
 
-I am developing Monster Truck, a Minecraft Bedrock Add-On that introduces a craftable, two-seat vehicle with six paint colors, engine audio, and controlled terrain stepping. I would like to make it available as a free Add-On through the official Minecraft Marketplace.
+I am developing Monster Truck, a Minecraft Bedrock Add-On that introduces a craftable, two-seat vehicle with sixteen paint colors, engine audio, controlled terrain stepping, dynamic suspension jumping, and amphibious exploration. I would like to make it available as a free Add-On through the official Minecraft Marketplace.
 
-The project includes repository-owned modeling and texture generation, synthesized audio, documented player instructions, and automated validation. A separate test-world harness checks vehicle behavior without distributing test scripts to players. I can provide a packaged build, gameplay screenshots, and test evidence for review.
+The project includes repository-owned modeling and texture generation, synthesized audio, documented player instructions, automated validation, and dynamic Script API physics. A separate test-world harness checks vehicle behavior without distributing test scripts to players. I can provide a packaged build, gameplay screenshots, and test evidence for review.
 
 Please advise on the current Marketplace creator application process, whether new independent creators are being accepted, and the approval process for a zero-price Add-On.
 
@@ -44,10 +44,11 @@ Proposed 30-second gameplay trailer:
 | Time | Actual footage to capture | Caption |
 | --- | --- | --- |
 | 0-5s | Three-quarter view of red truck | Monster Truck Add-On |
-| 5-10s | Six-color lineup followed by a real dye interaction | Six paint colors |
-| 10-17s | Player driving over a two-block stepped obstacle | Built for rough terrain |
-| 17-23s | Two players boarding and riding | Bring a passenger |
-| 23-28s | Crafting and deploying the vehicle in Survival | Craft. Customize. Drive. |
+| 5-10s | Sixteen-color showcase followed by real sneak-dye interaction | 16 paint colors |
+| 10-15s | Driving over two-block ledges with dynamic incline pitch | Built for rough terrain |
+| 15-20s | Wood demolition through trees and suspension jump over ravine | Jump & Demolish |
+| 20-25s | Amphibious cruising across water/lava and shoreline step-up | Land and liquid traversal |
+| 25-28s | Two players boarding; crafting and deploying in Survival | Craft. Customize. Drive. |
 | 28-30s | Clean hero view | Creator name to be supplied |
 
 Capture retail gameplay with the distributed pack; retain original footage. Use game audio only after playback verification. Do not substitute a screenshot slideshow for gameplay proof or show an unapproved Marketplace availability badge. A trailer has not yet been recorded.
@@ -57,8 +58,9 @@ Capture retail gameplay with the distributed pack; retain original footage. Use 
 | Asset group | Repository evidence | Remaining confirmation |
 | --- | --- | --- |
 | Vehicle geometry | `scripts/make_truck_geometry.py`; exported `monster_truck.geo.json` | Applicant confirms authorship/contributor rights and any external references |
-| Six vehicle textures | `scripts/make_placeholder_textures.py`; production entity PNGs | Confirm current exports originate from authorized sources |
+| Sixteen vehicle textures | `scripts/make_placeholder_textures.py`; production entity PNGs | Confirm current exports originate from authorized sources |
 | Engine sound effects | `scripts/generate_audio.py` synthesizes waveforms and converts with ffmpeg | Confirm shipped OGG files derive from this source or supply alternative licenses |
+| Script API kinematics & physics | Production scripts in `behavior_packs/MonsterTruck_BP/scripts/*.js` | Validated `@minecraft/server` scripting module |
 | Behavior, recipes, animations | Repository JSON and scripts | Identify contributors and any copied source requiring attribution |
 | Screenshots | Existing in-game captures under `docs/images/` | Approve selected images; check final export rules |
 | Test world starter | `testing/world-template.LICENSE.txt` | Test-only material; exclude world and harness from the release |

@@ -17,8 +17,8 @@ The secondary non-controlling seat (seat index 1) positioned alongside the drive
 _Avoid_: Back seat, rumble seat
 
 **Vehicle Item**:
-The portable inventory item form of the Monster Truck dropped when deliberately broken or retrieved by a player, ready to deploy elsewhere.
-_Avoid_: Spawn egg (in survival contexts), car block
+The portable inventory item form of the Monster Truck dropped when deliberately broken or retrieved by a player, ready to deploy elsewhere. In Minecraft Bedrock, this survival deployment item is represented by the custom spawn egg item (`blake:monster_truck_spawn_egg`).
+_Avoid_: Car block, generic spawn egg
 
 **Scrap**:
 The raw metallic materials (such as iron ingots) dropped when a Monster Truck is fatally destroyed by environmental hazards or combat rather than retrieved.
@@ -79,4 +79,21 @@ _Avoid_: Tilt, lean, slope lock, pitch glitch
 **Coordinated Four-Wheel Steering**:
 The counter-phase lateral angular deflection of front and rear wheel assemblies driven by turning rate with dynamic hydraulic spring-return centering.
 _Avoid_: Wheel turning, car turn, crab steering
+
+**Sixteen-Color Palette**:
+The complete spectrum of 16 vanilla Minecraft dye colors (`red`, `blue`, `green`, `yellow`, `black`, `white`, `orange`, `magenta`, `light_blue`, `lime`, `pink`, `gray`, `light_gray`, `cyan`, `purple`, `brown`) supported for vehicle chassis and wheel-hub accent customization.
+_Avoid_: 6-color palette, dye list, partial colors
+
+**Textured Color Swatches**:
+The high-contrast, pre-baked body and hood textures generated with matching wheel-hub accent plates for each of the 16 supported palette colors.
+_Avoid_: Skin, wrap, paint job
+
+**Sneak-Dye Repainting**:
+The non-destructive player interaction mechanic where sneaking (holding Shift / Sneak) while interacting with a monster truck holding any vanilla dye instantaneously repaints the vehicle without consuming or expending the dye item.
+_Avoid_: Painting, consuming dye, wash
+
+**Randomized Spawn Egg Placement**:
+The Creative mode spawn sequence (`blake:random_color_on_spawn`) that automatically evaluates a weighted uniform randomization branch upon spawn egg placement, assigning a random color from the Sixteen-Color Palette to newly placed vehicles.
+_Avoid_: Fixed red spawn, egg color lock
+
 
