@@ -14,7 +14,7 @@ def test_seat_configuration_and_ground_driving_authority():
 
     # 1. Ground driving authority must be present for WASD keyboard control
     assert "minecraft:input_ground_controlled" in comps, "Must have minecraft:input_ground_controlled for WASD driving"
-    assert "minecraft:can_power_jump" in comps, "Must have minecraft:can_power_jump for spacebar jump"
+    assert "minecraft:can_power_jump" not in comps, "Native charged jumping must not overlap script-owned Suspension Jump"
 
     # 2. Rideable seats
     rideable = comps["minecraft:rideable"]

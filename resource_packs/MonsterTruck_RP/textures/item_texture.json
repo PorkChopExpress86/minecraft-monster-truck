@@ -4,6 +4,9 @@
   "texture_data": {
     "monster_truck_spawn_egg": {
       "textures": "textures/items/monster_truck_spawn_egg"
+    },
+    "monster_truck_vehicle": {
+      "textures": "textures/items/monster_truck_spawn_egg"
     }
   }
 }

@@ -70,3 +70,25 @@ def test_script_pneumatic_shock_absorption_integration():
     assert "PNEUMATIC_VENT_SOUND" in content, "main.js must reference PNEUMATIC_VENT_SOUND"
     assert "PNEUMATIC_DUST_PARTICLE" in content, "main.js must reference PNEUMATIC_DUST_PARTICLE"
     assert "world.beforeEvents" in content, "main.js must register beforeEvents listener for pneumatic shock absorption"
+    assert "recentRiders" not in content, "Fall protection must follow the vehicle event, not a broad time window"
+    assert "protectedRiders" in content, "Jump/drop lifecycle must explicitly own rider protection"
+    assert content.index("const airborneOrFalling") < content.index("// Rider dismount management")
+    assert "if (!player.isSneaking && rideable && rideable.addRider)" in content
+    assert "protectRidersForLifecycle(state, truck.id, prevRiders)" in content
+    assert "state.isAirborne || state.isFalling ||" in content
+
+
+def test_script_api_version_supports_required_input_and_before_hurt_events():
+    manifest_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    server_dependency = next(
+        dep for dep in manifest["dependencies"] if dep.get("module_name") == "@minecraft/server"
+    )
+    assert server_dependency["version"] == "2.10.0"
+
+    bedrock = json.loads((REPO_ROOT / "testing" / "bedrock.json").read_text(encoding="utf-8"))
+    assert bedrock["script_api_version"] == "2.10.0"
+
+    main = (REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "main.js").read_text(encoding="utf-8")
+    assert "playerButtonInput" in main
+    assert "InputButton.Jump" in main

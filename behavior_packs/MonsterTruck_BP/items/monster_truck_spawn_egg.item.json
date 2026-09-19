@@ -1,0 +1,24 @@
+{
+  "format_version": "1.26.0",
+  "minecraft:item": {
+    "description": {
+      "identifier": "blake:monster_truck_spawn_egg",
+      "menu_category": {
+        "category": "nature"
+      }
+    },
+    "components": {
+      "minecraft:display_name": {
+        "value": "item.blake:monster_truck_spawn_egg.name"
+      },
+      "minecraft:icon": {
+        "textures": {
+          "default": "monster_truck_spawn_egg"
+        }
+      },
+      "minecraft:entity_placer": {
+        "entity": "blake:monster_truck<blake:random_color_on_spawn>"
+      }
+    }
+  }
+}

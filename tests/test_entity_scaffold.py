@@ -33,7 +33,7 @@ def test_minimal_behavior_entity():
         
     desc = data["minecraft:entity"]["description"]
     assert desc["identifier"] == "blake:monster_truck"
-    assert desc["is_spawnable"] is True
+    assert desc["is_spawnable"] is False
     assert desc["is_summonable"] is True
 
 def test_client_entity_and_render_controller():

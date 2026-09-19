@@ -12,6 +12,10 @@ export function calculateTrampleDamage(speed) {
   return Math.round(speed * 120);
 }
 
+export function canApplyTireTrample(speed, isAirborne) {
+  return !isAirborne && calculateTrampleDamage(speed) > 0;
+}
+
 export function isInContactPerimeter(
   targetLoc,
   truckLoc,
@@ -185,4 +189,3 @@ export function getSafeDismountLocation(truckLoc, heading = { x: 1, z: 0 }) {
     z: truckLoc.z - dirZ * 0.8,
   };
 }
-

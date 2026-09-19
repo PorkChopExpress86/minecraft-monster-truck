@@ -2,6 +2,33 @@
 
 export const CRUISING_AQUATIC_SPEED = 0.55;
 
+export function calculateAquaticIntent(
+  movement = { x: 0, y: 0 },
+  vehicleHeading = { x: 1, z: 0 }
+) {
+  const inputX = movement.x || 0;
+  const inputForward = movement.y || 0;
+  const magnitude = Math.hypot(inputX, inputForward);
+  if (magnitude <= 0.05) {
+    return { active: false, heading: { x: 0, z: 0 }, throttle: 0 };
+  }
+
+  const headingLength = Math.hypot(vehicleHeading.x, vehicleHeading.z) || 1;
+  const forwardX = vehicleHeading.x / headingLength;
+  const forwardZ = vehicleHeading.z / headingLength;
+  const rightX = -forwardZ;
+  const rightZ = forwardX;
+  const worldX = forwardX * inputForward + rightX * inputX;
+  const worldZ = forwardZ * inputForward + rightZ * inputX;
+  const worldLength = Math.hypot(worldX, worldZ) || 1;
+
+  return {
+    active: true,
+    heading: { x: worldX / worldLength, z: worldZ / worldLength },
+    throttle: Math.min(1, magnitude)
+  };
+}
+
 export function calculateAquaticImpulse(
   currentVelocity = { x: 0, z: 0 },
   heading = { x: 1, z: 0 },
@@ -42,6 +69,19 @@ export function detectShorelineBank(
   return {
     isShoreline: true,
     stepHeight,
+  };
+}
+
+export function classifyShorelineColumn(solidColumn = []) {
+  let stepHeight = 0;
+  for (const solid of solidColumn) {
+    if (!solid) break;
+    stepHeight += 1;
+  }
+
+  return {
+    isShoreline: stepHeight === 1 || stepHeight === 2,
+    stepHeight
   };
 }
 

@@ -20,7 +20,7 @@ def test_manifest_script_module_and_server_dependency():
     dependencies = manifest.get("dependencies", [])
     server_deps = [d for d in dependencies if d.get("module_name") == "@minecraft/server"]
     assert len(server_deps) == 1, "Must declare @minecraft/server dependency"
-    assert server_deps[0]["version"] == "2.0.0"
+    assert server_deps[0]["version"] == "2.10.0"
 
 def test_script_entry_point_exists_and_valid():
     entry_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "main.js"
@@ -94,5 +94,4 @@ assert.equal(canShearFoliage(false), false, "Foliage shearing requires driver pr
     res = subprocess.run([node_exe, "--input-type=module", "-e", script],
                          cwd=str(REPO_ROOT), capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
-
 

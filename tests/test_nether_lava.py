@@ -5,14 +5,15 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-def test_lava_damage_immunity_and_buoyancy():
+def test_lava_travel_and_catastrophic_hazard_damage():
     entity_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "entities" / "monster_truck.entity.json"
     with open(entity_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         
     comps = data["minecraft:entity"]["components"]
     
-    # 1. Damage sensor immunities
+    # 1. Fire and lava can eventually destroy the truck and therefore follow
+    # the catastrophic Scrap path; only the seated riders receive shielding.
     sensor = comps["minecraft:damage_sensor"]
     triggers = sensor["triggers"]
     
@@ -21,11 +22,11 @@ def test_lava_damage_immunity_and_buoyancy():
     lava_trigger = next((t for t in triggers if t.get("cause") == "lava"), None)
     
     assert fire_trigger is not None, "Must have fire damage trigger"
-    assert fire_trigger.get("deals_damage") == "no"
+    assert fire_trigger.get("deals_damage") == "yes"
     assert fire_tick_trigger is not None, "Must have fire_tick damage trigger"
-    assert fire_tick_trigger.get("deals_damage") == "no"
+    assert fire_tick_trigger.get("deals_damage") == "yes"
     assert lava_trigger is not None, "Must have lava damage trigger"
-    assert lava_trigger.get("deals_damage") == "no"
+    assert lava_trigger.get("deals_damage") == "yes"
     
     # 2. Lava buoyancy
     buoyancy = comps["minecraft:buoyant"]

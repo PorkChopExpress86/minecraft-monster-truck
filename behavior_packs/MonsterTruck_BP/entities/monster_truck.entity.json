@@ -3,7 +3,7 @@
   "minecraft:entity": {
     "description": {
       "identifier": "blake:monster_truck",
-      "is_spawnable": true,
+      "is_spawnable": false,
       "is_summonable": true,
       "is_experimental": false,
       "properties": {
@@ -466,15 +466,8 @@
         ]
       },
       "minecraft:input_ground_controlled": {},
-      "minecraft:can_power_jump": {},
-      "minecraft:horse.jump_strength": {
-        "value": 0.85
-      },
       "minecraft:is_tamed": {},
       "minecraft:is_saddled": {},
-      "minecraft:behavior.player_ride_tamed": {
-        "priority": 0
-      },
       "minecraft:variable_max_auto_step": {
         "base_value": 2.0,
         "controlled_value": 2.0,
@@ -498,7 +491,7 @@
           "minecraft:lava",
           "minecraft:flowing_lava"
         ],
-        "movement_type": "player_controlled"
+        "movement_type": "waves"
       },
       "minecraft:nameable": {},
       "minecraft:loot": {
@@ -512,15 +505,15 @@
           },
           {
             "cause": "fire",
-            "deals_damage": "no"
+            "deals_damage": "yes"
           },
           {
             "cause": "fire_tick",
-            "deals_damage": "no"
+            "deals_damage": "yes"
           },
           {
             "cause": "lava",
-            "deals_damage": "no"
+            "deals_damage": "yes"
           },
           {
             "cause": "entity_attack",
@@ -543,44 +536,6 @@
             "damage_multiplier": 0.25
           }
         ]
-      },
-      "minecraft:area_attack": {
-        "cause": "entity_attack",
-        "damage_per_tick": 40,
-        "damage_cooldown": 0.5,
-        "damage_range": 0.35,
-        "play_attack_sound": false,
-        "entity_filter": {
-          "all_of": [
-            {
-              "test": "is_moving",
-              "subject": "self",
-              "value": true
-            },
-            {
-              "test": "is_family",
-              "subject": "other",
-              "value": "mob"
-            },
-            {
-              "test": "is_family",
-              "subject": "other",
-              "value": "player",
-              "operator": "!="
-            },
-            {
-              "test": "is_family",
-              "subject": "other",
-              "value": "vehicle",
-              "operator": "!="
-            },
-            {
-              "test": "is_tamed",
-              "subject": "other",
-              "value": false
-            }
-          ]
-        }
       }
     },
     "events": {
@@ -763,9 +718,6 @@
           { "weight": 1, "trigger": "blake:paint_purple" },
           { "weight": 1, "trigger": "blake:paint_brown" }
         ]
-      },
-      "minecraft:entity_spawned": {
-        "trigger": "blake:random_color_on_spawn"
       }
     }
   }

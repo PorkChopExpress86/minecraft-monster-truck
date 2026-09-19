@@ -186,6 +186,16 @@ def test_configure_and_redeploy_are_confined_to_owned_world(project, monkeypatch
     untouched.parent.mkdir(parents=True)
     untouched.write_text("preserve")
     runner.deploy(root, config, world, "fresh")
+    deployed_bp = world / f"behavior_packs/addon-test-{config['harness_uuid']}"
+    deployed_rp = world / f"resource_packs/addon-test-{config['harness_uuid']}"
+    source_bp_id = runner.read_json(root / "bp/manifest.json")["header"]["uuid"]
+    source_rp_id = runner.read_json(root / "rp/manifest.json")["header"]["uuid"]
+    deployed_bp_id = runner.read_json(deployed_bp / "manifest.json")["header"]["uuid"]
+    deployed_rp_id = runner.read_json(deployed_rp / "manifest.json")["header"]["uuid"]
+    assert deployed_bp_id != source_bp_id
+    assert deployed_rp_id != source_rp_id
+    assert runner.read_json(world / "world_behavior_packs.json")[0]["pack_id"] == deployed_bp_id
+    assert runner.read_json(world / "world_resource_packs.json")[0]["pack_id"] == deployed_rp_id
     generated = world / f"behavior_packs/addon-harness-{config['harness_uuid']}/scripts/run_config.js"
     assert '"run_id": "fresh"' in generated.read_text()
     assert untouched.read_text() == "preserve"

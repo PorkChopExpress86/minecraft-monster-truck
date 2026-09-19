@@ -37,8 +37,14 @@ def test_randomized_spawn_egg_event():
     assert "randomize" in random_event, "blake:random_color_on_spawn must randomize color"
     random_branches = random_event["randomize"]
     assert len(random_branches) == 16, f"Must have 16 randomize color branches, got {len(random_branches)}"
-    assert "minecraft:entity_spawned" in events, "Must have minecraft:entity_spawned event"
-    assert events["minecraft:entity_spawned"]["trigger"] == "blake:random_color_on_spawn"
+    assert "minecraft:entity_spawned" not in events, "Generic spawns and bare summons must retain default red"
+    spawn_item = json.loads(
+        (ROOT / "behavior_packs/MonsterTruck_BP/items/monster_truck_spawn_egg.item.json")
+        .read_text(encoding="utf-8")
+    )["minecraft:item"]
+    assert spawn_item["components"]["minecraft:entity_placer"]["entity"] == (
+        "blake:monster_truck<blake:random_color_on_spawn>"
+    )
 
 
 def test_generated_colors_preserve_red_and_non_body_pixels(tmp_path):
@@ -82,3 +88,11 @@ def test_dye_painting_requires_sneaking_and_keeps_mounting():
             {"test": "has_equipment", "subject": "other", "domain": "main_hand", "value": "minecraft:" + color + "_dye"},
         ]
         assert interaction["use_item"] is False
+
+
+def test_live_harness_checks_every_explicit_spawn_color():
+    harness = (ROOT / "testing/harness/assertions.js").read_text(encoding="utf-8")
+    for color in COLORS:
+        assert f'"{color}"' in harness
+    assert 'triggerEvent("blake:spawn_" + colors[index])' in harness
+    assert 'triggerEvent("blake:paint_" + colors[index])' not in harness

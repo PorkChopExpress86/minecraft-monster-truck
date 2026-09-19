@@ -1,4 +1,11 @@
-import { system, world, EntityDamageCause } from "@minecraft/server";
+import {
+  system,
+  world,
+  ButtonState,
+  EntityDamageCause,
+  InputButton,
+  ItemStack
+} from "@minecraft/server";
 import { isFoliage, isDestructibleWoodOrGlass, canDemolishWood, canShearFoliage } from "./demolition.js";
 import {
   calculateDynamicPitch,
@@ -7,12 +14,14 @@ import {
 } from "./kinematics.js";
 import {
   calculateAquaticImpulse,
-  detectShorelineBank,
+  calculateAquaticIntent,
+  classifyShorelineColumn,
   calculateShorelineStepImpulse,
   CRUISING_AQUATIC_SPEED
 } from "./amphibious.js";
 import {
   calculateTrampleDamage,
+  canApplyTireTrample,
   isInContactPerimeter,
   calculateKnockbackImpulse,
   isProtectedTarget,
@@ -30,13 +39,16 @@ import {
   PNEUMATIC_DUST_PARTICLE,
   shouldAbsorbFallDamage,
   isFallingOrAirborne,
-  calculateWheelContactOffsets
+  calculateWheelContactOffsets,
+  advanceJumpPhase
 } from "./suspension.js";
 
 // Track state of each truck across ticks
 const truckStates = new Map();
 const entityHitCooldowns = new Map();
-const recentRiders = new Map();
+const protectedRiders = new Map();
+const pendingJumpRequests = new Map();
+const seatedDriverAssignments = new Map();
 let currentTick = 0;
 const DIMENSIONS = ["overworld", "nether", "the_end"];
 
@@ -44,10 +56,32 @@ function getCurrentTick() {
   return typeof system.currentTick === "number" ? system.currentTick : currentTick;
 }
 
-function isProtectedRider(entityId, tickNum) {
-  const lastTick = recentRiders.get(entityId);
-  if (lastTick === undefined) return false;
-  return (tickNum - lastTick) <= 40;
+function protectRidersForLifecycle(state, truckId, riderIds) {
+  state.protectedRiderIds = new Set(riderIds);
+  for (const riderId of state.protectedRiderIds) {
+    protectedRiders.set(riderId, truckId);
+  }
+}
+
+function clearProtectedRiders(state) {
+  for (const riderId of state.protectedRiderIds || []) {
+    protectedRiders.delete(riderId);
+  }
+  state.protectedRiderIds = new Set();
+}
+
+function restoreProtectedRiders(state, rideable) {
+  if (!rideable?.addRider || !state.protectedRiderIds?.size) return;
+  const seated = new Set((rideable.getRiders?.() || []).map((rider) => rider.id));
+  for (const riderId of state.protectedRiderIds) {
+    if (seated.has(riderId)) continue;
+    try {
+      const rider = world.getEntity(riderId);
+      if (rider?.isValid && rider.typeId === "minecraft:player" && !rider.isSneaking) {
+        rideable.addRider(rider);
+      }
+    } catch {}
+  }
 }
 
 function onTick() {
@@ -130,9 +164,6 @@ function onTick() {
       const currentRiders = rideable && rideable.getRiders ? rideable.getRiders() : [];
       const prevRiders = state.riders || [];
       state.riders = currentRiders.map((r) => r.id);
-      for (const rider of currentRiders) {
-        recentRiders.set(rider.id, tickNumber);
-      }
 
       // Check if truck is in lava or water
       let inLava = false;
@@ -156,6 +187,7 @@ function onTick() {
       }
 
       const driver = currentRiders.length > 0 ? currentRiders[0] : undefined;
+      if (driver) seatedDriverAssignments.set(driver.id, { truckId: truck.id, tick: tickNumber });
 
       // Dynamic Incline Pitch and Coordinated Four-Wheel Steering updates
       let currentYaw = 0;
@@ -212,12 +244,22 @@ function onTick() {
         const isNonAirNonLiquid = (b) => b && !b.isAir && b.typeId !== "minecraft:air" && !isLiquidBlock(b.typeId);
         const baseY = Math.floor(loc.y);
         let bankFound = null;
+        let aquaticIntent = { active: false, heading: { x: dirX, z: dirZ }, throttle: 0 };
+
+        try {
+          aquaticIntent = calculateAquaticIntent(
+            driver.inputInfo.getMovementVector(),
+            { x: dirX, z: dirZ }
+          );
+        } catch {}
 
         try {
           const latOffsets = [0, -0.8, 0.8];
           for (const lat of latOffsets) {
-            const checkX = Math.floor(loc.x + dirX * 1.5 + perpX * lat);
-            const checkZ = Math.floor(loc.z + dirZ * 1.5 + perpZ * lat);
+            const intentDir = aquaticIntent.active ? aquaticIntent.heading : { x: dirX, z: dirZ };
+            const intentPerp = { x: -intentDir.z, z: intentDir.x };
+            const checkX = Math.floor(loc.x + intentDir.x * 1.5 + intentPerp.x * lat);
+            const checkZ = Math.floor(loc.z + intentDir.z * 1.5 + intentPerp.z * lat);
 
             const bAtWater = dimension.getBlock({ x: checkX, y: baseY, z: checkZ });
             const bAbove1 = dimension.getBlock({ x: checkX, y: baseY + 1, z: checkZ });
@@ -229,24 +271,25 @@ function onTick() {
             const solid2 = isNonAirNonLiquid(bAbove2);
             const solid3 = isNonAirNonLiquid(bAbove3);
 
-            // Sheer cliff >= 3 blocks requires intentional Suspension Jump
-            if (solid3 && solid2) continue;
-
-            const res = detectShorelineBank(true, solid0 || solid1, solid1 && !solid3);
+            const res = classifyShorelineColumn([solid0, solid1, solid2, solid3]);
             if (res.isShoreline) {
               bankFound = res;
               break;
             }
           }
 
-          if (bankFound && (!state.lastShorelineStep || tickNumber - state.lastShorelineStep > 12)) {
+          if (aquaticIntent.active && bankFound && (!state.lastShorelineStep || tickNumber - state.lastShorelineStep > 12)) {
             state.lastShorelineStep = tickNumber;
-            const stepImpulse = calculateShorelineStepImpulse({ x: dirX, z: dirZ }, bankFound.stepHeight);
+            const stepImpulse = calculateShorelineStepImpulse(aquaticIntent.heading, bankFound.stepHeight);
             truck.applyImpulse(stepImpulse);
-          } else if (effectiveSpeed > 0.05 && !state.isAirborne) {
-            // Apply aquatic propulsion up to 0.55 cruising speed when moving/throttling
+          } else if (aquaticIntent.active && !state.isAirborne) {
+            // Apply propulsion from current Driver input, including from rest.
             const curVel = vel || { x: dx, z: dz };
-            const aquaticImpulse = calculateAquaticImpulse(curVel, { x: dirX, z: dirZ }, CRUISING_AQUATIC_SPEED);
+            const aquaticImpulse = calculateAquaticImpulse(
+              curVel,
+              aquaticIntent.heading,
+              CRUISING_AQUATIC_SPEED * aquaticIntent.throttle
+            );
             if (aquaticImpulse.x !== 0 || aquaticImpulse.z !== 0) {
               truck.applyImpulse(aquaticImpulse);
             }
@@ -279,22 +322,37 @@ function onTick() {
         } catch {}
       }
 
+      const requestedAt = pendingJumpRequests.get(truck.id);
+      const jumpWasRequested = requestedAt !== undefined && tickNumber - requestedAt <= 2;
+      const velY = vel ? vel.y : dy;
+      const airborneOrFalling = isFallingOrAirborne(Boolean(state.isAirborne), dy, velY);
+
       // Rider dismount management: differentiate deliberate Sneak (Shift) from Spacebar jump ejection
       if (prevRiders.length > currentRiders.length) {
         const currentRiderIds = new Set(currentRiders.map((r) => r.id));
         const dismountedIds = prevRiders.filter((id) => !currentRiderIds.has(id));
         const safePos = getSafeDismountLocation(loc, { x: dirX, z: dirZ });
-        const justJumped = state.lastJumpTick && (tickNumber - state.lastJumpTick <= 8);
         for (const playerId of dismountedIds) {
           try {
             const player = world.getEntity(playerId);
             if (player && player.isValid && player.typeId === "minecraft:player") {
-              if (justJumped && !player.isSneaking && rideable && rideable.addRider) {
-                // Involuntary Spacebar dismount: re-seat rider in vehicle
+              if (!player.isSneaking && rideable && rideable.addRider) {
+                // Sneak is the only deliberate exit. Keep any other engine
+                // detachment tied to a bounded vehicle lifecycle.
+                if (!state.protectedRiderIds?.size) {
+                  protectRidersForLifecycle(state, truck.id, prevRiders);
+                }
+                state.riderRetentionUntil = tickNumber + 8;
+                if (airborneOrFalling && !state.isAirborne) state.isFalling = true;
                 rideable.addRider(player);
               } else if (inLava || inWater) {
                 // Deliberate sneak dismount over liquid: teleport to safe shoreline
                 player.teleport(safePos, { dimension });
+                protectedRiders.delete(playerId);
+                state.protectedRiderIds?.delete(playerId);
+              } else {
+                protectedRiders.delete(playerId);
+                state.protectedRiderIds?.delete(playerId);
               }
             }
           } catch {}
@@ -305,11 +363,16 @@ function onTick() {
       const NATIVE_JUMP_ASCENT_THRESHOLD = 0.42;
       const isAscending = (vel && vel.y > NATIVE_JUMP_ASCENT_THRESHOLD) || dy > NATIVE_JUMP_ASCENT_THRESHOLD;
       const notStepping = !state.lastShorelineStep || (tickNumber - state.lastShorelineStep > 15);
-      const isJumpTriggered = (driver && driver.isJumping) || (driver && isAscending && notStepping && !state.isAirborne);
-      if (isJumpTriggered && canTriggerJump(state.lastJumpTick, tickNumber)) {
+      const isJumpTriggered = jumpWasRequested || (driver && isAscending && notStepping && !state.isAirborne);
+      if (isJumpTriggered && !state.isAirborne &&
+          canTriggerJump(state.lastJumpTick, tickNumber) &&
+          canTriggerJump(state.lastLandingTick, tickNumber)) {
+        pendingJumpRequests.delete(truck.id);
         state.lastJumpTick = tickNumber;
         state.isAirborne = true;
-        const jImpulse = calculateJumpImpulse(effectiveSpeed, { x: dirX, z: dirZ }, 0.40);
+        state.jumpPhase = "launch";
+        protectRidersForLifecycle(state, truck.id, prevRiders.length ? prevRiders : state.riders);
+        const jImpulse = calculateJumpImpulse(effectiveSpeed, { x: dirX, z: dirZ });
         try { truck.applyImpulse(jImpulse); } catch {}
 
         // Audio & Particles
@@ -327,33 +390,41 @@ function onTick() {
         } catch {}
       }
 
+      if (state.isAirborne || state.isFalling ||
+          (state.riderRetentionUntil && tickNumber <= state.riderRetentionUntil)) {
+        restoreProtectedRiders(state, rideable);
+      } else if (state.riderRetentionUntil && tickNumber > state.riderRetentionUntil) {
+        clearProtectedRiders(state);
+        delete state.riderRetentionUntil;
+      }
+
       // Free-fall and airborne tracking
-      const velY = vel ? vel.y : dy;
-      const airborneOrFalling = isFallingOrAirborne(Boolean(state.isAirborne), dy, velY);
       if (airborneOrFalling && !state.isAirborne) {
         state.isFalling = true;
+        if (!state.protectedRiderIds?.size) {
+          protectRidersForLifecycle(state, truck.id, state.riders);
+        }
       }
 
 
 
       // Pneumatic Shock Absorption & Landing Detection
-      if ((state.isAirborne || state.isFalling) && dy <= 0) {
-        let hasLanded = false;
-        try {
-          const blockBelow = dimension.getBlock({
-            x: Math.floor(loc.x),
-            y: Math.floor(loc.y - 0.1),
-            z: Math.floor(loc.z)
-          });
-          if (blockBelow && !blockBelow.isAir && blockBelow.typeId !== "minecraft:air") {
-            hasLanded = true;
-          }
-        } catch {}
+      if (state.isAirborne || state.isFalling) {
+        const grounded = Boolean(truck.isOnGround);
+        const jumpProgress = advanceJumpPhase(state.jumpPhase, {
+          verticalVelocity: velY,
+          deltaY: dy,
+          grounded
+        });
+        state.jumpPhase = jumpProgress.phase;
+        const fallLanded = state.isFalling && !state.isAirborne && grounded && dy <= 0;
 
-        if (hasLanded) {
-          const wasJump = Boolean(state.isAirborne);
+        if (jumpProgress.didLand || fallLanded) {
+          const wasJump = jumpProgress.didLand;
           state.isAirborne = false;
           state.isFalling = false;
+          state.lastLandingTick = tickNumber;
+          state.riderRetentionUntil = tickNumber + 8;
 
           // Dissipate impact energy with pneumatic venting audio and quad wheel dust particles
           try {
@@ -396,7 +467,7 @@ function onTick() {
       }
 
       // Tire trample check (within 1.6 blocks contact perimeter)
-      if (effectiveSpeed > 0.08) {
+      if (canApplyTireTrample(effectiveSpeed, state.isAirborne)) {
         try {
           const nearbyEntities = dimension.getEntities({
             location: loc,
@@ -561,8 +632,49 @@ function isPneumaticallyProtectedFall(event) {
   if (!hurtEntity) return false;
 
   const isTruck = hurtEntity.typeId === "blake:monster_truck";
-  const isRider = isProtectedRider(hurtEntity.id, getCurrentTick());
+  const isRider = protectedRiders.has(hurtEntity.id);
   return shouldAbsorbFallDamage(cause, isTruck || isRider);
+}
+
+function isDeliberateRetrieval(event) {
+  const truck = event.hurtEntity;
+  const player = event.damageSource?.damagingEntity;
+  if (truck?.typeId !== "blake:monster_truck" || player?.typeId !== "minecraft:player") {
+    return false;
+  }
+
+  try {
+    const health = truck.getComponent("minecraft:health");
+    return event.damage >= health.currentValue;
+  } catch {
+    return false;
+  }
+}
+
+if (world.afterEvents && world.afterEvents.playerButtonInput) {
+  world.afterEvents.playerButtonInput.subscribe((event) => {
+    if (event.button !== InputButton.Jump || event.newButtonState !== ButtonState.Pressed) return;
+    try {
+      const tick = getCurrentTick();
+      let truck = event.player.getComponent("minecraft:riding")?.entityRidingOn;
+      if (!truck) {
+        const assignment = seatedDriverAssignments.get(event.player.id);
+        if (assignment && tick - assignment.tick <= 2) {
+          truck = world.getEntity(assignment.truckId);
+        }
+      }
+      if (truck?.typeId === "blake:monster_truck") {
+        pendingJumpRequests.set(truck.id, tick);
+        system.run(() => {
+          try {
+            if (truck.isValid && !event.player.isSneaking) {
+              truck.getComponent("minecraft:rideable")?.addRider(event.player);
+            }
+          } catch {}
+        });
+      }
+    } catch {}
+  });
 }
 
 if (world.beforeEvents && world.beforeEvents.entityHurt) {
@@ -570,8 +682,17 @@ if (world.beforeEvents && world.beforeEvents.entityHurt) {
     world.beforeEvents.entityHurt.subscribe((event) => {
       if (isPneumaticallyProtectedFall(event)) {
         event.cancel = true;
+      } else if (isDeliberateRetrieval(event)) {
+        event.cancel = true;
+        const truck = event.hurtEntity;
+        const location = { ...truck.location };
+        const dimension = truck.dimension;
+        system.run(() => {
+          if (!truck.isValid) return;
+          dimension.spawnItem(new ItemStack("blake:monster_truck_vehicle", 1), location);
+          truck.remove();
+        });
       }
     });
   } catch {}
 }
-

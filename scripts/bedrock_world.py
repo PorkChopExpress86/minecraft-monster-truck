@@ -43,8 +43,15 @@ def enable_logging(root, data_root):
     original = options.read_bytes()
     match = re.search(rb"(?m)^content_log_file:([01])(?=\r?$)", original)
     if not match:
-        raise ValueError("Installed Minecraft options do not expose the known content_log_file setting")
-    if match[1] == b"0":
+        if re.search(rb"(?m)^content_log_file:", original):
+            raise ValueError("Installed Minecraft options contain a malformed content_log_file setting")
+        backup = root / "dist/bedrock-tests/setup" / uuid.uuid4().hex / "options.txt"
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        backup.write_bytes(original)
+        newline = b"\r\n" if b"\r\n" in original else b"\n"
+        separator = b"" if not original or original.endswith((b"\n", b"\r")) else newline
+        options.write_bytes(original + separator + b"content_log_file:1" + newline)
+    elif match[1] == b"0":
         backup = root / "dist/bedrock-tests/setup" / uuid.uuid4().hex / "options.txt"
         backup.parent.mkdir(parents=True, exist_ok=True)
         backup.write_bytes(original)

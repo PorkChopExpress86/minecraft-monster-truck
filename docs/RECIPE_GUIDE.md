@@ -37,6 +37,8 @@ Open a standard **Crafting Table** and place the items in this exact layout:
 +------------------+------------------+------------------+
 ```
 
+The recipe returns one **Monster Truck Vehicle Item**. Using it deploys a red truck; it is intentionally separate from the randomized Creative spawn egg.
+
 ---
 
 ## 🏁 Vehicle Stats Card

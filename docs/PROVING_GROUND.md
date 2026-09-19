@@ -70,6 +70,16 @@ Construct a small proving track with the following obstacles:
 | **22. Molten Tire Trample** | Traverse lava, then ram hostile mobs on land within 10 seconds. | Wheels ignite impacted mobs with fire ticks in addition to collision impact damage per ADR-0010. | [ ] |
 | **23. Wood Demolition** | Drive forward into logs, planks, fences, or glass at speed ($\ge 0.25$). | Blocks shatter with standard breaking sounds and drop collectable survival items per ADR-0009. | [ ] |
 | **24. Foliage Shearing** | Drive into tree leaves or hanging vines at resting or low speed. | Foliage clears instantly on contact without item drops to prevent lag per ADR-0011. | [ ] |
+| **25. Input Release in Liquid** | From rest in water and lava, hold then release each movement direction. | The truck starts under input, follows the intended direction, and stops adding propulsion when controls are released. | [ ] |
+| **26. Three-Block Shoreline Boundary** | Drive from liquid directly into a continuous three-block stone bank without Spacebar. | Shoreline Step-Up does not lift the truck; an intentional Suspension Jump is required. | [ ] |
+| **27. Two-Seat High Drop** | With a Driver and Passenger seated, drive off a 30+ block drop, then deliberately exit and perform an unrelated fall. | Both seated occupants are protected for the vehicle event; protection does not persist after deliberate exit. | [ ] |
+| **28. Retrieval** | Reduce a truck to its final hit with a direct player attack. | The truck returns exactly one Monster Truck Vehicle Item and no Scrap. | [ ] |
+| **29. Catastrophic Destruction** | Separately destroy trucks through mob combat, explosion, fire/lava, and another environmental cause. | Each destruction produces Scrap and never a complete Vehicle Item or duplicate drop. | [ ] |
+| **30. Tire Trample Scaling** | Contact the same mob type while parked and at low, medium, and high speeds. | Parked contact is safe; damage rises monotonically with speed; knockback is outward; protected targets remain unharmed; damage is not doubled. | [ ] |
+
+## Acceptance evidence
+
+Record the repository revision, packaged add-on version, installed Minecraft version, automated run identifier, and the completed checklist with the retained report, content log, and screenshots. A static-only result, an older packaged build, or an incomplete manual checklist does not qualify the current release.
 
 ## Heavy-duty driving checks
 

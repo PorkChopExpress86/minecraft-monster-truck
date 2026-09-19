@@ -1,0 +1,25 @@
+{
+  "format_version": "1.26.0",
+  "minecraft:item": {
+    "description": {
+      "identifier": "blake:monster_truck_vehicle",
+      "menu_category": {
+        "category": "equipment"
+      }
+    },
+    "components": {
+      "minecraft:display_name": {
+        "value": "item.blake:monster_truck_vehicle.name"
+      },
+      "minecraft:icon": {
+        "textures": {
+          "default": "monster_truck_vehicle"
+        }
+      },
+      "minecraft:max_stack_size": 1,
+      "minecraft:entity_placer": {
+        "entity": "blake:monster_truck<blake:spawn_red>"
+      }
+    }
+  }
+}

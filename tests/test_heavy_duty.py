@@ -10,11 +10,8 @@ def test_heavy_duty_stats_and_impact_protections():
     assert {'cause':'fall','deals_damage':'no'} in triggers
     for cause in ['entity_attack','projectile','entity_explosion','block_explosion']:
         assert {'cause':cause,'deals_damage':'yes','damage_multiplier':0.25} in triggers
-    attack = c['minecraft:area_attack']
-    assert attack['damage_per_tick'] == 40
-    assert attack['damage_cooldown'] == 0.5
-    filters = attack['entity_filter']['all_of']
-    assert {'test':'is_moving','subject':'self','value':True} in filters
-    for family in ['player','vehicle']:
-        assert {'test':'is_family','subject':'other','value':family,'operator':'!='} in filters
-    assert {'test':'is_tamed','subject':'other','value':False} in filters
+    assert 'minecraft:area_attack' not in c, (
+        'Scripted Speed-Scaled Tire Trample must be the only contact-damage authority'
+    )
+    main = (ROOT/'behavior_packs/MonsterTruck_BP/scripts/main.js').read_text(encoding='utf-8')
+    assert 'calculateTrampleDamage(effectiveSpeed)' in main

@@ -39,7 +39,10 @@ async function createShowcase(player, run) {
   for (const previous of player.dimension.getEntities({ tags: [tag] })) previous.remove();
   const origin = { x: Math.floor(player.location.x) + 8, y: Math.floor(player.location.y),
     z: Math.floor(player.location.z) + 4 };
-  const colors = ["red", "blue", "green", "yellow", "black", "white"];
+  const colors = [
+    "red", "blue", "green", "yellow", "black", "white", "orange", "magenta",
+    "light_blue", "lime", "pink", "gray", "light_gray", "cyan", "purple", "brown"
+  ];
   const entities = [];
   const checks = [];
   let cameraTimer;
@@ -52,13 +55,13 @@ async function createShowcase(player, run) {
   try {
     for (let index = 0; index < colors.length; index++) {
       const entity = player.dimension.spawnEntity(run.entity_id, {
-        x: origin.x + (index % 3) * 6, y: origin.y + 0.1,
-        z: origin.z + Math.floor(index / 3) * 8,
+        x: origin.x + (index % 4) * 6, y: origin.y + 0.1,
+        z: origin.z + Math.floor(index / 4) * 7,
       });
       entities.push(entity);
       entity.addTag(tag);
       entity.setRotation({ x: 0, y: 180 });
-      entity.triggerEvent("blake:paint_" + colors[index]);
+      entity.triggerEvent("blake:spawn_" + colors[index]);
     }
     await new Promise(resolve => system.runTimeout(resolve, 2));
     for (let index = 0; index < entities.length; index++) {
@@ -74,16 +77,18 @@ async function createShowcase(player, run) {
       }
       checks.push(colors[index] + ": spawned, color synchronized, required components and two seats");
     }
+    checks.push(...await checkSpawnSources(player, run, origin, entities));
+    checks.push(...await checkDestructionOutcomes(player, run, origin));
     checks.push(...await checkHeavyDuty(player, run, origin));
     world.setTimeOfDay(6000);
     player.onScreenDisplay.hideAllExcept([]);
     const views = [
-      { location: { x: origin.x + 19, y: origin.y + 10, z: origin.z - 18 },
-        facingLocation: { x: origin.x + 6, y: origin.y + 1, z: origin.z + 4 } },
+      { location: { x: origin.x + 28, y: origin.y + 14, z: origin.z - 20 },
+        facingLocation: { x: origin.x + 9, y: origin.y + 1, z: origin.z + 10 } },
       { location: { x: origin.x - 6, y: origin.y + 4, z: origin.z - 8 },
         facingLocation: { x: origin.x + 1, y: origin.y + 1, z: origin.z } },
-      { location: { x: origin.x + 19, y: origin.y + 6, z: origin.z + 13 },
-        facingLocation: { x: origin.x + 6, y: origin.y + 1, z: origin.z + 4 } },
+      { location: { x: origin.x + 28, y: origin.y + 8, z: origin.z + 30 },
+        facingLocation: { x: origin.x + 9, y: origin.y + 1, z: origin.z + 10 } },
     ];
     let view = 0;
     player.camera.setCamera("minecraft:free", views[view]);
@@ -97,6 +102,112 @@ async function createShowcase(player, run) {
     cleanup();
     throw error;
   }
+}
+
+
+async function checkSpawnSources(player, run, origin, entities) {
+  const wait = ticks => new Promise(resolve => system.runTimeout(resolve, ticks));
+  const dimension = player.dimension;
+  const checks = [];
+  const bare = dimension.spawnEntity(run.entity_id, { x: origin.x - 6, y: origin.y + 0.1, z: origin.z });
+  entities.push(bare);
+  await wait(2);
+  if (bare.getProperty("blake:color") !== 0) throw new Error("Bare summon must default red");
+  checks.push("bare summon defaults red");
+
+  const vehicle = dimension.spawnEntity(run.entity_id, { x: origin.x - 6, y: origin.y + 0.1, z: origin.z + 6 });
+  entities.push(vehicle);
+  vehicle.triggerEvent("blake:spawn_red");
+  await wait(2);
+  if (vehicle.getProperty("blake:color") !== 0) throw new Error("Vehicle Item spawn must default red");
+  checks.push("Vehicle Item spawn event defaults red");
+
+  const randomized = new Set();
+  for (let index = 0; index < 32; index++) {
+    const sample = dimension.spawnEntity(run.entity_id, {
+      x: origin.x - 12, y: origin.y + 0.1, z: origin.z + (index % 4) * 2
+    });
+    sample.triggerEvent("blake:random_color_on_spawn");
+    await wait(1);
+    const color = sample.getProperty("blake:color");
+    sample.remove();
+    if (!Number.isInteger(color) || color < 0 || color > 15) {
+      throw new Error("Creative egg randomization produced invalid color: " + color);
+    }
+    randomized.add(color);
+  }
+  if (randomized.size < 2) throw new Error("Creative egg randomization did not vary across 32 samples");
+  checks.push("Creative egg event randomizes across the Sixteen-Color Palette");
+  return checks;
+}
+
+
+async function checkDestructionOutcomes(player, run, origin) {
+  const dimension = player.dimension;
+  const location = { x: origin.x - 24, y: origin.y + 0.1, z: origin.z + 20 };
+  const wait = ticks => new Promise(resolve => system.runTimeout(resolve, ticks));
+  const itemEntities = () => dimension.getEntities({ type: "minecraft:item", location, maxDistance: 6 });
+  const clearDrops = () => {
+    for (const item of itemEntities()) item.remove();
+  };
+  const totals = () => {
+    const result = new Map();
+    for (const entity of itemEntities()) {
+      const stack = entity.getComponent("minecraft:item")?.itemStack;
+      if (stack) result.set(stack.typeId, (result.get(stack.typeId) || 0) + stack.amount);
+    }
+    return result;
+  };
+
+  clearDrops();
+  const retrievalTruck = dimension.spawnEntity(run.entity_id, location);
+  await wait(2);
+  retrievalTruck.applyDamage(5000, {
+    cause: EntityDamageCause.entityAttack,
+    damagingEntity: player,
+  });
+  await wait(8);
+  const retrievalDrops = totals();
+  if (retrievalDrops.get("blake:monster_truck_vehicle") !== 1 ||
+      retrievalDrops.has("minecraft:iron_ingot")) {
+    throw new Error("Deliberate retrieval did not return exactly one Vehicle Item");
+  }
+  clearDrops();
+
+  const golem = dimension.spawnEntity("minecraft:iron_golem", { ...location, x: location.x + 4 });
+  const catastrophicCases = [
+    ["mob combat", EntityDamageCause.entityAttack, golem],
+    ["explosion", EntityDamageCause.entityExplosion, undefined],
+    ["fire", EntityDamageCause.fire, undefined],
+    ["lava", EntityDamageCause.lava, undefined],
+    ["environmental lightning", EntityDamageCause.lightning, undefined],
+  ];
+  try {
+    for (const [label, cause, damagingEntity] of catastrophicCases) {
+      const truck = dimension.spawnEntity(run.entity_id, location);
+      await wait(2);
+      const options = { cause };
+      if (damagingEntity) options.damagingEntity = damagingEntity;
+      truck.applyDamage(5000, options);
+      await wait(8);
+      const drops = totals();
+      if ((drops.get("minecraft:iron_ingot") || 0) < 2 ||
+          drops.has("blake:monster_truck_vehicle")) {
+        throw new Error(label + " did not produce Scrap-only destruction");
+      }
+      clearDrops();
+      if (truck.isValid) truck.remove();
+    }
+  } finally {
+    clearDrops();
+    if (golem.isValid) golem.remove();
+    if (retrievalTruck.isValid) retrievalTruck.remove();
+  }
+
+  return [
+    "direct player-fatal retrieval returns exactly one Vehicle Item",
+    "mob, explosion, fire, lava, and environmental deaths produce Scrap only",
+  ];
 }
 
 
@@ -122,11 +233,11 @@ async function checkHeavyDuty(player, run, origin) {
     await wait(2);
     if (health.currentValue !== 990) throw new Error("Fall protection failed");
     truck.applyDamage(40, { cause: EntityDamageCause.lava });
-    await wait(2);
-    if (health.currentValue !== 990) throw new Error("Lava immunity failed");
+    await wait(12);
+    if (health.currentValue !== 950) throw new Error("Lava hazard damage failed: " + health.currentValue);
     truck.applyDamage(40, { cause: EntityDamageCause.fire });
     await wait(2);
-    if (health.currentValue !== 990) throw new Error("Fire immunity failed");
+    if (health.currentValue !== 910) throw new Error("Fire hazard damage failed: " + health.currentValue);
     if (!pig.isValid || pig.getComponent("minecraft:health").currentValue !== 10) {
       throw new Error("Parked truck damaged a mob");
     }
@@ -207,31 +318,23 @@ async function checkHeavyDuty(player, run, origin) {
       if (golem && golem.isValid) golem.remove();
     }
 
-    // Verify Suspension Jump vertical clearance
-    truck.teleport(location);
-    truck.clearVelocity();
-    truck.applyImpulse({ x: 0, y: 0.82, z: 0 });
-    let peakY = location.y;
-    for (let tick = 0; tick < 15; tick++) {
-      await wait(1);
-      if (truck.location.y > peakY) peakY = truck.location.y;
-    }
-    if (peakY < location.y + 2.8) {
-      throw new Error("Suspension jump failed vertical clearance: " + peakY);
-    }
+    // The ledge scenario is complete. Restore its terrain before measuring a
+    // flat-ground landing transition so elevated contact cannot be mistaken
+    // for a premature stomp.
+    for (const [block, permutation] of blocks) block.setPermutation(permutation);
+    blocks.length = 0;
 
     return [
       "two-block ledge traversed with horizontal impulses",
       "1000 health",
       "75% melee damage reduction",
       "fall damage immunity",
-      "fire and lava immunity",
+      "fire and lava remain catastrophic Scrap-producing hazards",
       "parked truck leaves mob unharmed",
       "moving truck kills mob",
       "momentum-gated wood demolition clears path and preserves stationary wood",
       "heavy entity collision halts low-speed truck and shoves with damage at top speed",
-      "amphibious flotation buoyancy configured for water and lava",
-      "instant-tap suspension jump achieves vertical clearance"
+      "amphibious flotation buoyancy configured for water and lava"
     ];
   } finally {
     for (const [block, permutation] of blocks) block.setPermutation(permutation);

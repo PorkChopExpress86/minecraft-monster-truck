@@ -48,10 +48,7 @@
       },
       "render_controllers": [
         "controller.render.blake.monster_truck"
-      ],
-      "spawn_egg": {
-        "texture": "monster_truck_spawn_egg"
-      }
+      ]
     }
   }
 }

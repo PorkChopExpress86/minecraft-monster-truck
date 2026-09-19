@@ -34,7 +34,14 @@ def test_durability_and_loot():
     assert loot_path.exists(), "Loot table for monster truck must exist"
     with open(loot_path, "r", encoding="utf-8") as f:
         loot = json.load(f)
-    assert "pools" in loot
+    serialized_loot = json.dumps(loot)
+    assert "blake:monster_truck_vehicle" not in serialized_loot
+    assert "blake:monster_truck_spawn_egg" not in serialized_loot
+    assert "minecraft:iron_ingot" in serialized_loot, "Catastrophic destruction must yield Scrap"
+
+    main = (REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "main.js").read_text(encoding="utf-8")
+    assert 'new ItemStack("blake:monster_truck_vehicle", 1)' in main
+    assert "isDeliberateRetrieval" in main
 
 def test_crafting_recipe():
     recipe_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "recipes" / "monster_truck.json"
@@ -56,6 +63,7 @@ def test_crafting_recipe():
     assert "S" in key and key["S"]["item"] == "minecraft:saddle"
     assert "C" in key and key["C"]["item"] == "minecraft:coal_block"
     assert "R" in key and key["R"]["item"] == "minecraft:redstone_block"
+    assert shaped["result"] == {"item": "blake:monster_truck_vehicle", "count": 1}
 
 def test_audio_pipeline_and_timeline():
     rp_sounds = REPO_ROOT / "resource_packs" / "MonsterTruck_RP" / "sounds"
@@ -89,3 +97,12 @@ def test_audio_pipeline_and_timeline():
     events_path = REPO_ROOT / "resource_packs" / "MonsterTruck_RP" / "sounds.json"
     events = json.loads(events_path.read_text(encoding="utf-8"))["entity_sounds"]["entities"]["blake:monster_truck"]["events"]
     assert events == {"ambient": ""}, "Keep ambient audio silent; animation timelines drive engine audio"
+
+
+def test_live_harness_covers_retrieval_and_catastrophic_sources():
+    harness = (REPO_ROOT / "testing" / "harness" / "assertions.js").read_text(encoding="utf-8")
+    assert "checkDestructionOutcomes" in harness
+    for cause in ("entityAttack", "entityExplosion", "fire", "lava", "lightning"):
+        assert f"EntityDamageCause.{cause}" in harness
+    assert "blake:monster_truck_vehicle" in harness
+    assert "minecraft:iron_ingot" in harness

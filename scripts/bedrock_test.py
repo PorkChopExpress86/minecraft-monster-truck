@@ -137,15 +137,21 @@ def pack_entries(root, config):
     return bp, rp
 
 
+def dedicated_pack_ids(config):
+    namespace = uuid.UUID(config["harness_uuid"])
+    return str(uuid.uuid5(namespace, "behavior-pack")), str(uuid.uuid5(namespace, "resource-pack"))
+
+
 def deploy(root, config, world, run_id):
     validate_world(world)
     owner = checked_destination(world, OWNER)
     if not owner.exists() or read_json(owner) != owner_data(root, config):
         raise SetupError("World ownership is not configured for this repository")
     bp, rp = pack_entries(root, config)
+    test_bp_id, test_rp_id = dedicated_pack_ids(config)
     for name, allowed in (
-        ("world_behavior_packs.json", {bp["header"]["uuid"], config["harness_uuid"]}),
-        ("world_resource_packs.json", {rp["header"]["uuid"]}),
+        ("world_behavior_packs.json", {bp["header"]["uuid"], test_bp_id, config["harness_uuid"]}),
+        ("world_resource_packs.json", {rp["header"]["uuid"], test_rp_id}),
     ):
         metadata = checked_destination(world, name)
         if metadata.exists() and any(entry["pack_id"] not in allowed for entry in read_json(metadata)):
@@ -161,6 +167,17 @@ def deploy(root, config, world, run_id):
             shutil.rmtree(target)
     shutil.copytree(root / config["behavior_pack"], destinations[0])
     shutil.copytree(root / config["resource_pack"], destinations[1])
+    deployed_bp_manifest = destinations[0] / "manifest.json"
+    deployed_rp_manifest = destinations[1] / "manifest.json"
+    deployed_bp = read_json(deployed_bp_manifest)
+    deployed_rp = read_json(deployed_rp_manifest)
+    deployed_bp["header"]["uuid"] = test_bp_id
+    deployed_rp["header"]["uuid"] = test_rp_id
+    for dependency in deployed_bp.get("dependencies", []):
+        if dependency.get("uuid") == rp["header"]["uuid"]:
+            dependency["uuid"] = test_rp_id
+    write_json(deployed_bp_manifest, deployed_bp)
+    write_json(deployed_rp_manifest, deployed_rp)
     harness = destinations[2]
     shutil.copytree(root / "testing/harness", harness / "scripts")
     write_json(harness / "manifest.json", {
@@ -175,7 +192,7 @@ def deploy(root, config, world, run_id):
                      "uuid": config["harness_module_uuid"], "version": [1, 0, 0]}],
         "dependencies": [
             {"module_name": "@minecraft/server", "version": config["script_api_version"]},
-            {"uuid": bp["header"]["uuid"], "version": bp["header"]["version"]},
+            {"uuid": test_bp_id, "version": bp["header"]["version"]},
         ],
     })
     run = {"run_id": run_id, "entity_id": config["entity_id"],
@@ -187,11 +204,11 @@ def deploy(root, config, world, run_id):
         "export const run = " + json.dumps(run) + ";\n", encoding="utf-8",
     )
     write_json(world / "world_behavior_packs.json", [
-        {"pack_id": bp["header"]["uuid"], "version": bp["header"]["version"]},
+        {"pack_id": test_bp_id, "version": bp["header"]["version"]},
         {"pack_id": config["harness_uuid"], "version": [1, 0, 0]},
     ])
     write_json(world / "world_resource_packs.json", [
-        {"pack_id": rp["header"]["uuid"], "version": rp["header"]["version"]},
+        {"pack_id": test_rp_id, "version": rp["header"]["version"]},
     ])
 
 
@@ -315,7 +332,8 @@ def evaluate_lines(lines, run_id, entity_id):
     return errors, warnings, markers
 
 
-def await_result(logs, config, run_id, output, clock=time.monotonic, sleep=time.sleep, on_poll=None):
+def await_result(logs, config, run_id, output, clock=time.monotonic, sleep=time.sleep,
+                 on_poll=None):
     started = clock()
     deadline = started + config["timeout_seconds"]
     passed_at = None

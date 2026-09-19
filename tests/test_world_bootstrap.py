@@ -88,9 +88,19 @@ def test_cached_template_hash_is_verified(tmp_path):
         world.template_bytes(tmp_path)
 
 
-def test_unknown_logging_setting_preserves_options(starter):
+def test_missing_logging_setting_is_backed_up_and_added(starter):
     root, data_root, _, options = starter
     options.write_text("unknown_setting:1\n")
-    with pytest.raises(ValueError, match="known content_log_file"):
+    world.enable_logging(root, data_root)
+    assert options.read_text() == "unknown_setting:1\ncontent_log_file:1\n"
+    backups = list((root / "dist/bedrock-tests/setup").glob("*/options.txt"))
+    assert len(backups) == 1
+    assert backups[0].read_text() == "unknown_setting:1\n"
+
+
+def test_malformed_logging_setting_is_refused(starter):
+    root, data_root, _, options = starter
+    options.write_text("content_log_file:unexpected\n")
+    with pytest.raises(ValueError, match="malformed content_log_file"):
         world.enable_logging(root, data_root)
-    assert options.read_text() == "unknown_setting:1\n"
+    assert options.read_text() == "content_log_file:unexpected\n"

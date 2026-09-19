@@ -17,7 +17,7 @@ The secondary non-controlling seat (seat index 1) positioned alongside the drive
 _Avoid_: Back seat, rumble seat
 
 **Vehicle Item**:
-The portable inventory item form of the Monster Truck dropped when deliberately broken or retrieved by a player, ready to deploy elsewhere. In Minecraft Bedrock, this survival deployment item is represented by the custom spawn egg item (`blake:monster_truck_spawn_egg`).
+The portable inventory form of the Monster Truck returned by deliberate player retrieval and crafted for deterministic red deployment. It is distinct from the randomized Creative spawn egg.
 _Avoid_: Car block, generic spawn egg
 
 **Scrap**:

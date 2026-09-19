@@ -18,6 +18,7 @@ def test_trample_math_and_protection_contracts():
 import assert from 'node:assert/strict';
 import {
   calculateTrampleDamage,
+  canApplyTireTrample,
   isInContactPerimeter,
   calculateKnockbackImpulse,
   isProtectedTarget
@@ -28,6 +29,8 @@ import {
 assert.equal(calculateTrampleDamage(0), 0);
 // Low-speed crawling (speed 0.05): 0 damage (mobs unharmed)
 assert.equal(calculateTrampleDamage(0.05), 0);
+assert.equal(canApplyTireTrample(0.50, true), false, "Airborne tires cannot trample targets");
+assert.equal(canApplyTireTrample(0.50, false), true, "Grounded moving tires can trample targets");
 // Medium speed (0.15): minor/moderate damage (18 damage)
 assert.equal(calculateTrampleDamage(0.15), 18);
 // Ramming speed (0.35): heavy crushing damage (42 damage)

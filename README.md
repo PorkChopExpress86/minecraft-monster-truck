@@ -6,7 +6,7 @@ A lifted, two-seat monster pickup with oversized octagonal tires, chunky tread, 
 
 ## Choose a color
 
-Vehicles spawn in a randomized color when placed using the Creative spawn egg, or default to **red** when crafted in Survival or summoned via `/summon blake:monster_truck`. To repaint one, hold any of the 16 vanilla Minecraft dyes, **sneak**, and **interact with the truck** (Shift + right-click on Windows). Dye is reusable and is not consumed. Interact normally without sneaking to mount the truck.
+Vehicles spawn in a randomized color when placed using the Creative spawn egg. The distinct Survival Vehicle Item produced by the recipe places a **red** truck, and a bare `/summon blake:monster_truck` also defaults to red. To repaint one, hold any of the 16 vanilla Minecraft dyes, **sneak**, and **interact with the truck** (Shift + right-click on Windows). Dye is reusable and is not consumed. Interact normally without sneaking to mount the truck.
 
 | Paint | Item | Paint | Item |
 |---|---|---|---|
@@ -34,6 +34,8 @@ Colors change the body, hood, roof, and wheel-hub accents. Tires stay dark, with
 | Controlled Auto-step height | 2 blocks |
 | Suspension Jump clearance | 3 blocks (Spacebar, 1.2s cooldown) |
 | Tire Trample damage | Speed-scaled (up to lethal impact) with outward knockback |
+| Retrieval | A direct player-fatal dismantle returns exactly one Vehicle Item |
+| Catastrophic destruction | Combat, explosions, fire, lava, and other hazards drop Scrap |
 
 The Monster Truck is built for extreme demolition and all-terrain traversal:
 - **Controlled Auto-Step**: Climbs 2-block vertical ledges smoothly without requiring jump input.
@@ -60,10 +62,10 @@ With Python 3.11+ installed and Minecraft initialized and closed, run:
 powershell.exe -NoProfile -File .\Test-Addon.ps1
 ```
 
-The command prepares its Python environment, creates a dedicated flat test world, enables content logging with a settings backup, deploys the test packs, and launches Minecraft. It checks all 16 color events, the required components, both seats, armor, fall protection, parked contact safety, moving run-over damage, and a two-block ledge crossed using horizontal impulses; collects screenshots from multiple camera angles; checks the final content log; and closes the client normally.
+The command prepares its Python environment, creates a dedicated flat test world, enables content logging with a settings backup, deploys the test packs, and launches Minecraft. It checks all 16 explicit color events, randomized and deterministic spawn-source behavior, required components, both seats, armor, fall protection, parked contact safety, moving run-over damage, and a two-block ledge; collects screenshots from multiple camera angles; checks the final content log; and closes the client normally.
 
 Reports and original screenshots are under `dist/bedrock-tests/<run-id>/`. The images above are actual Minecraft captures from that workflow. Showcase trucks stay in the dedicated test world for inspection and are replaced on the next run. Other worlds are not used for testing.
 
-Screenshots document appearance; automated color-event checks do not simulate a player's dye click or driving controls. Those interactions remain in the [manual proving-ground checklist](docs/PROVING_GROUND.md).
+The runner never generates keyboard input. Driver Seat Spacebar behavior, rider retention through a jump, visible three-block clearance, control feel, dye interaction, visual quality, camera comfort, audio playback, and multiplayer behavior remain in the [manual proving-ground checklist](docs/PROVING_GROUND.md).
 
 See [Windows testing](docs/WINDOWS_TESTING.md) for configuration and the reusable `minecraft-addon-testing` skill. Production vehicle physics, demolition, kinematics, and amphibious traversal are powered by the Bedrock Script API (`@minecraft/server`).

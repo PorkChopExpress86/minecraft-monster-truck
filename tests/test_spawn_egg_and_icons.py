@@ -15,6 +15,22 @@ def test_item_texture_registration():
     tex_data = data.get("texture_data", {})
     assert "monster_truck_spawn_egg" in tex_data
     assert tex_data["monster_truck_spawn_egg"]["textures"] == "textures/items/monster_truck_spawn_egg"
+    assert tex_data["monster_truck_vehicle"]["textures"] == "textures/items/monster_truck_spawn_egg"
+
+
+def test_survival_vehicle_item_is_deterministically_red():
+    item_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "items" / "monster_truck_vehicle.item.json"
+    item = json.loads(item_path.read_text(encoding="utf-8"))["minecraft:item"]
+    assert item["description"]["identifier"] == "blake:monster_truck_vehicle"
+    assert item["components"]["minecraft:entity_placer"]["entity"] == (
+        "blake:monster_truck<blake:spawn_red>"
+    )
+
+    recipe = json.loads(
+        (REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "recipes" / "monster_truck.json")
+        .read_text(encoding="utf-8")
+    )["minecraft:recipe_shaped"]
+    assert recipe["result"] == {"item": "blake:monster_truck_vehicle", "count": 1}
 
 def test_client_entity_spawn_egg():
     ce_path = REPO_ROOT / "resource_packs" / "MonsterTruck_RP" / "entity" / "monster_truck.entity.json"
@@ -22,8 +38,14 @@ def test_client_entity_spawn_egg():
         ce_data = json.load(f)
         
     desc = ce_data["minecraft:client_entity"]["description"]
-    assert "spawn_egg" in desc
-    assert desc["spawn_egg"].get("texture") == "monster_truck_spawn_egg"
+    assert "spawn_egg" not in desc, "The explicit Creative item owns randomized placement"
+
+    item = json.loads(
+        (REPO_ROOT / "behavior_packs/MonsterTruck_BP/items/monster_truck_spawn_egg.item.json")
+        .read_text(encoding="utf-8")
+    )["minecraft:item"]
+    assert item["description"]["identifier"] == "blake:monster_truck_spawn_egg"
+    assert item["components"]["minecraft:icon"]["textures"]["default"] == "monster_truck_spawn_egg"
 
 def test_spawn_egg_and_pack_icon_assets():
     egg_path = REPO_ROOT / "resource_packs" / "MonsterTruck_RP" / "textures" / "items" / "monster_truck_spawn_egg.png"

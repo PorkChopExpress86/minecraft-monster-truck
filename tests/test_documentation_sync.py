@@ -46,7 +46,7 @@ def test_readme_and_context_cover_all_sixteen_colors():
     assert "Textured Color Swatches" in context
     assert "Sneak-Dye Repainting" in context
     assert "Randomized Spawn Egg Placement" in context
-    assert "blake:monster_truck_spawn_egg" in context
+    assert "distinct from the randomized Creative spawn egg" in context
 
 
 def test_proving_ground_checklist_covers_kinematics_and_sixteen_colors():
