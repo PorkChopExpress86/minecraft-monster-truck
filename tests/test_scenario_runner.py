@@ -63,6 +63,8 @@ def server_files(tmp_path, monkeypatch):
     monkeypatch.setattr(scenarios, "server_zip", lambda root, server: archive)
     monkeypatch.setattr(scenarios, "template_bytes", lambda root: starter.getvalue())
     config = json.loads((REPO_ROOT / "testing/bedrock.json").read_text())
+    # The fake server below reports only the smoke scenario.
+    config["scenario_server"]["scenarios"] = ["smoke"]
     return config
 
 
