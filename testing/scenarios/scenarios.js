@@ -14,6 +14,19 @@ const TRUCK_MAX_HEALTH = 1000;
 const PITCH_TOLERANCE = 5;       // degrees, agreed in #33
 const PITCH_CLAMP = 35;          // degrees, ADR-0014
 const PITCH_MAX_STEP = 15;       // degrees per tick: 0.2 smoothing of a full 70 degree swing, rounded up
+const PITCH_SAMPLE_SPAN = 2.25;  // blocks between the front and rear ground samples (main.js, 1.125 each way)
+const degrees = radians => radians * 180 / Math.PI;
+
+// Accepted settled pitch on a stair ramp. Stairs are not a smooth slope: when one stair is
+// longer than the sample span, the samples straddle a single step for part of each stair and
+// read atan(rise / span) rather than the nominal angle. Both readings are correct (user, #38).
+function pitchBand(rise, run_) {
+  const readings = [degrees(Math.atan2(rise, run_))];
+  if (run_ >= PITCH_SAMPLE_SPAN) readings.push(degrees(Math.atan2(rise, PITCH_SAMPLE_SPAN)));
+  const low = Math.min(PITCH_CLAMP, Math.min(...readings)) - PITCH_TOLERANCE;
+  const high = Math.min(PITCH_CLAMP, Math.max(...readings)) + PITCH_TOLERANCE;
+  return { low, high };
+}
 
 const at = (origin, dx, dz, y = GROUND_Y) => ({ x: origin.x + dx, y, z: origin.z + dz });
 
@@ -103,8 +116,10 @@ async function suspension_jump({ dimension, origin, driver, run }) {
   await board(driver, truck, 0);
   let peak = truck.location.y;
   let jumped = false;
+  const tracker = retentionTracker(truck, driver);
   await drive(driver, 50, {
-    onTick: () => {
+    onTick: tick => {
+      tracker.sample(tick);
       peak = Math.max(peak, truck.location.y);
       if (!jumped && truck.location.z >= origin.z + 7) {
         requestDriverJump(driver);
@@ -117,7 +132,63 @@ async function suspension_jump({ dimension, origin, driver, run }) {
   if (peak - GROUND_Y < 3) throw new Error(`Suspension Jump peaked only +${(peak - GROUND_Y).toFixed(2)} blocks`);
   if (truck.location.z <= origin.z + 13) throw new Error("Suspension Jump did not clear the 3-block wall");
   if (riders(truck)[0]?.id !== driver.id) throw new Error("Driver was ejected by the Suspension Jump");
-  return [`Suspension Jump peaked +${(peak - GROUND_Y).toFixed(2)} blocks`, "cleared a 3-block wall with the driver still seated"];
+  return [`Suspension Jump peaked +${(peak - GROUND_Y).toFixed(2)} blocks`, "cleared a 3-block wall with the driver still seated",
+    tracker.verify("moving Suspension Jump")];
+}
+
+// Per-tick rider retention (#32): the driver must stay in the truck's rider list, keep its
+// riding link, and stay at its seat offset on every tick of a Suspension Jump.
+function retentionTracker(truck, driver) {
+  const offset = () => ({
+    x: driver.location.x - truck.location.x,
+    y: driver.location.y - truck.location.y,
+    z: driver.location.z - truck.location.z,
+  });
+  const seat = offset();
+  const lost = [];
+  let maxDrift = 0;
+  return {
+    sample(tick) {
+      const listed = riders(truck)[0]?.id === driver.id;
+      const linked = driver.getComponent("minecraft:riding")?.entityRidingOn?.id === truck.id;
+      const now = offset();
+      const drift = Math.hypot(now.x - seat.x, now.y - seat.y, now.z - seat.z);
+      maxDrift = Math.max(maxDrift, drift);
+      if (!listed || !linked) lost.push({ tick, listed, linked, y: +(truck.location.y - GROUND_Y).toFixed(2) });
+    },
+    verify(label) {
+      if (lost.length) throw new Error(`${label}: driver detached on ${lost.length} ticks ${JSON.stringify(lost.slice(0, 8))}`);
+      if (maxDrift > 1) throw new Error(`${label}: driver drifted ${maxDrift.toFixed(2)} blocks from the seat`);
+      return `${label}: driver seated and linked every tick (max seat drift ${maxDrift.toFixed(2)} blocks)`;
+    },
+  };
+}
+
+async function jump_rider_retention({ dimension, origin, driver, run }) {
+  const truck = spawnTruck(dimension, run, at(origin, 0, 4));
+  await wait(10);
+  await board(driver, truck, 0);
+  await wait(10);
+  const tracker = retentionTracker(truck, driver);
+  // Three stationary jumps, each requested once the truck has been back on the ground 15 ticks.
+  let jumps = 0;
+  let grounded = 0;
+  for (let tick = 0; tick < 240 && jumps < 3; tick++) {
+    await wait(1);
+    tracker.sample(tick);
+    grounded = truck.location.y - GROUND_Y < 0.05 ? grounded + 1 : 0;
+    if (grounded >= 15) {
+      requestDriverJump(driver);
+      jumps++;
+      grounded = 0;
+    }
+  }
+  for (let tick = 0; tick < 60; tick++) {
+    await wait(1);
+    tracker.sample(240 + tick);
+  }
+  if (jumps < 3) throw new Error(`Only ${jumps} stationary jumps completed`);
+  return [tracker.verify("3 stationary Suspension Jumps")];
 }
 
 async function crush_stomp({ dimension, origin, driver, run }) {
@@ -155,32 +226,43 @@ async function shock_absorption({ dimension, origin, driver, run }) {
 }
 
 async function liquid_crossing({ dimension, origin, driver, run }, liquid) {
-  // Liquid pool flush with the ground, then a 1-block-high bank.
+  // Liquid pool flush with the ground, then a long 1-block-high bank that doubles as the
+  // overland reference lane: the truck must cross liquid at full overland cruising speed.
   fill(dimension, at(origin, -5, 6, GROUND_Y - 3), at(origin, 5, 30, GROUND_Y - 1), liquid);
-  fill(dimension, at(origin, -5, 31, GROUND_Y), at(origin, 5, 45, GROUND_Y), "stone");
+  fill(dimension, at(origin, -5, 31, GROUND_Y), at(origin, 5, 79, GROUND_Y), "stone");
   const truck = spawnTruck(dimension, run, at(origin, 0, 2));
   await wait(10);
   await board(driver, truck, 0);
   let lowest = Infinity;
   let poolTicks = 0;
-  await drive(driver, 120, {
+  let landTicks = 0;
+  let steppedUp = false;
+  await drive(driver, 200, {
     onTick: () => {
       const z = truck.location.z - origin.z;
       if (z > 9 && z < 28) {
         lowest = Math.min(lowest, truck.location.y);
         poolTicks++;
       }
-      return z > 38;
+      if (z > 33 && z < 38 && truck.location.y >= GROUND_Y + 0.9) steppedUp = true;
+      if (z > 45 && z < 64) landTicks++;
+      return z > 70;
     },
   });
   const checks = [];
   if (lowest < GROUND_Y - 1.5) throw new Error(`Truck sank in ${liquid}: lowest y ${(lowest - GROUND_Y).toFixed(2)}`);
   checks.push(`floated across ${liquid} (lowest ${(lowest - GROUND_Y).toFixed(2)} relative to the surface)`);
-  checks.push(`crossed the pool mid-section in ${poolTicks} ticks (${(19 / Math.max(poolTicks, 1)).toFixed(2)} blocks/tick)`);
-  if (truck.location.z - origin.z < 33 || truck.location.y < GROUND_Y + 0.9) {
+  if (!steppedUp) {
     throw new Error(`Shoreline Step-Up failed: z=${(truck.location.z - origin.z).toFixed(1)} y=${(truck.location.y - GROUND_Y).toFixed(2)}`);
   }
   checks.push("Shoreline Step-Up onto a 1-block bank without a jump");
+  if (!landTicks) throw new Error(`Truck never drove the overland lane: z=${(truck.location.z - origin.z).toFixed(1)}`);
+  const poolSpeed = 19 / Math.max(poolTicks, 1);
+  const landSpeed = 19 / landTicks;
+  const speeds = `${liquid} ${poolSpeed.toFixed(2)} vs overland ${landSpeed.toFixed(2)} blocks/tick`;
+  // 10% allows for tick-boundary counting over a 19-block window.
+  if (poolSpeed < 0.9 * landSpeed) throw new Error(`Not crossing ${liquid} at overland cruising speed: ${speeds}`);
+  checks.push(`crossed ${liquid} at overland cruising speed: ${speeds}`);
   if (riders(truck)[0]?.id !== driver.id) throw new Error("Driver lost the seat while crossing " + liquid);
   return { truck, checks };
 }
@@ -191,13 +273,13 @@ async function flotation_water(context) {
 
 async function flotation_lava(context) {
   const { dimension, origin, driver } = context;
-  const { checks } = await liquid_crossing(context, "lava");
+  const { truck, checks } = await liquid_crossing(context, "lava");
   if (health(driver) !== PLAYER_MAX_HEALTH || driver.getComponent("minecraft:onfire")) {
     throw new Error(`Rider not shielded from lava: health ${health(driver)}`);
   }
   checks.push("rider shielded from lava heat");
   // Molten Tire Trample: a heavy mob survives the hit, so ignition is observable.
-  const golem = dimension.spawnEntity("minecraft:iron_golem", at(origin, 0, 43, GROUND_Y + 1));
+  const golem = dimension.spawnEntity("minecraft:iron_golem", at(origin, 0, Math.min(77, truck.location.z - origin.z + 6), GROUND_Y + 1));
   await wait(5);
   await drive(driver, 20, { onTick: () => golem.getComponent("minecraft:onfire") !== undefined });
   if (!golem.isValid || !golem.getComponent("minecraft:onfire")) throw new Error("Molten Tire Trample did not ignite the mob");
@@ -331,7 +413,8 @@ async function incline_pitch({ dimension, origin, driver, run }) {
   for (const [rise, run_] of [[1, 2], [1, 3], [1, 1]]) {
     park(driver, origin);
     resetArena(dimension, origin);
-    const steps = 10;
+    // At least 20 blocks of run per flight, so pitch settles past its smoothing ramp.
+    const steps = Math.max(10, Math.ceil(20 / run_));
     const start = 4;
     const upEnd = start + steps * run_;
     const plateauEnd = upEnd + 6;
@@ -364,12 +447,12 @@ async function incline_pitch({ dimension, origin, driver, run }) {
     });
     await wait(40);
     const settled = truck.getProperty("blake:pitch_angle");
-    const expected = Math.min(PITCH_CLAMP, Math.atan2(rise, run_) * 180 / Math.PI);
+    const { low, high } = pitchBand(rise, run_);
     const mean = values => values.reduce((a, b) => a + b, 0) / Math.max(values.length, 1);
-    const label = `${rise}:${run_} (expected ${expected.toFixed(1)}°)`;
+    const label = `${rise}:${run_} (expected ${low.toFixed(1)}° to ${high.toFixed(1)}°)`;
     if (!up.length || !down.length) throw new Error(`${label}: truck did not traverse the ramp (z=${(truck.location.z - origin.z).toFixed(1)})`);
-    if (Math.abs(mean(up) - expected) > PITCH_TOLERANCE) throw new Error(`${label}: uphill mean pitch ${mean(up).toFixed(1)}° ${JSON.stringify(up)}`);
-    if (Math.abs(mean(down) + expected) > PITCH_TOLERANCE) throw new Error(`${label}: downhill mean pitch ${mean(down).toFixed(1)}° ${JSON.stringify(down)}`);
+    if (mean(up) < low || mean(up) > high) throw new Error(`${label}: uphill mean pitch ${mean(up).toFixed(1)}° ${JSON.stringify(up)}`);
+    if (-mean(down) < low || -mean(down) > high) throw new Error(`${label}: downhill mean pitch ${mean(down).toFixed(1)}° ${JSON.stringify(down)}`);
     if (settled !== 0) throw new Error(`${label}: pitch did not return to level on flat ground: ${settled}`);
     if (maxStep > PITCH_MAX_STEP) throw new Error(`${label}: pitch jumped ${maxStep}° in one tick`);
     checks.push(`${label}: uphill ${mean(up).toFixed(1)}°, downhill ${mean(down).toFixed(1)}°, level ${settled}°, max step ${maxStep}°/tick`);
@@ -381,7 +464,7 @@ async function incline_pitch({ dimension, origin, driver, run }) {
 }
 
 export const SCENARIOS = {
-  smoke, seats, auto_step, suspension_jump, crush_stomp, shock_absorption,
+  smoke, seats, auto_step, suspension_jump, jump_rider_retention, crush_stomp, shock_absorption,
   flotation_water, flotation_lava, trample, demolition, foliage_shearing,
   dye_repaint, retrieval, incline_pitch,
 };

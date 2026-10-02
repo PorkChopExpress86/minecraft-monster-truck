@@ -1,6 +1,18 @@
 // Amphibious propulsion and shoreline step-up physics for Monster Truck
 
-export const CRUISING_AQUATIC_SPEED = 0.55;
+// Full overland cruising speed in blocks/tick. The 0.55 movement attribute is an engine
+// value, not a speed: a driven truck covers 1.06-1.12 blocks/tick on flat ground (Scenario Runs, #38).
+export const CRUISING_AQUATIC_SPEED = 1.1;
+export const MAX_AQUATIC_ACCELERATION = 0.5; // blocks/tick gained per tick
+// Share of velocity a floating truck keeps after the engine's liquid drag, measured by
+// Scenario Runs (#38): a 1.1 velocity moved it 0.95 blocks/tick in water, 0.79 in lava.
+export const LIQUID_DRAG_RETENTION = { water: 0.86, lava: 0.72 };
+
+// Velocity to restore each tick so that, after drag, the truck covers cruising distance.
+export function aquaticVelocityTarget(inLava = false, throttle = 1) {
+  const retention = inLava ? LIQUID_DRAG_RETENTION.lava : LIQUID_DRAG_RETENTION.water;
+  return CRUISING_AQUATIC_SPEED * throttle / retention;
+}
 
 export function calculateAquaticIntent(
   movement = { x: 0, y: 0 },
@@ -46,8 +58,9 @@ export function calculateAquaticImpulse(
   }
 
   const deficit = targetSpeed - currentForwardSpeed;
-  // Apply proportional acceleration impulse
-  const boost = Math.min(Math.max(deficit * 0.45, 0.15), targetSpeed);
+  // Restore the whole deficit each tick, so liquid drag cannot hold the truck below
+  // cruising speed; the cap keeps acceleration from rest gradual.
+  const boost = Math.min(deficit, MAX_AQUATIC_ACCELERATION);
 
   return {
     x: dirX * boost,

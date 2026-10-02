@@ -57,6 +57,8 @@ def test_amphibious_physics_helpers_via_node():
 import assert from 'node:assert/strict';
 import {
   CRUISING_AQUATIC_SPEED,
+  LIQUID_DRAG_RETENTION,
+  aquaticVelocityTarget,
   calculateAquaticImpulse,
   calculateAquaticIntent,
   classifyShorelineColumn,
@@ -65,7 +67,7 @@ import {
 } from './behavior_packs/MonsterTruck_BP/scripts/amphibious.js';
 
 // Speed target contract
-assert.equal(CRUISING_AQUATIC_SPEED, 0.55);
+assert.equal(CRUISING_AQUATIC_SPEED, 1.1);
 
 // Aquatic forward impulse from standstill
 const impulseFromStop = calculateAquaticImpulse({ x: 0, z: 0 }, { x: 1, z: 0 }, 0.55);
@@ -76,6 +78,16 @@ assert.equal(impulseFromStop.z, 0);
 // Zero impulse when already at cruising speed
 const impulseAtSpeed = calculateAquaticImpulse({ x: 0.55, z: 0 }, { x: 1, z: 0 }, 0.55);
 assert.equal(impulseAtSpeed.x, 0, "No added impulse when already at full speed");
+
+// Liquid drag is compensated: after drag the truck covers full overland cruising distance.
+for (const [inLava, liquid] of [[false, "water"], [true, "lava"]]) {
+  const target = aquaticVelocityTarget(inLava);
+  assert.ok(Math.abs(target * LIQUID_DRAG_RETENTION[liquid] - CRUISING_AQUATIC_SPEED) < 1e-9, liquid);
+  const afterDrag = CRUISING_AQUATIC_SPEED;
+  const restore = calculateAquaticImpulse({ x: afterDrag, z: 0 }, { x: 1, z: 0 }, target);
+  assert.ok(Math.abs(afterDrag + restore.x - target) < 1e-9, "steady state restores the drag loss in one tick: " + liquid);
+}
+assert.equal(aquaticVelocityTarget(false, 0.5), aquaticVelocityTarget(false) / 2, "partial throttle scales the target");
 
 // Player movement intent, not existing momentum, owns liquid propulsion.
 const forwardIntent = calculateAquaticIntent({ x: 0, y: 1 }, { x: 1, z: 0 });

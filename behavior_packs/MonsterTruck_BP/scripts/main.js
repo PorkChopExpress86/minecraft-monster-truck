@@ -17,7 +17,7 @@ import {
   calculateAquaticIntent,
   classifyShorelineColumn,
   calculateShorelineStepImpulse,
-  CRUISING_AQUATIC_SPEED,
+  aquaticVelocityTarget,
   shouldShieldRiderFromHeat
 } from "./amphibious.js";
 import {
@@ -295,7 +295,7 @@ function onTick() {
             const aquaticImpulse = calculateAquaticImpulse(
               curVel,
               aquaticIntent.heading,
-              CRUISING_AQUATIC_SPEED * aquaticIntent.throttle
+              aquaticVelocityTarget(inLava, aquaticIntent.throttle)
             );
             if (aquaticImpulse.x !== 0 || aquaticImpulse.z !== 0) {
               truck.applyImpulse(aquaticImpulse);
@@ -681,7 +681,10 @@ export function requestDriverJump(player) {
       pendingJumpRequests.set(truck.id, tick);
       system.run(() => {
         try {
-          if (truck.isValid && !player.isSneaking) {
+          // Re-seat only a driver the engine detached. Re-adding a seated rider is the
+          // suspected cause of the client showing the driver briefly outside the truck (#32).
+          const seated = player.getComponent("minecraft:riding")?.entityRidingOn?.id === truck.id;
+          if (truck.isValid && !seated && !player.isSneaking) {
             truck.getComponent("minecraft:rideable")?.addRider(player);
           }
         } catch {}

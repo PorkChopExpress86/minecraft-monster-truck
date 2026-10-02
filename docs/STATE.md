@@ -1,10 +1,10 @@
 ## Goal
 Set up the add-on for Linux development, debug, install, and fully automate in-game testing of the monster truck.
 ## Now
-#38: fixes A,B,D,E,F applied. Run cf5d67f2f100477ab602a0f028bad961: 13/14 pass; incline 1:3 downhill -23.6 vs -18.4 (stair straddle geometry atan(1/2.25)=24) awaiting user decision on expected value. Speed reading (C) still not given. Jump rider flashing = issue #32, fix commit 04e0772 only on Windows machine (unpushed).
+#38 all green (run d0db7b5cf32b400dbd619e6a1367370b, 15/15). Awaiting user OK to bump 1.0.4 + install (restarts minecraft-creative/survival).
 ## Next
-1. #36 Scenario Run container bootstrap. 3. #37 Simulated Driver prototype. 4. #38 mechanic scenarios incl. pitch. 5. #39 CI.
-6. After #38: trim issues #27-#30 to visual-only residue.
+1. Bump to 1.0.4 and install: python scripts/install_addon.py --servers creative,survival; user retests #32 flicker in real client.
+2. Trim issues #27-#30 to visual-only residue; comment/close #38. 3. #39 CI.
 ## Constraints
 - "Keep the version and install with #38" (no rev/install until #38 lands)
 - "if there is something strange then prompt me for input" (re: test thresholds/outcomes)
@@ -30,6 +30,8 @@ Set up the add-on for Linux development, debug, install, and fully automate in-g
 - DECISION: Incline pitch scenario: stepped ramps at 1:2 (~27deg), 1:3 (~18deg), 1:1 (clamp 35deg); assert pitch >0 uphill and <0 downhill within +-5deg of atan(rise/run), returns to 0 on flat, per-tick delta within smoothing bound; strange results -> ask user.
 - DECISION: Client Smoke Run showcase adds a camera angle on a truck parked on a slope.
 - DECISION: If 1.26.52.3 client fails to launch -> stop and ask user (no fallback to 1.26.45.1); Scenario Runs proceed independently.
+- DECISION: incline_pitch band = [min,max] of nominal atan(rise/run) and, when one stair can be straddled alone (run >= 2.25, the front/rear sample span), atan(rise/2.25); widened +-5, clamped 35 — user chose (a).
+- DECISION: Aquatic cruising speed must equal measured overland speed (CONTEXT.md 'full overland cruising speed'); scenario asserts pool speed >= 90% of land speed.
 ## Facts
 - Launcher: flatpak io.mrarm.mcpelauncher v1.8.4; client binary via `flatpak run --command=mcpelauncher-client io.mrarm.mcpelauncher` supports `-u minecraft://?load=<world>`.
 - com.mojang (Linux): ~/.var/app/io.mrarm.mcpelauncher/data/mcpelauncher/games/com.mojang ; versions in .../data/mcpelauncher/versions/ (1.26.40.5, 1.26.52.3).
@@ -44,6 +46,7 @@ Set up the add-on for Linux development, debug, install, and fully automate in-g
 - Scenario server: official BDS zip sha256 f6348d84...71c6 cached in dist/bedrock-tests/cache; image itzg/minecraft-bedrock-server@sha256:42004bb6...; needs ONLINE_MODE=false, ALLOW_LIST=false, docker -t (else stdout block-buffered); modules @minecraft/server 2.11.0-beta + @minecraft/server-gametest 1.0.0-beta; spawnSimulatedPlayer(DimensionLocation, name, GameMode) top-level.
 - Desktop: KDE Wayland; spectacle installed; no xdotool/ydotool.
 ## Done
+- #38 finish — RESULT: run d0db7b5cf32b400dbd619e6a1367370b 15/15 PASS, pytest 136 passed. incline 1:3 down -23.6 inside band [13.4,29.0]; 1:1 ramp lengthened to 20 steps (was transient 27.8). Water/lava now 1.12 b/tick vs overland 1.06 (was 0.54/0.40): amphibious.js CRUISING_AQUATIC_SPEED 1.1, full-deficit impulse capped MAX_AQUATIC_ACCELERATION 0.5, aquaticVelocityTarget divides by LIQUID_DRAG_RETENTION {water 0.86, lava 0.72}. #32: jump_rider_retention + moving jump show driver listed+linked every tick, 0.00 drift server-side; requestDriverJump no longer re-adds an already-seated rider (suspected client flicker cause, client retest needed).
 - #37 — RESULT (run 1ec3980aa43a4a71b9a6aa43c4941866, 0 errors): driver seats at seat 0 via interactWithEntity; moveRelative drives truck 63.84 blocks/60 ticks; setBodyRotation steers (yaw 0->90, steer_angle=1); requestDriverJump(driver) -> Suspension Jump +4.92 blocks. Fixes: driver runs inside test copy of add-on runtime (server 2.11.0-beta + gametest); production exports requestDriverJump.
 - Playground world created: com.mojang/minecraftWorlds/monster-truck-playground (seed 8832057175689493418), helper pack spawns 16 trucks once + actionbar speedometer; BDS load check clean.
 - #36 Scenario Run container — RESULT: ./test-addon.sh Scenarios exit 0, run 5a61248ad05a41ae8bc5e6e27fc389d8 smoke PASS (simulated driver joined, truck spawned, 2 seats), no container left; pytest 135 passed.
@@ -57,10 +60,10 @@ Set up the add-on for Linux development, debug, install, and fully automate in-g
 - (F) FIXED (1:1 now passes; 1:3 downhill open) — 1:1 ramp pitch only +13.0/-6.5 (expected 35): sampleGroundHeight scans startY+2..-3 and falls back to truck height on miss; 2-block auto-step lurches put rear terrain >3 below. Proposed: widen scan and keep previous pitch on a miss. Also 1:3 downhill -23.7 vs -18.4 (5.3 over tolerance).
 - (A) FIXED (uncommitted) — was: DEFECT candidate: main.js:362-366 native-jump detection (vel.y > 0.42 = NATIVE_JUMP_ASCENT_THRESHOLD) fires on engine step-ups -> unrequested Suspension Jump. Evidence: run 57eee60ad40b486e8163082ad48492cf '[DIAG] SUSPENSION JUMP t=189 requested=false ascending=true' on the first 1-block stair; 2-block ledge launches to +6.92. Breaks incline_pitch (uphill samples are airborne trajectory) and auto_step.
 - (B) FIXED via seam (uncommitted) — was: flotation_water/lava fail at Shoreline Step-Up: aquatic propulsion + step-up gated on driver.inputInfo.getMovementVector(), always (0,0) for SimulatedPlayer (main.js:249-281).
-- trample speed-scaling evidence weak: moveRelative speed 0.3 still ~1 b/tick (122 vs 130 dmg).
-- Speed: Simulated Driver drives ~1.06 blocks/tick (~21 b/s) vs design 0.55 b/tick (ADR-0011, PROVING_GROUND item 7). User is measuring real driving in the playground speedometer; calibrate #38 speed checks to their answer.
+- (open) trample speed-scaling evidence weak: moveRelative speed 0.3 still ~1 b/tick (122 vs 130 dmg).
+- DONE Speed: user said land speed good, water slow; water/lava now match overland (see Done). PROVING_GROUND item 7 still says '0.55 cruising speed' (movement attribute wording) — left as-is.
 - NOTED (not done): main.js:166 `currentRiders.map((r) => r.id)` throws if getRiders() ever yields undefined (only seen with cross-runtime simulated players).
-- Pitch rounding in kinematics.js (Math.round after 0.2 smoothing) stalls up to ~2 deg short of target — check against the +-5 deg pitch tolerance in #38.
+- DONE (fix E) Pitch rounding in kinematics.js (Math.round after 0.2 smoothing) stalls up to ~2 deg short of target — check against the +-5 deg pitch tolerance in #38.
 ## Failed attempts
 - #37 probe run d45e0504130947af80cbd899c710b7dc: interactWithEntity seats SimulatedDriver at seat 0 (riders visible from scenario pack); moveRelative moves truck 63.84 blocks/60 ticks (inputInfo.getMovementVector()=(0,0)); setBodyRotation turns truck yaw 0->90; jump() true but truck +0.00; production main.js:166 `currentRiders.map((r) => r.id)` throws 'cannot read property id of undefined' every tick while seated (340 log lines).
 - #37 ATTEMPT 1 [L1]: hypothesis 'production pack lacks @minecraft/server-gametest so simulated rider unwrappable' — test copy given server 2.11.0-beta + gametest 1.0.0-beta (run fd60486ab5f349a1b5a012f280213298) -> same TypeError at main.js:166 (170 lines). Refuted.
