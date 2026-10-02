@@ -20,6 +20,7 @@ def starter(tmp_path, monkeypatch):
     options.parent.mkdir(parents=True)
     options.write_bytes(b"other_setting:keep\r\ncontent_log_file:0\r\n")
     monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     config = {"name": "Fixture Cart", "harness_uuid": "18835304-6819-4c3c-bfcb-93b26b93d996"}
     level = nbtlib.File({
         "LevelName": nbtlib.String("starter"),

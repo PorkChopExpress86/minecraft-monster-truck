@@ -14,6 +14,11 @@ import zipfile
 
 import nbtlib
 
+try:
+    from .bedrock_linux import com_mojang_roots as linux_roots
+except ImportError:
+    from bedrock_linux import com_mojang_roots as linux_roots
+
 
 WORLD_URL = (
     "https://raw.githubusercontent.com/Mojang/minecraft-creator-tools/"
@@ -24,13 +29,18 @@ SOURCE_MARKER = ".addon-test-world-source.json"
 
 
 def account_root():
-    users = Path(os.environ["APPDATA"]) / "Minecraft Bedrock/Users"
-    candidates = [path for path in users.glob("*/games/com.mojang")
-                  if path.parents[1].name != "Shared" and (path / "minecraftpe/options.txt").is_file()]
-    legacy = (Path(os.environ["LOCALAPPDATA"]) /
-              "Packages/Microsoft.MinecraftUWP_8wekyb3d8bbwe/LocalState/games/com.mojang")
-    if not candidates and (legacy / "minecraftpe/options.txt").is_file():
-        candidates = [legacy]
+    candidates = []
+    if os.environ.get("APPDATA"):
+        users = Path(os.environ["APPDATA"]) / "Minecraft Bedrock/Users"
+        candidates = [path for path in users.glob("*/games/com.mojang")
+                      if path.parents[1].name != "Shared" and (path / "minecraftpe/options.txt").is_file()]
+    if os.environ.get("LOCALAPPDATA"):
+        legacy = (Path(os.environ["LOCALAPPDATA"]) /
+                  "Packages/Microsoft.MinecraftUWP_8wekyb3d8bbwe/LocalState/games/com.mojang")
+        if not candidates and (legacy / "minecraftpe/options.txt").is_file():
+            candidates = [legacy]
+    if not candidates:
+        candidates = linux_roots()
     if len(candidates) != 1:
         raise ValueError("Automatic setup requires one initialized Minecraft account; use Configure for multiple accounts")
     return candidates[0].resolve()
@@ -56,7 +66,9 @@ def enable_logging(root, data_root):
         backup.parent.mkdir(parents=True, exist_ok=True)
         backup.write_bytes(original)
         options.write_bytes(original[:match.start(1)] + b"1" + original[match.end(1):])
-    if "Packages" in data_root.parts:
+    if "mcpelauncher" in data_root.parts:
+        logs = data_root / "logs"
+    elif "Packages" in data_root.parts:
         logs = data_root.parent.parent / "logs"
     else:
         logs = Path(os.environ["APPDATA"]) / "Minecraft Bedrock/logs"

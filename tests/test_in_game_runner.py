@@ -9,6 +9,13 @@ import pytest
 from scripts import bedrock_test as runner
 
 
+@pytest.fixture(autouse=True)
+def windows_client(tmp_path, monkeypatch):
+    """These tests exercise the Windows client path; never reach the real Linux desktop or launcher data."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(runner, "WINDOWS", True)
+
+
 @pytest.fixture
 def project(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path))

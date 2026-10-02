@@ -1,14 +1,15 @@
 ## Goal
 Set up the add-on for Linux development, debug, install, and fully automate in-game testing of the monster truck.
 ## Now
-Slice #34 implemented (uncommitted); awaiting user: rev+install to local client? live --servers deploy? commit?
+#35 done; next slice #36 Scenario Run container bootstrap.
 ## Next
-1. #35 Linux Client Smoke Run (bedrock_test.py Linux mode + test-addon.sh; bedrock_world.py:27/62 and bedrock_test.py:56 are Windows-only discovery).
-2. #36 Scenario Run container bootstrap. 3. #37 Simulated Driver prototype. 4. #38 mechanic scenarios incl. pitch. 5. #39 CI.
+1. #36 Scenario Run container bootstrap. 3. #37 Simulated Driver prototype. 4. #38 mechanic scenarios incl. pitch. 5. #39 CI.
 6. After #38: trim issues #27-#30 to visual-only residue.
 ## Constraints
 - "if there is something strange then prompt me for input" (re: test thresholds/outcomes)
+- "do not look into the separt containers" (re: NetherNet errors on minecraft-creative/minecraft-survival)
 ## Decisions
+- DECISION: Linux Client Smoke Run verdict = world loaded with our packs (client stdout) + screenshots; gameplay stage not_verified on Linux; all gameplay pass/fail from BDS Scenario Runs — Android-based client never surfaces script console output (user chose option 1).
 - DECISION: Automate driving mechanics via BDS + GameTest SimulatedPlayer, keep real client for smoke + screenshots — no Wayland input injection (ADR-0007 stays).
 - DECISION: Target Minecraft 1.26.52.3 for both client and BDS — client already downloaded; official BDS 1.26.52.3 Linux zip exists.
 - DECISION: Run BDS via Docker image itzg/minecraft-bedrock-server (user already uses it) — not a native zip.
@@ -34,9 +35,16 @@ Slice #34 implemented (uncommitted); awaiting user: rev+install to local client?
 - Dynamic Incline Pitch is server-observable via entity property blake:pitch_angle (int, clamp +-35), computed in behavior_packs/MonsterTruck_BP/scripts/kinematics.js.
 - Tests: .venv-testing/bin/python -m pytest -q (venv created from requirements-testing.txt).
 - Docker servers keep add-ons in /data/behavior_packs/<Name>_BP and /data/resource_packs/<Name>_RP, world lists at /data/worlds/<level-name>/world_*_packs.json, texturepack-required=true already.
+- Linux client: `flatpak run --command=mcpelauncher-client io.mrarm.mcpelauncher -dg <data>/versions/1.26.52.3 -m <data>/mods/mcpelauncher-updates/1.26.45.1/x86_64/ -u minecraft://?load=<world folder>` loads the world directly; flatpak run execs into bwrap so Popen.pid is the process-group leader; KWin script closeWindow() exits rc 0; spectacle -b -n -a -e -S captures after KWin activation.
+- Linux content logs: com.mojang/logs/ContentLog<date>.txt (created but stays empty).
+- Dedicated Test World: com.mojang/minecraftWorlds/addon-test-b06f3b8a-1a26-4f26-a3aa-76c2c480ad35 ; options.txt backup in dist/bedrock-tests/setup/.
 - Desktop: KDE Wayland; spectacle installed; no xdotool/ydotool.
 ## Done
+- #35 Linux Client Smoke Run — RESULT: ./test-addon.sh Game exit 0, PASSED run 137bd73e04984abd9e6063415e020472 (world_load, screenshots 3 + final hill view, shutdown passed; gameplay not_verified by design); pytest 127 passed.
+- #34 committed 408a9de; v1.0.3 installed to flatpak client + both Docker servers (server logs show Monster Truck Behavior 1.0.3 in Pack Stack).
 - Grilling + ADR-0016 + CONTEXT.md terms + GitHub spec #33 and slices #34-#39 — RESULT: created.
 - #34 Linux install — RESULT: find_com_mojang_roots finds flatpak root on this machine; install_addon.py --servers creative,survival added (docker cp to /data/{behavior,resource}_packs, world_*_packs.json entry, texturepack-required, confirm restart); .venv-testing/bin/python -m pytest -q -> 120 passed (baseline 116). Live server deploy not yet run.
 ## Open items
+- Pitch rounding in kinematics.js (Math.round after 0.2 smoothing) stalls up to ~2 deg short of target — check against the +-5 deg pitch tolerance in #38.
 ## Failed attempts
+- ATTEMPT 1 [L1]: Linux Client Smoke Run: harness PASS marker missing (content log ContentLog*.txt in com.mojang/logs stays 0 bytes; marker absent from client stdout). Hypothesis H1 'SIGTERM loses buffered content log' tested by graceful KWin closeWindow (rc 0) -> still 0 bytes. H1 refuted.

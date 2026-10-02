@@ -1,4 +1,4 @@
-"""Repository-owned Windows Bedrock smoke runner. See docs/WINDOWS_TESTING.md."""
+"""Repository-owned Bedrock smoke runner (Windows and Linux). See docs/WINDOWS_TESTING.md and docs/LINUX_TESTING.md."""
 
 import argparse
 import ctypes
@@ -15,10 +15,16 @@ import time
 from urllib.parse import quote
 import uuid
 
+if __package__:
+    from . import bedrock_linux as linux
+else:
+    import bedrock_linux as linux
+
 
 ROOT = Path(__file__).resolve().parents[1]
 MARKER = "[ADDON_TEST]"
 OWNER = ".addon-test-owner.json"
+WINDOWS = os.name == "nt"
 
 
 class SetupError(Exception):
@@ -61,6 +67,10 @@ def discover():
     users = roaming / "Users"
     roots = list(users.glob("*/games/com.mojang/minecraftWorlds")) if users.is_dir() else []
     roots.append(legacy / "games/com.mojang/minecraftWorlds")
+    for data_root in linux.com_mojang_roots():
+        if (data_root / "logs").is_dir():
+            result["log_directories"].append(str(data_root / "logs"))
+        roots.append(data_root / "minecraftWorlds")
     for root in roots:
         for world in sorted(root.glob("*")):
             if (world / "level.dat").is_file():
@@ -103,9 +113,14 @@ def minecraft_running():
 
 
 def require_closed_client():
-    if os.name != "nt":
-        raise SetupError("Live client testing requires Windows")
-    if minecraft_running():
+    if WINDOWS:
+        running = minecraft_running()
+    else:
+        try:
+            running = linux.client_running()
+        except linux.ClientError as error:
+            raise SetupError(str(error)) from error
+    if running:
         raise SetupError("Close Minecraft before deployment; the runner will launch the dedicated world")
 
 
@@ -364,7 +379,40 @@ def await_result(logs, config, run_id, output, clock=time.monotonic, sleep=time.
             "warnings": warnings, "marker": marker, "stream_wait_expired": True}
 
 
-def finalize_game_logs(logs, result, config, run_id, output):
+def await_client_load(client, stdout_path, world, pack_ids, config, clock=time.monotonic, sleep=time.sleep,
+                      on_poll=None):
+    """Linux client: script console output never reaches a readable log, so the verdict is
+    that the dedicated world opened with every deployed pack and the player spawned (ADR-0016)."""
+    started = clock()
+    expected = {"world opened": f"Opening level '{world / 'db'}'", "player spawned": "Player Spawned:"}
+    expected.update({f"pack {pack_id} loaded": pack_id for pack_id in pack_ids})
+    seen, offset, loaded_at = set(), 0, None
+    while clock() < started + config["timeout_seconds"] or loaded_at is not None:
+        if on_poll:
+            on_poll()
+        with open(stdout_path, "rb") as stream:
+            stream.seek(offset)
+            data = stream.read()
+        complete = data[:data.rfind(b"\n") + 1]
+        offset += len(complete)
+        for line in complete.decode("utf-8", errors="replace").splitlines():
+            if "Pack Stack" not in line and "Opening level" not in line and "Player Spawned" not in line:
+                continue
+            seen.update(name for name, needle in expected.items() if needle in line)
+        if loaded_at is None and seen == set(expected):
+            loaded_at = clock()
+        if client.poll() is not None:
+            return {"status": "failed", "errors": ["Minecraft exited during the run (code %s)" % client.returncode],
+                    "warnings": [], "marker": None, "load_checks": sorted(seen)}
+        if loaded_at is not None and clock() - started >= config.get("observe_seconds", 0):
+            return {"status": "passed", "errors": [], "warnings": [], "marker": None, "load_checks": sorted(seen)}
+        sleep(0.25)
+    missing = sorted(set(expected) - seen)
+    return {"status": "failed", "errors": ["Timed out before the dedicated world loaded: missing " + ", ".join(missing)],
+            "warnings": [], "marker": None, "load_checks": sorted(seen)}
+
+
+def finalize_game_logs(logs, result, config, run_id, output, require_marker=True):
     """The Windows client can buffer all content-log output until normal shutdown."""
     lines = logs.read()
     for path, data in logs.pending.items():
@@ -380,7 +428,7 @@ def finalize_game_logs(logs, result, config, run_id, output):
         errors = result["errors"] + errors
     warnings = result["warnings"] + warnings
     marker = result["marker"] or (markers[0] if markers else None)
-    if not marker:
+    if not marker and require_marker:
         errors.append("No fresh harness PASS was recorded before the client closed")
     result.update(status="failed" if errors or warnings else "passed", errors=errors,
                   warnings=warnings, marker=marker, final_logs_collected=True)
@@ -407,6 +455,11 @@ def find_game_window():
 
 
 def capture_game(output):
+    if not WINDOWS:
+        try:
+            return linux.capture(output)
+        except linux.ClientError as error:
+            raise SetupError(str(error)) from error
     command = (
         "import sys; from pathlib import Path; from bedrock_test import _capture_game; "
         "print(_capture_game(Path(sys.argv[1])))"
@@ -513,7 +566,14 @@ def run_game(root, config, run_id, output):
         raise SetupError("Configured content log directory is missing")
     deploy(root, config, world, run_id)
     logs = FreshLogs(logs_path)
-    os.startfile("minecraft://?load=" + quote(world.name, safe=""))
+    client = None
+    if WINDOWS:
+        os.startfile("minecraft://?load=" + quote(world.name, safe=""))
+    else:
+        try:
+            client = linux.launch(world.name, config["linux_client_version"], output / "client-stdout.log")
+        except linux.ClientError as error:
+            raise SetupError(str(error)) from error
     screenshots = []
     attempts = []
     next_capture = time.monotonic() + 15
@@ -547,7 +607,13 @@ def run_game(root, config, run_id, output):
 
     shutdown = {"status": "not_run"}
     try:
-        result = await_result(logs, config, run_id, output, on_poll=capture_progress)
+        if WINDOWS:
+            result = await_result(logs, config, run_id, output, on_poll=capture_progress)
+        else:
+            # The client logs only the behavior pack stack; resource packs are evidenced by screenshots.
+            pack_ids = (dedicated_pack_ids(config)[0], config["harness_uuid"])
+            result = await_client_load(client, output / "client-stdout.log", world, pack_ids, config,
+                                       on_poll=capture_progress)
         result["screenshots"] = screenshots
         path = capture(output)
         if path:
@@ -556,23 +622,37 @@ def run_game(root, config, run_id, output):
             result["screenshot_note"] = attempts[-1]["error"]
     finally:
         try:
-            close_game()
+            if WINDOWS:
+                close_game()
+            else:
+                linux.close(client, output)
             shutdown["status"] = "passed"
         except Exception as error:
             shutdown.update(status="failed", error=str(error))
         write_json(output / "shutdown.json", shutdown)
-    result = finalize_game_logs(logs, result, config, run_id, output)
+    result = finalize_game_logs(logs, result, config, run_id, output, require_marker=WINDOWS)
     required = bool(config.get("showcase"))
     capture_passed = len(screenshots) >= 2 if required else bool(result.get("screenshot"))
+    if WINDOWS:
+        gameplay = {"status": "passed" if result["marker"] else "failed",
+                    "checks": (result["marker"] or {}).get("checks", [])}
+    else:
+        gameplay = {"status": "not_verified", "checks": [],
+                    "note": "The Linux client never surfaces script output; gameplay is asserted by Scenario Runs"}
     result["stages"] = {
-        "gameplay": {"status": "passed" if result["marker"] else "failed",
-                     "checks": (result["marker"] or {}).get("checks", [])},
+        "gameplay": gameplay,
         "content_logs": {"status": result["status"], "errors": list(result["errors"]),
                          "warnings": list(result["warnings"])},
         "screenshots": {"status": "passed" if capture_passed else "failed",
                         "required": required, "attempts": attempts},
         "shutdown": shutdown,
     }
+    if not WINDOWS:
+        load_checks = result.pop("load_checks", [])
+        result["stages"]["world_load"] = {
+            "status": "passed" if "world opened" in load_checks and "player spawned" in load_checks
+            and sum(check.startswith("pack ") for check in load_checks) == 2 else "failed",
+            "checks": load_checks}
     result["coverage"] = {name: "not_verified" for name in
                           ("visual_appearance", "audio_playback", "player_input", "multiplayer", "other_devices")}
     if required and not capture_passed:

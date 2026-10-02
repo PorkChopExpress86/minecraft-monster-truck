@@ -80,11 +80,17 @@ async function createShowcase(player, run) {
     checks.push(...await checkSpawnSources(player, run, origin, entities));
     checks.push(...await checkDestructionOutcomes(player, run, origin));
     checks.push(...await checkHeavyDuty(player, run, origin));
+    const hill = await parkOnHill(player, run, origin, tag);
+    entities.push(hill.truck);
+    checks.push(hill.check);
     world.setTimeOfDay(6000);
     player.onScreenDisplay.hideAllExcept([]);
     const views = [
       { location: { x: origin.x + 28, y: origin.y + 14, z: origin.z - 20 },
         facingLocation: { x: origin.x + 9, y: origin.y + 1, z: origin.z + 10 } },
+      // Side-on view of the truck parked on the hill (Dynamic Incline Pitch).
+      { location: { x: origin.x - 22, y: origin.y + 5, z: origin.z + 6.5 },
+        facingLocation: { x: origin.x - 10, y: origin.y + 3, z: origin.z + 6.5 } },
       { location: { x: origin.x - 6, y: origin.y + 4, z: origin.z - 8 },
         facingLocation: { x: origin.x + 1, y: origin.y + 1, z: origin.z } },
       { location: { x: origin.x + 28, y: origin.y + 8, z: origin.z + 30 },
@@ -104,6 +110,25 @@ async function createShowcase(player, run) {
   }
 }
 
+
+// A 1-up-per-2 stone ramp west of the palette grid; the parked truck faces uphill (+Z).
+async function parkOnHill(player, run, origin, tag) {
+  const dimension = player.dimension;
+  for (let step = 1; step <= 6; step++) {
+    for (let x = -12; x <= -8; x++) for (let dz = 0; dz < 2; dz++) for (let y = 0; y < step; y++) {
+      dimension.getBlock({ x: origin.x + x, y: origin.y + y, z: origin.z + step * 2 + dz })
+        .setType("minecraft:stone");
+    }
+  }
+  const truck = dimension.spawnEntity(run.entity_id, { x: origin.x - 9.5, y: origin.y + 3.1, z: origin.z + 6.5 });
+  truck.addTag(tag);
+  truck.setRotation({ x: 0, y: 0 });
+  truck.triggerEvent("blake:spawn_red");
+  await new Promise(resolve => system.runTimeout(resolve, 60));
+  const pitch = truck.getProperty("blake:pitch_angle");
+  if (!(pitch > 0)) throw new Error("Truck parked uphill is not pitched up: " + pitch);
+  return { truck, check: "hill: parked uphill truck pitched " + pitch + " degrees" };
+}
 
 async function checkSpawnSources(player, run, origin, entities) {
   const wait = ticks => new Promise(resolve => system.runTimeout(resolve, ticks));
