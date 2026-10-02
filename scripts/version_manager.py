@@ -139,6 +139,13 @@ def find_com_mojang_roots():
     if legacy.is_dir() and legacy.resolve() not in roots:
         roots.append(legacy.resolve())
 
+    # Linux mcpelauncher data directories (flatpak, then native install)
+    home = Path.home()
+    for linux_root in (home / ".var/app/io.mrarm.mcpelauncher/data/mcpelauncher/games/com.mojang",
+                       home / ".local/share/mcpelauncher/games/com.mojang"):
+        if linux_root.is_dir() and linux_root.resolve() not in roots:
+            roots.append(linux_root.resolve())
+
     return roots
 
 def get_installed_versions(mojang_roots=None):

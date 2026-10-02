@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -41,7 +42,61 @@ except ImportError:
         RP_UUID,
     )
 
-def install(rev=True, rev_part="patch", explicit_version=None):
+# Opt-in Docker Bedrock Dedicated Server targets (itzg/minecraft-bedrock-server containers).
+SERVER_CONTAINERS = {"creative": "minecraft-creative", "survival": "minecraft-survival"}
+
+
+def docker(*args, input=None):
+    return subprocess.run(["docker", *args], input=input, capture_output=True, text=True)
+
+
+def install_to_server(name, version, bp_src, rp_src, run=docker, confirm=input):
+    """Deploy both packs into a server container, activate them in its world, then confirm a restart."""
+    container = SERVER_CONTAINERS[name]
+
+    def check(result, action):
+        if result.returncode != 0:
+            raise RuntimeError(f"{container}: {action} failed: {result.stderr.strip()}")
+        return result.stdout
+
+    props = check(run("exec", container, "cat", "/data/server.properties"), "reading server.properties")
+    world = next((line.split("=", 1)[1].strip() for line in props.splitlines()
+                  if line.startswith("level-name=")), "")
+    if not world:
+        raise RuntimeError(f"{container}: level-name missing from server.properties")
+
+    for src, kind, uuid in ((bp_src, "behavior", BP_UUID), (rp_src, "resource", RP_UUID)):
+        dest = f"/data/{kind}_packs/{src.name}"
+        check(run("exec", container, "rm", "-rf", dest), f"removing old {dest}")
+        check(run("cp", f"{src}/.", f"{container}:{dest}"), f"copying {src.name}")
+        check(run("exec", container, "chown", "-R", "1000:1000", dest), f"chown {dest}")
+
+        list_path = f"/data/worlds/{world}/world_{kind}_packs.json"
+        existing = run("exec", container, "cat", list_path)
+        packs = json.loads(existing.stdout) if existing.returncode == 0 and existing.stdout.strip() else []
+        entry = next((p for p in packs if p.get("pack_id") == uuid), None)
+        if entry is None:
+            packs.append({"pack_id": uuid, "version": list(version)})
+        else:
+            entry["version"] = list(version)
+        check(run("exec", "-i", container, "sh", "-c", 'cat > "$1"', "sh", list_path,
+                  input=json.dumps(packs, indent=2) + "\n"), f"writing {list_path}")
+        print(f"  [OK] {container}: {src.name} v{version_to_str(version)} active in world '{world}'")
+
+    if "texturepack-required=true" not in props.splitlines():
+        check(run("exec", container, "sed", "-i", "s/^texturepack-required=.*/texturepack-required=true/",
+                  "/data/server.properties"), "requiring resource pack")
+        print(f"  [OK] {container}: texturepack-required=true")
+
+    answer = confirm(f"Restart {container} now? Connected players will be disconnected. [y/N] ")
+    if answer.strip().lower() == "y":
+        check(run("restart", container), "restart")
+        print(f"  [OK] {container}: restarted")
+    else:
+        print(f"  [SKIP] {container}: not restarted; the new version loads on its next restart")
+
+
+def install(rev=True, rev_part="patch", explicit_version=None, servers=()):
     # 1. Version revving if requested
     current_ver = get_repo_version(REPO_ROOT)
     if explicit_version:
@@ -149,7 +204,16 @@ def install(rev=True, rev_part="patch", explicit_version=None):
         return 1
 
     print(f"\nSuccessfully installed Monster Truck add-on v{version_to_str(target_ver)} ({deployed_count} locations updated and verified).")
-    return 0
+
+    failed = False
+    for name in servers:
+        print(f"\nInstalling to server: {SERVER_CONTAINERS[name]}")
+        try:
+            install_to_server(name, target_ver, bp_src, rp_src)
+        except (RuntimeError, OSError, json.JSONDecodeError) as error:
+            print(f"[ERROR] {error}", file=sys.stderr)
+            failed = True
+    return 1 if failed else 0
 
 def main():
     parser = argparse.ArgumentParser(description="Install Monster Truck add-on with version revving and sync verification.")
@@ -159,8 +223,14 @@ def main():
     parser.add_argument("--rev-major", action="store_true", help="Rev major version before installing")
     parser.add_argument("--set-version", help="Set explicit version before installing e.g. 1.1.0")
     parser.add_argument("--check", action="store_true", help="Only verify version sync between repo and installed game")
+    parser.add_argument("--servers", default="",
+                        help="Also deploy to Docker servers, comma-separated: " + ",".join(SERVER_CONTAINERS))
 
     args = parser.parse_args()
+    servers = [s.strip() for s in args.servers.split(",") if s.strip()]
+    unknown = [s for s in servers if s not in SERVER_CONTAINERS]
+    if unknown:
+        parser.error(f"unknown server(s): {', '.join(unknown)}")
 
     if args.check:
         report = print_status_report(REPO_ROOT)
@@ -172,7 +242,7 @@ def main():
     elif args.rev_minor:
         part = "minor"
 
-    return install(rev=args.rev, rev_part=part, explicit_version=args.set_version)
+    return install(rev=args.rev, rev_part=part, explicit_version=args.set_version, servers=servers)
 
 if __name__ == "__main__":
     sys.exit(main())

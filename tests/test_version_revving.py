@@ -10,6 +10,7 @@ from scripts.version_manager import (
     version_to_str,
     str_to_version,
     check_version_sync,
+    find_com_mojang_roots,
     sync_world_pack_versions,
     BP_UUID,
     RP_UUID,
@@ -148,3 +149,18 @@ def test_check_version_sync_detection(tmp_path):
     res_mismatch = check_version_sync(repo_root=REPO_ROOT, mojang_roots=[mojang_root])
     assert res_mismatch["in_sync"] is False
     assert "OUT OF SYNC" in res_mismatch["summary"]
+
+def test_find_com_mojang_roots_discovers_linux_launcher(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "missing"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "missing"))
+    flatpak = tmp_path / ".var/app/io.mrarm.mcpelauncher/data/mcpelauncher/games/com.mojang"
+    native = tmp_path / ".local/share/mcpelauncher/games/com.mojang"
+
+    assert find_com_mojang_roots() == []
+
+    flatpak.mkdir(parents=True)
+    assert find_com_mojang_roots() == [flatpak.resolve()]
+
+    native.mkdir(parents=True)
+    assert find_com_mojang_roots() == [flatpak.resolve(), native.resolve()]

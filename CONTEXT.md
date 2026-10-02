@@ -48,6 +48,22 @@ _Avoid_: Roadkill, run-over, melee attack
 A disposable Minecraft Bedrock world reserved for repeatable verification of the Monster Truck add-on, separate from personal gameplay worlds.
 _Avoid_: Personal world, production world
 
+**Client Smoke Run**:
+A verification run in the real Minecraft client that opens the Dedicated Test World, confirms the add-on loads and spawns without content errors, and captures screenshots for human visual review.
+_Avoid_: Game test, live test, playtest
+
+**Scenario Run**:
+A headless verification run on a dedicated server in which a Simulated Driver operates the Monster Truck through scripted terrain challenges and the observable outcomes of each mechanic are asserted.
+_Avoid_: Integration test, physics test, game run
+
+**Simulated Driver**:
+A server-side simulated player that boards the Driver Seat and supplies real movement, steering, and jump input, standing in for a human player during a Scenario Run.
+_Avoid_: Bot, fake player, dummy, NPC
+
+**Scenario World**:
+The generated flat world used only by Scenario Runs, distinct from the Dedicated Test World and permitted to enable experimental test-only APIs that player worlds never use.
+_Avoid_: Test server world, BDS world
+
 **Suspension Jump**:
 The active, driver-triggered vertical launch that propels the vehicle upward to clear 3-block obstacles or ravines.
 _Avoid_: Jumping, hop, rocket jump, bounce
