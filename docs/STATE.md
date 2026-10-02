@@ -1,11 +1,12 @@
 ## Goal
 Set up the add-on for Linux development, debug, install, and fully automate in-game testing of the monster truck.
 ## Now
-#37 answered. User testing truck speed in 'Monster Truck Playground' world (random terrain, creative, 16 trucks + speedometer helper pack); then #38.
+#38: fixes A,B,D,E,F applied. Run cf5d67f2f100477ab602a0f028bad961: 13/14 pass; incline 1:3 downhill -23.6 vs -18.4 (stair straddle geometry atan(1/2.25)=24) awaiting user decision on expected value. Speed reading (C) still not given. Jump rider flashing = issue #32, fix commit 04e0772 only on Windows machine (unpushed).
 ## Next
 1. #36 Scenario Run container bootstrap. 3. #37 Simulated Driver prototype. 4. #38 mechanic scenarios incl. pitch. 5. #39 CI.
 6. After #38: trim issues #27-#30 to visual-only residue.
 ## Constraints
+- "Keep the version and install with #38" (no rev/install until #38 lands)
 - "if there is something strange then prompt me for input" (re: test thresholds/outcomes)
 - "do not look into the separt containers" (re: NetherNet errors on minecraft-creative/minecraft-survival)
 ## Decisions
@@ -51,6 +52,12 @@ Set up the add-on for Linux development, debug, install, and fully automate in-g
 - Grilling + ADR-0016 + CONTEXT.md terms + GitHub spec #33 and slices #34-#39 — RESULT: created.
 - #34 Linux install — RESULT: find_com_mojang_roots finds flatpak root on this machine; install_addon.py --servers creative,survival added (docker cp to /data/{behavior,resource}_packs, world_*_packs.json entry, texturepack-required, confirm restart); .venv-testing/bin/python -m pytest -q -> 120 passed (baseline 116). Live server deploy not yet run.
 ## Open items
+- (D) FIXED — lava: seated rider takes 1 'fire' damage at shoreline exit (run 18645440dc2649b69cc2ceb255e1cfbe, z=30.0, rider block=lava); add-on only extinguishes riders (main.js ~180-187). Proposed: cancel fire/lava/fire_tick damage to seated riders in beforeEvents.entityHurt.
+- (E) FIXED — pitch stalls at -2 on flat ground forever (kinematics.js calculateDynamicPitch Math.round after 0.2 smoothing). Proposed: snap to target when within 1 degree.
+- (F) FIXED (1:1 now passes; 1:3 downhill open) — 1:1 ramp pitch only +13.0/-6.5 (expected 35): sampleGroundHeight scans startY+2..-3 and falls back to truck height on miss; 2-block auto-step lurches put rear terrain >3 below. Proposed: widen scan and keep previous pitch on a miss. Also 1:3 downhill -23.7 vs -18.4 (5.3 over tolerance).
+- (A) FIXED (uncommitted) — was: DEFECT candidate: main.js:362-366 native-jump detection (vel.y > 0.42 = NATIVE_JUMP_ASCENT_THRESHOLD) fires on engine step-ups -> unrequested Suspension Jump. Evidence: run 57eee60ad40b486e8163082ad48492cf '[DIAG] SUSPENSION JUMP t=189 requested=false ascending=true' on the first 1-block stair; 2-block ledge launches to +6.92. Breaks incline_pitch (uphill samples are airborne trajectory) and auto_step.
+- (B) FIXED via seam (uncommitted) — was: flotation_water/lava fail at Shoreline Step-Up: aquatic propulsion + step-up gated on driver.inputInfo.getMovementVector(), always (0,0) for SimulatedPlayer (main.js:249-281).
+- trample speed-scaling evidence weak: moveRelative speed 0.3 still ~1 b/tick (122 vs 130 dmg).
 - Speed: Simulated Driver drives ~1.06 blocks/tick (~21 b/s) vs design 0.55 b/tick (ADR-0011, PROVING_GROUND item 7). User is measuring real driving in the playground speedometer; calibrate #38 speed checks to their answer.
 - NOTED (not done): main.js:166 `currentRiders.map((r) => r.id)` throws if getRiders() ever yields undefined (only seen with cross-runtime simulated players).
 - Pitch rounding in kinematics.js (Math.round after 0.2 smoothing) stalls up to ~2 deg short of target — check against the +-5 deg pitch tolerance in #38.

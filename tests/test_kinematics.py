@@ -154,3 +154,41 @@ assert.equal(calculateRearSteerAngle(0), 0);
     res = subprocess.run([node_exe, "--input-type=module", "-e", script],
                          cwd=str(REPO_ROOT), capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
+
+
+def test_pitch_levels_fully_holds_on_ground_misses_and_riders_are_heat_shielded():
+    node_exe = shutil.which("node")
+    if not node_exe:
+        return
+
+    script = r'''
+import assert from 'node:assert/strict';
+import { calculateDynamicPitch, sampleGroundHeight } from './behavior_packs/MonsterTruck_BP/scripts/kinematics.js';
+import { shouldShieldRiderFromHeat } from './behavior_packs/MonsterTruck_BP/scripts/amphibious.js';
+
+// Returning to level on flat ground must reach exactly 0 (whole-degree rounding used to stall at +-2).
+let pitch = -24;
+for (let tick = 0; tick < 60; tick++) {
+  pitch = calculateDynamicPitch({ frontHeight: 64, rearHeight: 64, currentPitch: pitch });
+}
+assert.equal(pitch, 0, `Pitch must settle to level, stalled at ${pitch}`);
+pitch = 2;
+pitch = calculateDynamicPitch({ frontHeight: 64, rearHeight: 64, currentPitch: pitch });
+assert.equal(pitch, 1, "Near the target the pitch still advances one degree per tick");
+
+// An axle with no ground in reach holds the current pitch instead of reading level.
+assert.equal(calculateDynamicPitch({ frontHeight: 70, rearHeight: null, currentPitch: 30 }), 30);
+
+// Ground is found up to six blocks below the body on steep stairs; nothing in reach is null.
+const column = solidY => ({ getBlock: ({ y }) => (y <= solidY ? { isAir: false, typeId: "minecraft:stone" } : { isAir: true, typeId: "minecraft:air" }) });
+assert.equal(sampleGroundHeight(column(54), 0.5, 60, 0.5), 55);
+assert.equal(sampleGroundHeight(column(40), 0.5, 60, 0.5), null);
+
+// Seated riders take no heat damage; other causes and unseated players are unaffected.
+for (const cause of ["fire", "fireTick", "lava"]) assert.equal(shouldShieldRiderFromHeat(cause, true), true);
+assert.equal(shouldShieldRiderFromHeat("lava", false), false);
+assert.equal(shouldShieldRiderFromHeat("entityAttack", true), false);
+'''
+    res = subprocess.run([node_exe, "--input-type=module", "-e", script],
+                         cwd=str(REPO_ROOT), capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr

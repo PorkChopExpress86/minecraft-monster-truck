@@ -1,13 +1,13 @@
 import { system, world, GameMode } from "@minecraft/server";
 import { spawnSimulatedPlayer } from "@minecraft/server-gametest";
 import { run } from "./run_config.js";
+import { park, resetArena, wait } from "./arena.js";
 import { SCENARIOS } from "./scenarios.js";
 
 // Test-only Scenario Run driver (ADR-0016). Never part of the distributable add-on.
 const emit = (status, details) => console.warn("[SCENARIO]" + JSON.stringify({
   run_id: run.run_id, status, ...details,
 }));
-const wait = ticks => new Promise(resolve => system.runTimeout(resolve, ticks));
 
 async function loadArena(dimension) {
   const spawn = world.getDefaultSpawnLocation();
@@ -21,18 +21,33 @@ async function loadArena(dimension) {
 
 world.afterEvents.worldLoad.subscribe(() => system.run(async () => {
   const dimension = world.getDimension("overworld");
+  const extras = [];
   let driver;
   try {
     const origin = await loadArena(dimension);
-    driver = spawnSimulatedPlayer({ dimension, ...origin }, "SimulatedDriver", GameMode.Creative);
+    // Survival, so fall, fire, and lava protection are observable on the rider.
+    driver = spawnSimulatedPlayer({ dimension, ...origin }, "SimulatedDriver", GameMode.Survival);
+    const spawnPlayer = name => {
+      const player = spawnSimulatedPlayer({ dimension, ...origin }, name, GameMode.Survival);
+      extras.push(player);
+      return player;
+    };
     await wait(20);
-    const context = { dimension, origin, driver, run, wait };
     for (const name of run.scenarios) {
+      park(driver, origin);
+      resetArena(dimension, origin);
+      driver.getComponent("minecraft:health").resetToMaxValue();
+      driver.extinguishFire();
+      await wait(10);
       try {
-        const checks = await SCENARIOS[name](context);
+        const scenario = SCENARIOS[name];
+        if (!scenario) throw new Error("Unknown scenario: " + name);
+        const checks = await scenario({ dimension, origin, driver, run, wait, spawnPlayer });
         emit("PASS", { scenario: name, checks });
       } catch (error) {
         emit("FAIL", { scenario: name, error: String(error) });
+      } finally {
+        while (extras.length) extras.pop().disconnect();
       }
     }
     emit("DONE", {});

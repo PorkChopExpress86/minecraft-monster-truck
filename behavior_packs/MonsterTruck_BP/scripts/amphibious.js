@@ -104,3 +104,11 @@ export function calculateShorelineStepImpulse(heading = { x: 1, z: 0 }, stepHeig
     z: dirZ * 0.35,
   };
 }
+
+// Thermal shielding: riders seated in the truck take no heat damage while it crosses lava
+// or climbs out of it, including the moment the seat dips into the lava surface.
+const HEAT_DAMAGE_CAUSES = new Set(["fire", "fireTick", "lava"]);
+
+export function shouldShieldRiderFromHeat(damageCause, isSeatedRider = false) {
+  return Boolean(isSeatedRider) && HEAT_DAMAGE_CAUSES.has(damageCause);
+}

@@ -17,7 +17,8 @@ import {
   calculateAquaticIntent,
   classifyShorelineColumn,
   calculateShorelineStepImpulse,
-  CRUISING_AQUATIC_SPEED
+  CRUISING_AQUATIC_SPEED,
+  shouldShieldRiderFromHeat
 } from "./amphibious.js";
 import {
   calculateTrampleDamage,
@@ -51,6 +52,12 @@ const pendingJumpRequests = new Map();
 const seatedDriverAssignments = new Map();
 let currentTick = 0;
 const DIMENSIONS = ["overworld", "nether", "the_end"];
+
+// Driver movement input ({ x: strafe, y: forward }). Exported so Scenario Runs can supply
+// the input a Simulated Driver's inputInfo never reports (ADR-0016).
+export const driverInput = {
+  movement: (driver) => driver.inputInfo.getMovementVector(),
+};
 
 function getCurrentTick() {
   return typeof system.currentTick === "number" ? system.currentTick : currentTick;
@@ -248,7 +255,7 @@ function onTick() {
 
         try {
           aquaticIntent = calculateAquaticIntent(
-            driver.inputInfo.getMovementVector(),
+            driverInput.movement(driver),
             { x: dirX, z: dirZ }
           );
         } catch {}
@@ -359,11 +366,9 @@ function onTick() {
         }
       }
 
-      // Suspension Jump execution (Native engine jump or driver jump key input)
-      const NATIVE_JUMP_ASCENT_THRESHOLD = 0.42;
-      const isAscending = (vel && vel.y > NATIVE_JUMP_ASCENT_THRESHOLD) || dy > NATIVE_JUMP_ASCENT_THRESHOLD;
-      const notStepping = !state.lastShorelineStep || (tickNumber - state.lastShorelineStep > 15);
-      const isJumpTriggered = jumpWasRequested || (driver && isAscending && notStepping && !state.isAirborne);
+      // Suspension Jump execution: driver Jump input only. Upward velocity alone is not
+      // a jump request; engine auto-steps and shoreline climbs rise just as fast.
+      const isJumpTriggered = jumpWasRequested;
       if (isJumpTriggered && !state.isAirborne &&
           canTriggerJump(state.lastJumpTick, tickNumber) &&
           canTriggerJump(state.lastLandingTick, tickNumber)) {
@@ -636,6 +641,15 @@ function isPneumaticallyProtectedFall(event) {
   return shouldAbsorbFallDamage(cause, isTruck || isRider);
 }
 
+function isThermallyShieldedRider(event) {
+  try {
+    const vehicle = event.hurtEntity?.getComponent("minecraft:riding")?.entityRidingOn;
+    return shouldShieldRiderFromHeat(event.damageSource?.cause, vehicle?.typeId === "blake:monster_truck");
+  } catch {
+    return false;
+  }
+}
+
 function isDeliberateRetrieval(event) {
   const truck = event.hurtEntity;
   const player = event.damageSource?.damagingEntity;
@@ -686,7 +700,7 @@ if (world.afterEvents && world.afterEvents.playerButtonInput) {
 if (world.beforeEvents && world.beforeEvents.entityHurt) {
   try {
     world.beforeEvents.entityHurt.subscribe((event) => {
-      if (isPneumaticallyProtectedFall(event)) {
+      if (isPneumaticallyProtectedFall(event) || isThermallyShieldedRider(event)) {
         event.cancel = true;
       } else if (isDeliberateRetrieval(event)) {
         event.cancel = true;

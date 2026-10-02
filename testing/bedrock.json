@@ -14,8 +14,12 @@
     "image": "itzg/minecraft-bedrock-server@sha256:42004bb667915b0accce0aa74d415122ef82cece8abe5ea0085b183bc4ac2df0",
     "server_api_version": "2.11.0-beta",
     "gametest_api_version": "1.0.0-beta",
-    "scenarios": ["smoke"],
-    "timeout_seconds": 300
+    "scenarios": [
+      "smoke", "seats", "auto_step", "suspension_jump", "crush_stomp", "shock_absorption",
+      "flotation_water", "flotation_lava", "trample", "demolition", "foliage_shearing",
+      "dye_repaint", "retrieval", "incline_pitch"
+    ],
+    "timeout_seconds": 600
   },
   "required_components": ["minecraft:rideable", "minecraft:health"],
   "expected_seat_count": 2,

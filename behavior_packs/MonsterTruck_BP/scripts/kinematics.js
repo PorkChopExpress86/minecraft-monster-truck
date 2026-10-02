@@ -31,6 +31,9 @@ export function calculateDynamicPitch({
     } else {
       targetPitch = 0.0;
     }
+  } else if (frontHeight === null || rearHeight === null) {
+    // An axle found no ground within reach: hold the current pitch rather than read it as level.
+    targetPitch = currentPitch;
   } else {
     // Ground contour pitch: deltaY between front and rear axle
     const deltaY = frontHeight - rearHeight;
@@ -41,10 +44,14 @@ export function calculateDynamicPitch({
   const factor = Math.max(0.0, Math.min(1.0, smoothingFactor));
   const smoothed = currentPitch + (targetPitch - currentPitch) * factor;
 
-  if (Math.abs(smoothed) < 0.05) {
-    return 0;
+  // Whole-degree rounding of a smoothed step stalls up to ~2 degrees short of the target,
+  // so always advance at least one degree until the target is reached.
+  const target = Math.round(targetPitch);
+  let next = Math.round(smoothed);
+  if (factor > 0 && next === Math.round(currentPitch) && next !== target) {
+    next += Math.sign(target - next);
   }
-  return Math.round(smoothed);
+  return next || 0;
 }
 
 /**
@@ -88,8 +95,9 @@ export function sampleGroundHeight(dimension, x, yStart, z) {
   const blockX = Math.floor(x);
   const blockZ = Math.floor(z);
 
-  // Scan downward from startY + 2 down to startY - 3
-  for (let dy = 2; dy >= -3; dy--) {
+  // Scan downward from startY + 2 to startY - 6: on steep stairs the engine lifts the
+  // truck two blocks at a time, leaving the rear axle's ground well below the body.
+  for (let dy = 2; dy >= -6; dy--) {
     try {
       const block = dimension.getBlock({ x: blockX, y: startY + dy, z: blockZ });
       if (block && !block.isAir && block.typeId !== "minecraft:air") {
@@ -99,5 +107,5 @@ export function sampleGroundHeight(dimension, x, yStart, z) {
       break;
     }
   }
-  return yStart;
+  return null;
 }
