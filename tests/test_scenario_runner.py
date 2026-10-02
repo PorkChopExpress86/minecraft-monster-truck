@@ -66,20 +66,26 @@ def server_files(tmp_path, monkeypatch):
     return config
 
 
-def test_prepared_scenario_world_enables_beta_apis_only_there_and_wires_packs(server_files, tmp_path):
+def test_prepared_scenario_world_runs_the_driver_inside_a_test_copy_of_the_addon(server_files, tmp_path):
     data = scenarios.prepare_server(REPO_ROOT, server_files, RUN, tmp_path)
     world = data / "worlds" / scenarios.LEVEL
     level = nbtlib.File.parse(io.BytesIO((world / "level.dat").read_bytes()[8:]), byteorder="little")
     assert level["experiments"]["gametest"] == 1
     assert (data / "bedrock_server-1.26.52.3").is_file()
-    manifest = json.loads((world / "behavior_packs/scenarios/manifest.json").read_text())
+    pack = world / "behavior_packs/MonsterTruck_BP"
+    manifest = json.loads((pack / "manifest.json").read_text())
     modules = {d.get("module_name"): d.get("version") for d in manifest["dependencies"]}
     assert modules["@minecraft/server-gametest"] == "1.0.0-beta"
+    assert modules["@minecraft/server"] == "2.11.0-beta"
+    assert manifest["modules"][-1]["entry"] == "scripts/scenario_entry.js"
+    entry = (pack / "scripts/scenario_entry.js").read_text()
+    assert 'import "./main.js"' in entry and 'import "./scenario_driver/main.js"' in entry
+    assert "export const run" in (pack / "scripts/scenario_driver/run_config.js").read_text()
     production = json.loads((REPO_ROOT / "behavior_packs/MonsterTruck_BP/manifest.json").read_text())
     assert not any("gametest" in str(d) for d in production["dependencies"])
+    assert {"module_name": "@minecraft/server", "version": "2.10.0"} in production["dependencies"]
     active = [entry["pack_id"] for entry in json.loads((world / "world_behavior_packs.json").read_text())]
-    assert active == [production["header"]["uuid"], scenarios.scenario_pack_ids(server_files)[0]]
-    assert "export const run" in (world / "behavior_packs/scenarios/scripts/run_config.js").read_text()
+    assert active == [production["header"]["uuid"]]
 
 
 class FakeDocker:

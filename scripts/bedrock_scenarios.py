@@ -9,7 +9,6 @@ import shutil
 import subprocess
 import time
 import urllib.request
-import uuid
 import zipfile
 
 try:
@@ -57,13 +56,8 @@ def server_zip(root, server):
     return cached
 
 
-def scenario_pack_ids(config):
-    namespace = uuid.UUID(config["harness_uuid"])
-    return str(uuid.uuid5(namespace, "scenario-pack")), str(uuid.uuid5(namespace, "scenario-module"))
-
-
 def prepare_server(root, config, run_id, output):
-    """Unpack the server and build the Scenario World with the add-on and the scenario pack."""
+    """Unpack the server and build the Scenario World with a test copy of the add-on running the scenario driver."""
     server = config["scenario_server"]
     data = output / "server"
     with zipfile.ZipFile(server_zip(root, server)) as archive:
@@ -88,32 +82,29 @@ def prepare_server(root, config, run_id, output):
 
     bp = json.loads((root / config["behavior_pack"] / "manifest.json").read_text(encoding="utf-8"))
     rp = json.loads((root / config["resource_pack"] / "manifest.json").read_text(encoding="utf-8"))
-    shutil.copytree(root / config["behavior_pack"], world / "behavior_packs/MonsterTruck_BP")
+    pack = world / "behavior_packs/MonsterTruck_BP"
+    shutil.copytree(root / config["behavior_pack"], pack)
     shutil.copytree(root / config["resource_pack"], world / "resource_packs/MonsterTruck_RP")
-    pack_id, module_id = scenario_pack_ids(config)
-    pack = world / "behavior_packs/scenarios"
-    shutil.copytree(root / "testing/scenarios", pack / "scripts")
-    write_json(pack / "manifest.json", {
-        "format_version": 2,
-        "header": {
-            "name": config["name"] + " Scenario Runs (scenario world only)",
-            "description": "Simulated Driver scenarios; excluded from the distributable add-on",
-            "uuid": pack_id, "version": [1, 0, 0],
-            "min_engine_version": bp["header"]["min_engine_version"],
-        },
-        "modules": [{"type": "script", "language": "javascript", "entry": "scripts/main.js",
-                     "uuid": module_id, "version": [1, 0, 0]}],
-        "dependencies": [
-            {"module_name": "@minecraft/server", "version": server["server_api_version"]},
-            {"module_name": "@minecraft/server-gametest", "version": server["gametest_api_version"]},
-            {"uuid": bp["header"]["uuid"], "version": bp["header"]["version"]},
-        ],
-    })
+    # A Simulated Driver only exists as a player object in the script runtime that spawned it,
+    # so the scenario driver runs inside this test copy of the add-on's runtime (ADR-0016).
+    shutil.copytree(root / "testing/scenarios", pack / "scripts/scenario_driver")
+    (pack / "scripts/scenario_entry.js").write_text(
+        'import "./main.js";\nimport "./scenario_driver/main.js";\n', encoding="utf-8")
+    manifest = json.loads((pack / "manifest.json").read_text(encoding="utf-8"))
+    for module in manifest["modules"]:
+        if module["type"] == "script":
+            module["entry"] = "scripts/scenario_entry.js"
+    manifest["dependencies"] = [dependency for dependency in manifest["dependencies"]
+                                if dependency.get("module_name") != "@minecraft/server"] + [
+        {"module_name": "@minecraft/server", "version": server["server_api_version"]},
+        {"module_name": "@minecraft/server-gametest", "version": server["gametest_api_version"]},
+    ]
+    write_json(pack / "manifest.json", manifest)
     run = {"run_id": run_id, "entity_id": config["entity_id"], "scenarios": server["scenarios"]}
-    (pack / "scripts/run_config.js").write_text("export const run = " + json.dumps(run) + ";\n", encoding="utf-8")
+    (pack / "scripts/scenario_driver/run_config.js").write_text(
+        "export const run = " + json.dumps(run) + ";\n", encoding="utf-8")
     write_json(world / "world_behavior_packs.json", [
         {"pack_id": bp["header"]["uuid"], "version": bp["header"]["version"]},
-        {"pack_id": pack_id, "version": [1, 0, 0]},
     ])
     write_json(world / "world_resource_packs.json", [
         {"pack_id": rp["header"]["uuid"], "version": rp["header"]["version"]},

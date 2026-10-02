@@ -1,7 +1,7 @@
 ## Goal
 Set up the add-on for Linux development, debug, install, and fully automate in-game testing of the monster truck.
 ## Now
-#36 done; next #37 Simulated Driver prototype.
+#37 answered. User testing truck speed in 'Monster Truck Playground' world (random terrain, creative, 16 trucks + speedometer helper pack); then #38.
 ## Next
 1. #36 Scenario Run container bootstrap. 3. #37 Simulated Driver prototype. 4. #38 mechanic scenarios incl. pitch. 5. #39 CI.
 6. After #38: trim issues #27-#30 to visual-only residue.
@@ -9,6 +9,8 @@ Set up the add-on for Linux development, debug, install, and fully automate in-g
 - "if there is something strange then prompt me for input" (re: test thresholds/outcomes)
 - "do not look into the separt containers" (re: NetherNet errors on minecraft-creative/minecraft-survival)
 ## Decisions
+- DECISION: Scenario driver runs inside a Scenario-World-only copy of the add-on BP (entry imports main.js + scenario_driver) on @minecraft/server 2.11.0-beta — simulated players only materialize in the spawning runtime (user approved).
+- DECISION: Production exports requestDriverJump(player), called by the Jump-button handler and by jump scenarios (user chose 2a).
 - DECISION: Linux Client Smoke Run verdict = world loaded with our packs (client stdout) + screenshots; gameplay stage not_verified on Linux; all gameplay pass/fail from BDS Scenario Runs — Android-based client never surfaces script console output (user chose option 1).
 - DECISION: Automate driving mechanics via BDS + GameTest SimulatedPlayer, keep real client for smoke + screenshots — no Wayland input injection (ADR-0007 stays).
 - DECISION: Target Minecraft 1.26.52.3 for both client and BDS — client already downloaded; official BDS 1.26.52.3 Linux zip exists.
@@ -41,14 +43,22 @@ Set up the add-on for Linux development, debug, install, and fully automate in-g
 - Scenario server: official BDS zip sha256 f6348d84...71c6 cached in dist/bedrock-tests/cache; image itzg/minecraft-bedrock-server@sha256:42004bb6...; needs ONLINE_MODE=false, ALLOW_LIST=false, docker -t (else stdout block-buffered); modules @minecraft/server 2.11.0-beta + @minecraft/server-gametest 1.0.0-beta; spawnSimulatedPlayer(DimensionLocation, name, GameMode) top-level.
 - Desktop: KDE Wayland; spectacle installed; no xdotool/ydotool.
 ## Done
+- #37 — RESULT (run 1ec3980aa43a4a71b9a6aa43c4941866, 0 errors): driver seats at seat 0 via interactWithEntity; moveRelative drives truck 63.84 blocks/60 ticks; setBodyRotation steers (yaw 0->90, steer_angle=1); requestDriverJump(driver) -> Suspension Jump +4.92 blocks. Fixes: driver runs inside test copy of add-on runtime (server 2.11.0-beta + gametest); production exports requestDriverJump.
+- Playground world created: com.mojang/minecraftWorlds/monster-truck-playground (seed 8832057175689493418), helper pack spawns 16 trucks once + actionbar speedometer; BDS load check clean.
 - #36 Scenario Run container — RESULT: ./test-addon.sh Scenarios exit 0, run 5a61248ad05a41ae8bc5e6e27fc389d8 smoke PASS (simulated driver joined, truck spawned, 2 seats), no container left; pytest 135 passed.
 - #35 Linux Client Smoke Run — RESULT: ./test-addon.sh Game exit 0, PASSED run 137bd73e04984abd9e6063415e020472 (world_load, screenshots 3 + final hill view, shutdown passed; gameplay not_verified by design); pytest 127 passed.
 - #34 committed 408a9de; v1.0.3 installed to flatpak client + both Docker servers (server logs show Monster Truck Behavior 1.0.3 in Pack Stack).
 - Grilling + ADR-0016 + CONTEXT.md terms + GitHub spec #33 and slices #34-#39 — RESULT: created.
 - #34 Linux install — RESULT: find_com_mojang_roots finds flatpak root on this machine; install_addon.py --servers creative,survival added (docker cp to /data/{behavior,resource}_packs, world_*_packs.json entry, texturepack-required, confirm restart); .venv-testing/bin/python -m pytest -q -> 120 passed (baseline 116). Live server deploy not yet run.
 ## Open items
+- Speed: Simulated Driver drives ~1.06 blocks/tick (~21 b/s) vs design 0.55 b/tick (ADR-0011, PROVING_GROUND item 7). User is measuring real driving in the playground speedometer; calibrate #38 speed checks to their answer.
+- NOTED (not done): main.js:166 `currentRiders.map((r) => r.id)` throws if getRiders() ever yields undefined (only seen with cross-runtime simulated players).
 - Pitch rounding in kinematics.js (Math.round after 0.2 smoothing) stalls up to ~2 deg short of target — check against the +-5 deg pitch tolerance in #38.
 ## Failed attempts
+- #37 probe run d45e0504130947af80cbd899c710b7dc: interactWithEntity seats SimulatedDriver at seat 0 (riders visible from scenario pack); moveRelative moves truck 63.84 blocks/60 ticks (inputInfo.getMovementVector()=(0,0)); setBodyRotation turns truck yaw 0->90; jump() true but truck +0.00; production main.js:166 `currentRiders.map((r) => r.id)` throws 'cannot read property id of undefined' every tick while seated (340 log lines).
+- #37 ATTEMPT 1 [L1]: hypothesis 'production pack lacks @minecraft/server-gametest so simulated rider unwrappable' — test copy given server 2.11.0-beta + gametest 1.0.0-beta (run fd60486ab5f349a1b5a012f280213298) -> same TypeError at main.js:166 (170 lines). Refuted.
+- #37 L3 instrumentation run b8a348a016cf4e1bb7840aebdaaee7da: in the add-on runtime world.getAllPlayers() contains undefined for SimulatedDriver ('cannot read property name of undefined'); in the scenario pack runtime getRiders() -> SimulatedPlayer. CAUSE: simulated player objects only materialize in the script runtime that spawned them. Next: run scenario driver inside the add-on's runtime (test copy only).
+- #37 run 323bd534feb243158c991baf069c0d08 (driver merged into test copy of add-on runtime, server 2.11.0-beta + gametest 1.0.0-beta): 0 errors, steer_angle=1; forward still 63.84 blocks/60 ticks (~1.06 b/tick vs design 0.55 b/tick per ADR-0011); jump() still +0.00 (add-on jump listens to playerButtonInput, which SimulatedPlayer never fires). Awaiting user decisions.
 - #36 ATTEMPT 1 [L1]: first container run -> 'Could not connect to Minecraft services. This is required to accept connections in online mode.' then server stopped; fix ONLINE_MODE=false (--network none has no services).
 - #36 ATTEMPT 2 [L1]: -> 'Using an allowlist without online authentication can be dangerous and is not allowed.'; also no live output (BDS stdout block-buffered without TTY). Fix: ALLOW_LIST=false + docker run -t.
 - ATTEMPT 1 [L1]: Linux Client Smoke Run: harness PASS marker missing (content log ContentLog*.txt in com.mojang/logs stays 0 bytes; marker absent from client stdout). Hypothesis H1 'SIGTERM loses buffered content log' tested by graceful KWin closeWindow (rc 0) -> still 0 bytes. H1 refuted.

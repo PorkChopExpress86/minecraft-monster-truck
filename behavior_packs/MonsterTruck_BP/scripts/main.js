@@ -651,29 +651,35 @@ function isDeliberateRetrieval(event) {
   }
 }
 
+// Driver Jump input: queue a Suspension Jump for the truck the player drives. Exported so
+// Scenario Runs can supply the same input a Simulated Driver cannot press (ADR-0016).
+export function requestDriverJump(player) {
+  try {
+    const tick = getCurrentTick();
+    let truck = player.getComponent("minecraft:riding")?.entityRidingOn;
+    if (!truck) {
+      const assignment = seatedDriverAssignments.get(player.id);
+      if (assignment && tick - assignment.tick <= 2) {
+        truck = world.getEntity(assignment.truckId);
+      }
+    }
+    if (truck?.typeId === "blake:monster_truck") {
+      pendingJumpRequests.set(truck.id, tick);
+      system.run(() => {
+        try {
+          if (truck.isValid && !player.isSneaking) {
+            truck.getComponent("minecraft:rideable")?.addRider(player);
+          }
+        } catch {}
+      });
+    }
+  } catch {}
+}
+
 if (world.afterEvents && world.afterEvents.playerButtonInput) {
   world.afterEvents.playerButtonInput.subscribe((event) => {
     if (event.button !== InputButton.Jump || event.newButtonState !== ButtonState.Pressed) return;
-    try {
-      const tick = getCurrentTick();
-      let truck = event.player.getComponent("minecraft:riding")?.entityRidingOn;
-      if (!truck) {
-        const assignment = seatedDriverAssignments.get(event.player.id);
-        if (assignment && tick - assignment.tick <= 2) {
-          truck = world.getEntity(assignment.truckId);
-        }
-      }
-      if (truck?.typeId === "blake:monster_truck") {
-        pendingJumpRequests.set(truck.id, tick);
-        system.run(() => {
-          try {
-            if (truck.isValid && !event.player.isSneaking) {
-              truck.getComponent("minecraft:rideable")?.addRider(event.player);
-            }
-          } catch {}
-        });
-      }
-    } catch {}
+    requestDriverJump(event.player);
   });
 }
 
