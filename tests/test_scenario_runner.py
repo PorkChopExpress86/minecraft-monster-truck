@@ -1,0 +1,122 @@
+"""Headless Scenario Run orchestration (ADR-0016), with Docker replaced by a fake."""
+import io
+import json
+from pathlib import Path
+import struct
+import subprocess
+import zipfile
+
+import nbtlib
+import pytest
+
+from scripts import bedrock_scenarios as scenarios
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+RUN = "run1"
+
+
+def marker(status, **extra):
+    return "[2026-10-02 00:58:41:421 WARN] [Scripting] [SCENARIO]" + json.dumps(
+        {"run_id": RUN, "status": status, **extra}) + "\n"
+
+
+def test_all_scenarios_must_pass_and_finish():
+    text = marker("PASS", scenario="smoke", checks=["spawned"]) + marker("DONE")
+    result = scenarios.evaluate(text, RUN, ["smoke"])
+    assert result["status"] == "passed"
+    assert result["scenarios"]["smoke"] == {"status": "passed", "checks": ["spawned"]}
+
+
+@pytest.mark.parametrize("text,expected", [
+    (marker("FAIL", scenario="smoke", error="Truck did not spawn") + marker("DONE"), "smoke: Truck did not spawn"),
+    (marker("DONE"), "smoke: no result reported"),
+    (marker("PASS", scenario="smoke") + "[2026-10-02 WARN] [Json] bad component\n" + marker("DONE"),
+     "[2026-10-02 WARN] [Json] bad component"),
+])
+def test_failures_missing_results_and_server_warnings_fail_the_run(text, expected):
+    result = scenarios.evaluate(text, RUN, ["smoke"])
+    assert result["status"] == "failed"
+    assert expected in result["errors"]
+
+
+def test_markers_from_other_runs_are_ignored():
+    stale = marker("PASS", scenario="smoke").replace(RUN, "old") + marker("DONE").replace(RUN, "old")
+    assert scenarios.evaluate(stale, RUN, ["smoke"])["status"] == "failed"
+
+
+@pytest.fixture
+def server_files(tmp_path, monkeypatch):
+    archive = tmp_path / "server.zip"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr("bedrock_server", b"binary")
+        zipped.writestr("server.properties", "level-name=Bedrock level\n")
+    level = nbtlib.File({"LevelName": nbtlib.String("starter"), "GameType": nbtlib.Int(0),
+                        "Difficulty": nbtlib.Int(2), "experiments": nbtlib.Compound({"gametest": nbtlib.Byte(0)}),
+                        **{key: nbtlib.Byte(1) for key in (
+                            "commandsEnabled", "MultiplayerGame", "MultiplayerGameIntent", "LANBroadcast",
+                            "LANBroadcastIntent", "XBLBroadcastIntent", "PlatformBroadcastIntent")}})
+    payload = io.BytesIO()
+    level.write(payload, byteorder="little")
+    starter = io.BytesIO()
+    with zipfile.ZipFile(starter, "w") as zipped:
+        zipped.writestr("level.dat", struct.pack("<II", 9, len(payload.getvalue())) + payload.getvalue())
+    monkeypatch.setattr(scenarios, "server_zip", lambda root, server: archive)
+    monkeypatch.setattr(scenarios, "template_bytes", lambda root: starter.getvalue())
+    config = json.loads((REPO_ROOT / "testing/bedrock.json").read_text())
+    return config
+
+
+def test_prepared_scenario_world_enables_beta_apis_only_there_and_wires_packs(server_files, tmp_path):
+    data = scenarios.prepare_server(REPO_ROOT, server_files, RUN, tmp_path)
+    world = data / "worlds" / scenarios.LEVEL
+    level = nbtlib.File.parse(io.BytesIO((world / "level.dat").read_bytes()[8:]), byteorder="little")
+    assert level["experiments"]["gametest"] == 1
+    assert (data / "bedrock_server-1.26.52.3").is_file()
+    manifest = json.loads((world / "behavior_packs/scenarios/manifest.json").read_text())
+    modules = {d.get("module_name"): d.get("version") for d in manifest["dependencies"]}
+    assert modules["@minecraft/server-gametest"] == "1.0.0-beta"
+    production = json.loads((REPO_ROOT / "behavior_packs/MonsterTruck_BP/manifest.json").read_text())
+    assert not any("gametest" in str(d) for d in production["dependencies"])
+    active = [entry["pack_id"] for entry in json.loads((world / "world_behavior_packs.json").read_text())]
+    assert active == [production["header"]["uuid"], scenarios.scenario_pack_ids(server_files)[0]]
+    assert "export const run" in (world / "behavior_packs/scenarios/scripts/run_config.js").read_text()
+
+
+class FakeDocker:
+    def __init__(self, logs):
+        self.logs = logs
+        self.calls = []
+
+    def __call__(self, *args):
+        self.calls.append(args)
+        out = {"logs": self.logs, "inspect": "true\n"}.get(args[0], "container-id\n")
+        return subprocess.CompletedProcess(args, 0, out, "")
+
+
+def test_container_is_isolated_stopped_and_removed_after_a_run(server_files, tmp_path):
+    docker = FakeDocker(marker("PASS", scenario="smoke", checks=["spawned"]) + marker("DONE"))
+    result = scenarios.run_scenarios(REPO_ROOT, server_files, RUN, tmp_path, run=docker, sleep=lambda _: None)
+    assert result["status"] == "passed"
+    start = docker.calls[0]
+    assert start[:2] == ("run", "-d") and "-t" in start
+    assert start[start.index("--network") + 1] == "none"
+    assert start[-1] == server_files["scenario_server"]["image"]
+    assert not any(arg.startswith("-p") or arg == "--publish" for arg in start)
+    assert ("stop", "-t", "30", "monster-truck-scenario-" + RUN) in docker.calls
+    assert docker.calls[-1] == ("rm", "monster-truck-scenario-" + RUN)
+    assert not (tmp_path / "server").exists()
+    assert "DONE" in (tmp_path / "scenario-server.log").read_text()
+
+
+def test_container_is_removed_even_when_reading_logs_fails(server_files, tmp_path):
+    docker = FakeDocker("")
+    original = docker.__call__
+
+    def failing(*args):
+        if args[0] == "inspect":
+            raise OSError("docker daemon went away")
+        return original(*args)
+
+    with pytest.raises(OSError):
+        scenarios.run_scenarios(REPO_ROOT, server_files, RUN, tmp_path, run=failing, sleep=lambda _: None)
+    assert docker.calls[-1] == ("rm", "monster-truck-scenario-" + RUN)

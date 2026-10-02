@@ -1,7 +1,7 @@
 ## Goal
 Set up the add-on for Linux development, debug, install, and fully automate in-game testing of the monster truck.
 ## Now
-#35 done; next slice #36 Scenario Run container bootstrap.
+#36 done; next #37 Simulated Driver prototype.
 ## Next
 1. #36 Scenario Run container bootstrap. 3. #37 Simulated Driver prototype. 4. #38 mechanic scenarios incl. pitch. 5. #39 CI.
 6. After #38: trim issues #27-#30 to visual-only residue.
@@ -38,8 +38,10 @@ Set up the add-on for Linux development, debug, install, and fully automate in-g
 - Linux client: `flatpak run --command=mcpelauncher-client io.mrarm.mcpelauncher -dg <data>/versions/1.26.52.3 -m <data>/mods/mcpelauncher-updates/1.26.45.1/x86_64/ -u minecraft://?load=<world folder>` loads the world directly; flatpak run execs into bwrap so Popen.pid is the process-group leader; KWin script closeWindow() exits rc 0; spectacle -b -n -a -e -S captures after KWin activation.
 - Linux content logs: com.mojang/logs/ContentLog<date>.txt (created but stays empty).
 - Dedicated Test World: com.mojang/minecraftWorlds/addon-test-b06f3b8a-1a26-4f26-a3aa-76c2c480ad35 ; options.txt backup in dist/bedrock-tests/setup/.
+- Scenario server: official BDS zip sha256 f6348d84...71c6 cached in dist/bedrock-tests/cache; image itzg/minecraft-bedrock-server@sha256:42004bb6...; needs ONLINE_MODE=false, ALLOW_LIST=false, docker -t (else stdout block-buffered); modules @minecraft/server 2.11.0-beta + @minecraft/server-gametest 1.0.0-beta; spawnSimulatedPlayer(DimensionLocation, name, GameMode) top-level.
 - Desktop: KDE Wayland; spectacle installed; no xdotool/ydotool.
 ## Done
+- #36 Scenario Run container — RESULT: ./test-addon.sh Scenarios exit 0, run 5a61248ad05a41ae8bc5e6e27fc389d8 smoke PASS (simulated driver joined, truck spawned, 2 seats), no container left; pytest 135 passed.
 - #35 Linux Client Smoke Run — RESULT: ./test-addon.sh Game exit 0, PASSED run 137bd73e04984abd9e6063415e020472 (world_load, screenshots 3 + final hill view, shutdown passed; gameplay not_verified by design); pytest 127 passed.
 - #34 committed 408a9de; v1.0.3 installed to flatpak client + both Docker servers (server logs show Monster Truck Behavior 1.0.3 in Pack Stack).
 - Grilling + ADR-0016 + CONTEXT.md terms + GitHub spec #33 and slices #34-#39 — RESULT: created.
@@ -47,4 +49,6 @@ Set up the add-on for Linux development, debug, install, and fully automate in-g
 ## Open items
 - Pitch rounding in kinematics.js (Math.round after 0.2 smoothing) stalls up to ~2 deg short of target — check against the +-5 deg pitch tolerance in #38.
 ## Failed attempts
+- #36 ATTEMPT 1 [L1]: first container run -> 'Could not connect to Minecraft services. This is required to accept connections in online mode.' then server stopped; fix ONLINE_MODE=false (--network none has no services).
+- #36 ATTEMPT 2 [L1]: -> 'Using an allowlist without online authentication can be dangerous and is not allowed.'; also no live output (BDS stdout block-buffered without TTY). Fix: ALLOW_LIST=false + docker run -t.
 - ATTEMPT 1 [L1]: Linux Client Smoke Run: harness PASS marker missing (content log ContentLog*.txt in com.mojang/logs stays 0 bytes; marker absent from client stdout). Hypothesis H1 'SIGTERM loses buffered content log' tested by graceful KWin closeWindow (rc 0) -> still 0 bytes. H1 refuted.

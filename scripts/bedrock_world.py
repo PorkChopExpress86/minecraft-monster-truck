@@ -93,7 +93,7 @@ def template_bytes(root):
     return data
 
 
-def customize_level(data, name):
+def customize_level(data, name, beta_apis=False):
     version, size = struct.unpack("<II", data[:8])
     if size != len(data) - 8:
         raise ValueError("World level.dat length does not match its header")
@@ -107,8 +107,11 @@ def customize_level(data, name):
     }.items():
         level[key] = type(level[key])(value)
     # The old starter enabled experimental GameTest; stable Script API needs none.
+    # Only the headless Scenario World turns "Beta APIs" (key gametest) back on (ADR-0016).
     for key in level["experiments"]:
         level["experiments"][key] = nbtlib.Byte(0)
+    if beta_apis:
+        level["experiments"]["gametest"] = nbtlib.Byte(1)
     stream = io.BytesIO()
     level.write(stream, byteorder="little")
     payload = stream.getvalue()

@@ -7,6 +7,16 @@
   "harness_module_uuid": "acf83677-0a76-42e8-bf6e-d84993212967",
   "script_api_version": "2.10.0",
   "linux_client_version": "1.26.52.3",
+  "scenario_server": {
+    "version": "1.26.52.3",
+    "url": "https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.26.52.3.zip",
+    "sha256": "f6348d84fa714d04ca194f207e89453ca6bba0a1359396475271a52a150471c6",
+    "image": "itzg/minecraft-bedrock-server@sha256:42004bb667915b0accce0aa74d415122ef82cece8abe5ea0085b183bc4ac2df0",
+    "server_api_version": "2.11.0-beta",
+    "gametest_api_version": "1.0.0-beta",
+    "scenarios": ["smoke"],
+    "timeout_seconds": 300
+  },
   "required_components": ["minecraft:rideable", "minecraft:health"],
   "expected_seat_count": 2,
   "showcase": true,
