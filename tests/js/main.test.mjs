@@ -12,7 +12,9 @@ const main = await import("../../behavior_packs/MonsterTruck_BP/scripts/main.js"
 const GROUND_Y = 61;
 const overworld = createFakeDimension();
 overworld.fillLayer(GROUND_Y - 1, "minecraft:stone");
-fake.dimensions.overworld = overworld; // nether and the_end are missing: the loop skips them
+fake.dimensions.overworld = overworld;
+fake.dimensions.nether = createFakeDimension(); // empty, as the vanilla dimensions always resolve
+fake.dimensions.the_end = createFakeDimension();
 
 function addTruck(options) {
   const truck = createFakeTruck(options);
@@ -124,4 +126,51 @@ test("a player's fatal blow returns exactly one Vehicle Item; other damage does 
   assert.equal(spawned[0].item.amount, 1);
   assert.deepEqual(spawned[0].location, { x: 160.5, y: GROUND_Y, z: 0.5 });
   assert.equal(removed, 1);
+});
+
+function removeTruck(truck) {
+  overworld.entities.splice(overworld.entities.indexOf(truck), 1);
+}
+
+test("a truck gone from the world takes its tick state with it", () => {
+  const truck = addTruck({ location: { x: 200.5, y: GROUND_Y, z: 0.5 } });
+  runTick();
+  removeTruck(truck);
+  runTick();
+
+  // The same truck comes back 30 blocks away (a reloaded chunk), parked, with a mob ahead.
+  truck.moveTo({ z: 30.5 }, { velocity: { z: 0 } });
+  const zombie = createFakeEntity({ location: { x: 200.5, y: GROUND_Y, z: 33 } });
+  overworld.entities.push(truck, zombie);
+  runTick();
+  assert.equal(zombie.damage.length, 0, "a fresh state measures no motion, so a parked truck tramples nothing");
+});
+
+test("a rider protected by a truck that is gone mid-drop loses fall protection", () => {
+  const rider = addPlayer("orphaned-rider");
+  const truck = addTruck({ location: { x: 240.5, y: GROUND_Y + 6, z: 0.5 }, isOnGround: false, riders: [rider] });
+  runTick();
+  truck.moveTo({ y: GROUND_Y + 5.5 }, { velocity: { y: -0.5 } });
+  runTick();
+  assert.equal(hurt(rider, "fall").cancel, true, "protected while the truck falls");
+  removeTruck(truck);
+  runTick();
+  assert.equal(hurt(rider, "fall").cancel, false, "protection ends with the truck");
+});
+
+test("a dimension that cannot be fetched hides its trucks, so their state and riders are kept", () => {
+  const rider = addPlayer("hidden-rider");
+  const truck = addTruck({ location: { x: 280.5, y: GROUND_Y + 6, z: 0.5 }, isOnGround: false, riders: [rider] });
+  runTick();
+  truck.moveTo({ y: GROUND_Y + 5.5 }, { velocity: { y: -0.5 } });
+  runTick();
+  assert.equal(hurt(rider, "fall").cancel, true, "protected while the truck falls");
+
+  delete fake.dimensions.overworld; // world.getDimension("overworld") throws this tick
+  try {
+    runTick();
+  } finally {
+    fake.dimensions.overworld = overworld;
+  }
+  assert.equal(hurt(rider, "fall").cancel, true, "a failed lookup does not end the drop's protection");
 });

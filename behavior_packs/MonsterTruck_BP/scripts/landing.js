@@ -103,6 +103,19 @@ function clearProtectedRiders(protectedRiders, landing) {
   landing.protectedRiderIds = new Set();
 }
 
+/**
+ * The truck is gone: end the fall protection it still holds for its riders.
+ * @param {LandingState} landing
+ * @param {string} truckId
+ * @param {Map<string, string>} protectedRiders
+ */
+export function releaseLanding(landing, truckId, protectedRiders) {
+  for (const riderId of landing.protectedRiderIds) {
+    if (protectedRiders.get(riderId) === truckId) protectedRiders.delete(riderId);
+  }
+  landing.protectedRiderIds = new Set();
+}
+
 function restoreProtectedRiders(getEntity, landing, rideable) {
   if (!rideable?.addRider || !landing.protectedRiderIds?.size) return;
   const seated = new Set((rideable.getRiders?.() || []).map((rider) => rider.id));

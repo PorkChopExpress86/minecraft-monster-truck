@@ -17,7 +17,7 @@ import {
 import { createDrivingState, groundRetention, headingVector, stepDriving } from "./driving.js";
 import { AXLE_OFFSET } from "./geometry.js";
 import { MOLTEN_TIRE_TICKS, stepContact } from "./contact.js";
-import { createLandingState, stepLanding } from "./landing.js";
+import { createLandingState, releaseLanding, stepLanding } from "./landing.js";
 
 /**
  * The Script API subset tickTruck uses. Production passes @minecraft/server objects.
@@ -70,22 +70,35 @@ import { createLandingState, stepLanding } from "./landing.js";
  * driverInput: the driver-input seam (main.js driverInput, ADR-0016).
  * getEntity: world-wide entity lookup by id (world.getEntity).
  * protectedRiders: rider id -> truck id whose fall protects them (read by the entityHurt handler).
- * hitCooldowns: entity id -> tick it was last trampled.
  * @typedef {{
  *   driverInput: DriverInput,
  *   getEntity(id: string): WorldEntity | undefined,
  *   protectedRiders: Map<string, string>,
- *   hitCooldowns: Map<string, number>,
  * }} TickInput
  * landing: landing.js's slice (the drop lifecycle).
- * @typedef {Record<string, any> & { landing: import("./landing.js").LandingState }} TruckState
+ * hitCooldowns: entity id -> tick this truck last trampled it (contact.js).
+ * @typedef {Record<string, any> & {
+ *   landing: import("./landing.js").LandingState,
+ *   hitCooldowns: Map<string, number>,
+ * }} TruckState
  */
 
 const AIR_DRAG_RETENTION = 0.91; // horizontal velocity kept per tick while airborne
 
 /** @returns {TruckState} */
 export function createTruckState() {
-  return { landing: createLandingState() };
+  return { landing: createLandingState(), hitCooldowns: new Map() };
+}
+
+/**
+ * The truck is no longer in the world: undo what its state holds outside itself (its riders'
+ * fall protection). The caller then drops the state, and its hit cooldowns with it.
+ * @param {string} truckId
+ * @param {TruckState} state
+ * @param {TickInput} input
+ */
+export function releaseTruck(truckId, state, input) {
+  releaseLanding(state.landing, truckId, input.protectedRiders);
 }
 
 /**
@@ -97,7 +110,7 @@ export function createTruckState() {
  * @param {number} tick
  */
 export function tickTruck(truck, dimension, state, input, tick) {
-  const { driverInput, getEntity, protectedRiders, hitCooldowns } = input;
+  const { driverInput, getEntity, protectedRiders } = input;
   const loc = truck.location;
   if (state.prevX === undefined) {
     // First tick for this truck: no motion yet.
@@ -346,7 +359,7 @@ export function tickTruck(truck, dimension, state, input, tick) {
     heading: { x: dirX, z: dirZ },
     speed: effectiveSpeed,
     moltenUntil: state.moltenUntil,
-    hitCooldowns,
+    hitCooldowns: state.hitCooldowns,
     tick: tickNumber
   });
 

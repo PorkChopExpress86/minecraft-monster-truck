@@ -1,7 +1,7 @@
 // What the truck's tires and bumper do to the entities they touch: Tire Trample, Molten Tire
-// Trample, heavy collisions (ADR-0008), and the per-entity hit cooldown. truck_tick.js calls
-// stepContact once per tick; landing.js reuses isProtectedTarget and damageEntity for Crush
-// Stomp. Must not import @minecraft/server, so node can load it.
+// Trample, heavy collisions (ADR-0008), and the per-truck, per-entity hit cooldown.
+// truck_tick.js calls stepContact once per tick; landing.js reuses isProtectedTarget and
+// damageEntity for Crush Stomp. Must not import @minecraft/server, so node can load it.
 
 import { CONTACT_PERIMETER, TRUCK_LENGTH, TRUCK_WIDTH } from "./geometry.js";
 
@@ -53,9 +53,13 @@ function igniteIfMolten(target, moltenUntil, tick) {
  *   hitCooldowns: Map<string, number>,
  *   tick: number,
  * }} contact heading is the unit direction of travel; speed is blocks/tick; moltenUntil is
- *   the tick Molten Tire Trample ends; hitCooldowns maps entity id -> tick last trampled.
+ *   the tick Molten Tire Trample ends; hitCooldowns is this truck's own map of entity id -> tick
+ *   it last trampled that entity (expired entries are pruned here).
  */
 export function stepContact(truck, dimension, { location, heading, speed, moltenUntil, hitCooldowns, tick }) {
+  for (const [targetId, lastHit] of hitCooldowns) {
+    if (tick - lastHit >= HIT_COOLDOWN_TICKS) hitCooldowns.delete(targetId);
+  }
   if (!canApplyTireTrample(speed, false)) return;
   try {
     const nearbyEntities = dimension.getEntities({

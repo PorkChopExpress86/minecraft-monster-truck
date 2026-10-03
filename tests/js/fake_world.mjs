@@ -171,6 +171,5 @@ export function createTickInput({ driverInput = fixedInput(), entities = [] } = 
     driverInput,
     getEntity: (id) => entities.find((entity) => entity.id === id),
     protectedRiders: new Map(),
-    hitCooldowns: new Map(),
   };
 }

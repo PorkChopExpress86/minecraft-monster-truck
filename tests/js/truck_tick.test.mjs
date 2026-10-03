@@ -327,6 +327,42 @@ test("the trample cooldown is 6 ticks: no repeat hit at +5, a fresh hit at +6", 
   assert.equal(zombie.damage.length, 2, "hit again once 6 ticks have passed");
 });
 
+test("the trample cooldown is per truck: a second truck still hits a mob the first just hit", () => {
+  const world = scene();
+  const other = createFakeTruck({ location: { x: 0.5, y: GROUND_Y, z: 5.5 } });
+  const otherState = createTruckState();
+  world.dimension.entities.push(other);
+  const zombie = createFakeEntity({ location: { x: 0.5, y: GROUND_Y, z: 3 } });
+  world.dimension.entities.push(zombie);
+
+  const tick = world.step(() => world.truck.moveTo({}, { velocity: { z: 0.5 } }));
+  assert.equal(zombie.damage.length, 1, "truck A tramples the mob");
+  other.moveTo({}, { velocity: { z: -0.5 } });
+  tickTruck(other, world.dimension, otherState, world.input, tick);
+  assert.equal(zombie.damage.length, 2, "truck B is not shielded by truck A's cooldown");
+  assert.equal(zombie.damage[1].options.damagingEntity, other);
+
+  world.step(() => world.truck.moveTo({}, { velocity: { z: 0.5 } }));
+  assert.equal(zombie.damage.length, 2, "truck A is still cooling down on that mob");
+});
+
+test("a heavy collision that halts the truck leaves the next tick's measured motion true", () => {
+  const world = scene();
+  const golem = createFakeEntity({ typeId: "minecraft:iron_golem", location: { x: 0.5, y: GROUND_Y, z: 3 } });
+  world.dimension.entities.push(golem);
+  world.step(() => world.truck.moveTo({}, { velocity: { z: 0.2 } }));
+  assert.equal(world.truck.cleared, 1, "the slow hit on the golem halts the truck");
+
+  // Next tick the truck has moved 0.5 blocks; the halt must leave prevX/Y/Z alone so dz reports
+  // it. (The pre-refactor re-store wrote the tick-start location, already stored, so it was a
+  // no-op: this guards motion measurement against writes from the halt, not a past regression.)
+  const zombie = createFakeEntity({ location: { x: 0.5, y: GROUND_Y, z: 3.5 } });
+  world.dimension.entities.push(zombie);
+  world.step(() => world.truck.moveTo({ z: 1 }, { velocity: { z: 0 } }));
+  assert.equal(zombie.damage.length, 1);
+  assert.equal(zombie.damage[0].amount, 60, "trample speed is the true 0.5 blocks/tick moved (0.5 * 120)");
+});
+
 test("lava shields riders from burning and ignites mobs trampled after leaving it", () => {
   const driver = createFakePlayer({ id: "driver" });
   const world = scene({ riders: [driver], isOnGround: false });

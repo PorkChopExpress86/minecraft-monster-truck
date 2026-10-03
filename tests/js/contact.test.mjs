@@ -74,3 +74,12 @@ test("the hit cooldown is shared through the map it is given", () => {
   contact(0.5, { tick: 1006 });
   assert.equal(target.damage.length, 2, "hit again at +6");
 });
+
+test("expired cooldowns are pruned, even on a tick the truck is too slow to trample", () => {
+  const { target, hitCooldowns, contact } = scene();
+  contact(0.5, { tick: 1000 });
+  contact(0, { tick: 1005 });
+  assert.equal(hitCooldowns.get(target.id), 1000, "still cooling down at +5");
+  contact(0, { tick: 1006 });
+  assert.equal(hitCooldowns.size, 0, "expired at +6 and forgotten");
+});

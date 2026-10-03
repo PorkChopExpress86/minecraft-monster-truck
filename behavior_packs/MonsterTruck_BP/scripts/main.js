@@ -7,11 +7,10 @@ import {
 } from "@minecraft/server";
 import { shouldShieldRiderFromHeat } from "./amphibious.js";
 import { absorbsFallDamage } from "./landing.js";
-import { createTruckState, tickTruck } from "./truck_tick.js";
+import { createTruckState, releaseTruck, tickTruck } from "./truck_tick.js";
 
-// Track state of each truck across ticks
+// Track state of each truck across ticks; a truck's state is dropped once it is gone.
 const truckStates = new Map();
-const entityHitCooldowns = new Map();
 const protectedRiders = new Map();
 let currentTick = 0;
 const DIMENSIONS = ["overworld", "nether", "the_end"];
@@ -29,36 +28,52 @@ const tickInput = {
   driverInput,
   getEntity: (id) => world.getEntity(id),
   protectedRiders,
-  hitCooldowns: entityHitCooldowns,
 };
 
 function onTick() {
+  const presentTrucks = new Set();
+  // A failed dimension lookup or truck query hides that dimension's trucks, so nothing is
+  // known to be gone.
+  let sawEveryTruck = true;
   for (const dimName of DIMENSIONS) {
     /** @type {import("@minecraft/server").Dimension} */
     let dimension;
     try {
       dimension = world.getDimension(dimName);
     } catch {
+      sawEveryTruck = false;
       continue;
     }
-    if (!dimension) continue;
+    if (!dimension) {
+      sawEveryTruck = false;
+      continue;
+    }
 
     /** @type {import("@minecraft/server").Entity[]} */
     let trucks;
     try {
       trucks = dimension.getEntities({ type: "blake:monster_truck" });
     } catch {
+      sawEveryTruck = false;
       continue;
     }
 
     for (const truck of trucks) {
       if (!truck || !truck.isValid) continue;
+      presentTrucks.add(truck.id);
 
       const state = truckStates.get(truck.id) || createTruckState();
       truckStates.set(truck.id, state);
       const tickNumber = typeof system.currentTick === "number" ? system.currentTick : currentTick++;
       tickTruck(truck, dimension, state, tickInput, tickNumber);
     }
+  }
+
+  if (!sawEveryTruck) return;
+  for (const [truckId, state] of truckStates) {
+    if (presentTrucks.has(truckId)) continue;
+    releaseTruck(truckId, state, tickInput);
+    truckStates.delete(truckId);
   }
 }
 
