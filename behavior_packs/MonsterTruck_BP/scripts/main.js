@@ -9,17 +9,15 @@ import {
 import { isFoliage, isDestructibleWoodOrGlass, canDemolishWood, canShearFoliage } from "./demolition.js";
 import {
   calculateDynamicPitch,
-  calculateSteerAngle,
   sampleGroundHeight
 } from "./kinematics.js";
 import {
-  calculateAquaticImpulse,
-  calculateAquaticIntent,
   classifyShorelineColumn,
   calculateShorelineStepImpulse,
-  aquaticVelocityTarget,
+  LIQUID_DRAG_RETENTION,
   shouldShieldRiderFromHeat
 } from "./amphibious.js";
+import { createDrivingState, groundRetention, headingVector, stepDriving } from "./driving.js";
 import {
   calculateTrampleDamage,
   canApplyTireTrample,
@@ -32,36 +30,31 @@ import {
   getSafeDismountLocation
 } from "./trample.js";
 import {
-  calculateJumpImpulse,
-  canTriggerJump,
   calculateCrushStompDamage,
   calculateShockwaveImpulse,
+  isCrushStompLanding,
   PNEUMATIC_VENT_SOUND,
   PNEUMATIC_DUST_PARTICLE,
   shouldAbsorbFallDamage,
-  isFallingOrAirborne,
-  calculateWheelContactOffsets,
-  advanceJumpPhase
+  isFalling,
+  calculateWheelContactOffsets
 } from "./suspension.js";
 
 // Track state of each truck across ticks
 const truckStates = new Map();
 const entityHitCooldowns = new Map();
 const protectedRiders = new Map();
-const pendingJumpRequests = new Map();
-const seatedDriverAssignments = new Map();
+const AIR_DRAG_RETENTION = 0.91; // horizontal velocity kept per tick while airborne
 let currentTick = 0;
 const DIMENSIONS = ["overworld", "nether", "the_end"];
 
-// Driver movement input ({ x: strafe, y: forward }). Exported so Scenario Runs can supply
-// the input a Simulated Driver's inputInfo never reports (ADR-0016).
+// Driver input: movement ({ x: strafe, y: forward }) and the held Jump button, which is the
+// handbrake. Exported so Scenario Runs can supply the input a Simulated Driver's inputInfo
+// never reports (ADR-0016).
 export const driverInput = {
   movement: (driver) => driver.inputInfo.getMovementVector(),
+  handbrake: (driver) => driver.inputInfo.getButtonState(InputButton.Jump) === ButtonState.Pressed,
 };
-
-function getCurrentTick() {
-  return typeof system.currentTick === "number" ? system.currentTick : currentTick;
-}
 
 function protectRidersForLifecycle(state, truckId, riderIds) {
   state.protectedRiderIds = new Set(riderIds);
@@ -194,26 +187,64 @@ function onTick() {
       }
 
       const driver = currentRiders.length > 0 ? currentRiders[0] : undefined;
-      if (driver) seatedDriverAssignments.set(driver.id, { truckId: truck.id, tick: tickNumber });
 
-      // Dynamic Incline Pitch and Coordinated Four-Wheel Steering updates
-      let currentYaw = 0;
-      try {
-        if (truck.getRotation) {
-          currentYaw = truck.getRotation().y;
+      // Script-driven driving (ADR-0017): W/S throttle, A/D steer the wheels, Jump held is
+      // the handbrake. The truck's yaw is owned here; the driver's mouse only moves the camera.
+      let driverControls = {};
+      if (driver) {
+        try {
+          const movement = driverInput.movement(driver);
+          driverControls = { forward: movement.y, strafe: movement.x };
+        } catch {}
+        try {
+          driverControls.handbrake = driverInput.handbrake(driver);
+        } catch {}
+      }
+      if (!state.driving) {
+        let spawnYaw = 0;
+        try { spawnYaw = truck.getRotation().y; } catch {}
+        state.driving = createDrivingState(spawnYaw);
+      }
+      const inLiquid = inWater || inLava;
+      // A Shoreline Step-Up lifts the truck clear of the liquid; keep driving it forward over
+      // the bank's edge while it rises.
+      const steppingAshore = state.lastShorelineStep !== undefined && tickNumber - state.lastShorelineStep < 8;
+      const onGround = Boolean(truck.isOnGround);
+      const wheelsDown = inLiquid || onGround || steppingAshore;
+      const lastMotion = headingVector(state.driving.yaw + state.driving.slip);
+      const wasMoving = state.driving.speed !== 0;
+      const drive = stepDriving(state.driving, driverControls, {
+        grounded: wheelsDown,
+        // Afloat, a bank is climbed by Shoreline Step-Up, so keep pushing rather than stopping.
+        measuredSpeed: wasMoving && !inLiquid ? dx * lastMotion.x + dz * lastMotion.z : undefined
+      });
+      state.driving = drive.state;
+      if (wheelsDown && (wasMoving || drive.state.speed !== 0 || driverControls.handbrake)) {
+        // Replace the engine's horizontal velocity with the driven one. The engine applies ground
+        // friction or liquid drag before moving the truck, so ask for what survives it.
+        let retention = inLava ? LIQUID_DRAG_RETENTION.lava : inWater ? LIQUID_DRAG_RETENTION.water : undefined;
+        if (retention === undefined && !onGround) {
+          retention = AIR_DRAG_RETENTION;
+        } else if (retention === undefined) {
+          let ground;
+          try { ground = dimension.getBlock({ x: loc.x, y: loc.y - 0.5, z: loc.z })?.typeId; } catch {}
+          retention = groundRetention(ground);
         }
+        const current = vel || { x: 0, z: 0 };
+        try {
+          truck.applyImpulse({
+            x: drive.velocity.x / retention - current.x,
+            y: 0,
+            z: drive.velocity.z / retention - current.z
+          });
+        } catch {}
+      }
+      try {
+        truck.setRotation({ x: 0, y: drive.state.yaw });
       } catch {}
 
-      const prevYaw = typeof state.prevYaw === "number" ? state.prevYaw : currentYaw;
-      let deltaYaw = ((currentYaw - prevYaw + 540) % 360) - 180;
-      state.prevYaw = currentYaw;
-
-      // Update steering angle and sync to property
-      state.steerAngle = calculateSteerAngle({
-        deltaYaw,
-        currentSteer: state.steerAngle || 0,
-        hasDriver: Boolean(driver)
-      });
+      // Coordinated Four-Wheel Steering: the front wheels show the A/D steering angle.
+      state.steerAngle = Math.round(drive.state.steer);
       try {
         truck.setProperty("blake:steer_angle", state.steerAngle);
       } catch {}
@@ -237,7 +268,7 @@ function onTick() {
         frontHeight,
         rearHeight,
         currentPitch: state.pitchAngle || 0,
-        isAirborne: Boolean(state.isAirborne || state.isFalling),
+        isAirborne: Boolean(state.isFalling),
         inLiquid: inWater || inLava,
         verticalVelocity,
         horizontalSpeed: effectiveSpeed
@@ -246,60 +277,30 @@ function onTick() {
         truck.setProperty("blake:pitch_angle", state.pitchAngle);
       } catch {}
 
-      // Aquatic propulsion and Shoreline Step-Up
-      if ((inWater || inLava) && driver) {
+      // Shoreline Step-Up: driving forward against a 1-2 block bank lifts the truck out.
+      // Propulsion on liquids is the driving above.
+      if (inLiquid && driver && (driverControls.forward ?? 0) > 0.05) {
         const isNonAirNonLiquid = (b) => b && !b.isAir && b.typeId !== "minecraft:air" && !isLiquidBlock(b.typeId);
         const baseY = Math.floor(loc.y);
+        const intentDir = headingVector(drive.state.yaw);
+        const intentPerp = { x: -intentDir.z, z: intentDir.x };
         let bankFound = null;
-        let aquaticIntent = { active: false, heading: { x: dirX, z: dirZ }, throttle: 0 };
 
         try {
-          aquaticIntent = calculateAquaticIntent(
-            driverInput.movement(driver),
-            { x: dirX, z: dirZ }
-          );
-        } catch {}
-
-        try {
-          const latOffsets = [0, -0.8, 0.8];
-          for (const lat of latOffsets) {
-            const intentDir = aquaticIntent.active ? aquaticIntent.heading : { x: dirX, z: dirZ };
-            const intentPerp = { x: -intentDir.z, z: intentDir.x };
+          for (const lat of [0, -0.8, 0.8]) {
             const checkX = Math.floor(loc.x + intentDir.x * 1.5 + intentPerp.x * lat);
             const checkZ = Math.floor(loc.z + intentDir.z * 1.5 + intentPerp.z * lat);
-
-            const bAtWater = dimension.getBlock({ x: checkX, y: baseY, z: checkZ });
-            const bAbove1 = dimension.getBlock({ x: checkX, y: baseY + 1, z: checkZ });
-            const bAbove2 = dimension.getBlock({ x: checkX, y: baseY + 2, z: checkZ });
-            const bAbove3 = dimension.getBlock({ x: checkX, y: baseY + 3, z: checkZ });
-
-            const solid0 = isNonAirNonLiquid(bAtWater);
-            const solid1 = isNonAirNonLiquid(bAbove1);
-            const solid2 = isNonAirNonLiquid(bAbove2);
-            const solid3 = isNonAirNonLiquid(bAbove3);
-
-            const res = classifyShorelineColumn([solid0, solid1, solid2, solid3]);
+            const column = [0, 1, 2, 3].map((h) => isNonAirNonLiquid(dimension.getBlock({ x: checkX, y: baseY + h, z: checkZ })));
+            const res = classifyShorelineColumn(column);
             if (res.isShoreline) {
               bankFound = res;
               break;
             }
           }
 
-          if (aquaticIntent.active && bankFound && (!state.lastShorelineStep || tickNumber - state.lastShorelineStep > 12)) {
+          if (bankFound && (!state.lastShorelineStep || tickNumber - state.lastShorelineStep > 12)) {
             state.lastShorelineStep = tickNumber;
-            const stepImpulse = calculateShorelineStepImpulse(aquaticIntent.heading, bankFound.stepHeight);
-            truck.applyImpulse(stepImpulse);
-          } else if (aquaticIntent.active && !state.isAirborne) {
-            // Apply propulsion from current Driver input, including from rest.
-            const curVel = vel || { x: dx, z: dz };
-            const aquaticImpulse = calculateAquaticImpulse(
-              curVel,
-              aquaticIntent.heading,
-              aquaticVelocityTarget(inLava, aquaticIntent.throttle)
-            );
-            if (aquaticImpulse.x !== 0 || aquaticImpulse.z !== 0) {
-              truck.applyImpulse(aquaticImpulse);
-            }
+            truck.applyImpulse(calculateShorelineStepImpulse(intentDir, bankFound.stepHeight));
           }
         } catch {}
       }
@@ -329,12 +330,10 @@ function onTick() {
         } catch {}
       }
 
-      const requestedAt = pendingJumpRequests.get(truck.id);
-      const jumpWasRequested = requestedAt !== undefined && tickNumber - requestedAt <= 2;
       const velY = vel ? vel.y : dy;
-      const airborneOrFalling = isFallingOrAirborne(Boolean(state.isAirborne), dy, velY);
+      const falling = isFalling(dy, velY);
 
-      // Rider dismount management: differentiate deliberate Sneak (Shift) from Spacebar jump ejection
+      // Rider dismount management: Sneak (Shift) is the only deliberate exit
       if (prevRiders.length > currentRiders.length) {
         const currentRiderIds = new Set(currentRiders.map((r) => r.id));
         const dismountedIds = prevRiders.filter((id) => !currentRiderIds.has(id));
@@ -350,7 +349,10 @@ function onTick() {
                   protectRidersForLifecycle(state, truck.id, prevRiders);
                 }
                 state.riderRetentionUntil = tickNumber + 8;
-                if (airborneOrFalling && !state.isAirborne) state.isFalling = true;
+                if (falling && !state.isFalling) {
+                  state.isFalling = true;
+                  state.fallStartY = loc.y - dy;
+                }
                 rideable.addRider(player);
               } else if (inLava || inWater) {
                 // Deliberate sneak dismount over liquid: teleport to safe shoreline
@@ -366,36 +368,7 @@ function onTick() {
         }
       }
 
-      // Suspension Jump execution: driver Jump input only. Upward velocity alone is not
-      // a jump request; engine auto-steps and shoreline climbs rise just as fast.
-      const isJumpTriggered = jumpWasRequested;
-      if (isJumpTriggered && !state.isAirborne &&
-          canTriggerJump(state.lastJumpTick, tickNumber) &&
-          canTriggerJump(state.lastLandingTick, tickNumber)) {
-        pendingJumpRequests.delete(truck.id);
-        state.lastJumpTick = tickNumber;
-        state.isAirborne = true;
-        state.jumpPhase = "launch";
-        protectRidersForLifecycle(state, truck.id, prevRiders.length ? prevRiders : state.riders);
-        const jImpulse = calculateJumpImpulse(effectiveSpeed, { x: dirX, z: dirZ });
-        try { truck.applyImpulse(jImpulse); } catch {}
-
-        // Audio & Particles
-        try {
-          dimension.playSound("random.fizz", loc, { volume: 1.0, pitch: 0.8 });
-          dimension.spawnParticle("minecraft:campfire_smoke_particle", { x: loc.x, y: loc.y + 0.2, z: loc.z });
-          if (inWater) {
-            dimension.playSound("random.splash", loc, { volume: 1.2, pitch: 0.9 });
-            dimension.spawnParticle("minecraft:water_splash_particle", { x: loc.x, y: loc.y + 0.5, z: loc.z });
-          } else if (inLava) {
-            dimension.playSound("random.fizz", loc, { volume: 1.2, pitch: 0.6 });
-            dimension.spawnParticle("minecraft:lava_particle", { x: loc.x, y: loc.y + 0.5, z: loc.z });
-            dimension.spawnParticle("minecraft:basic_flame_particle", { x: loc.x, y: loc.y + 0.5, z: loc.z });
-          }
-        } catch {}
-      }
-
-      if (state.isAirborne || state.isFalling ||
+      if (state.isFalling ||
           (state.riderRetentionUntil && tickNumber <= state.riderRetentionUntil)) {
         restoreProtectedRiders(state, rideable);
       } else if (state.riderRetentionUntil && tickNumber > state.riderRetentionUntil) {
@@ -403,32 +376,21 @@ function onTick() {
         delete state.riderRetentionUntil;
       }
 
-      // Free-fall and airborne tracking
-      if (airborneOrFalling && !state.isAirborne) {
+      // Free-fall tracking: remember where the drop began for Crush Stomp
+      if (falling && !state.isFalling) {
         state.isFalling = true;
+        state.fallStartY = loc.y - dy;
         if (!state.protectedRiderIds?.size) {
           protectRidersForLifecycle(state, truck.id, state.riders);
         }
       }
 
-
-
       // Pneumatic Shock Absorption & Landing Detection
-      if (state.isAirborne || state.isFalling) {
+      if (state.isFalling) {
         const grounded = Boolean(truck.isOnGround);
-        const jumpProgress = advanceJumpPhase(state.jumpPhase, {
-          verticalVelocity: velY,
-          deltaY: dy,
-          grounded
-        });
-        state.jumpPhase = jumpProgress.phase;
-        const fallLanded = state.isFalling && !state.isAirborne && grounded && dy <= 0;
-
-        if (jumpProgress.didLand || fallLanded) {
-          const wasJump = jumpProgress.didLand;
-          state.isAirborne = false;
+        if (grounded && dy <= 0) {
+          const crushes = isCrushStompLanding((state.fallStartY ?? loc.y) - loc.y);
           state.isFalling = false;
-          state.lastLandingTick = tickNumber;
           state.riderRetentionUntil = tickNumber + 8;
 
           // Dissipate impact energy with pneumatic venting audio and quad wheel dust particles
@@ -444,7 +406,7 @@ function onTick() {
             }
           } catch {}
 
-          if (wasJump) {
+          if (crushes) {
             const crushDamage = calculateCrushStompDamage();
             try {
               const nearby = dimension.getEntities({ location: loc, maxDistance: 3.5 });
@@ -472,7 +434,7 @@ function onTick() {
       }
 
       // Tire trample check (within 1.6 blocks contact perimeter)
-      if (canApplyTireTrample(effectiveSpeed, state.isAirborne)) {
+      if (canApplyTireTrample(effectiveSpeed, false)) {
         try {
           const nearbyEntities = dimension.getEntities({
             location: loc,
@@ -578,7 +540,7 @@ function onTick() {
 
       // Foliage shearing at any speed with driver; structural wood requires > 0.25 momentum
       const hasDriver = Boolean(driver);
-      const canWood = canDemolishWood(effectiveSpeed, state.isAirborne);
+      const canWood = canDemolishWood(effectiveSpeed);
       const canFoliage = canShearFoliage(hasDriver);
 
       if (!canWood && !canFoliage) {
@@ -595,8 +557,8 @@ function onTick() {
           const px = Math.floor(loc.x + dirX * fwd + perpX * lat);
           const pz = Math.floor(loc.z + dirZ * fwd + perpZ * lat);
 
-          // Foliage cleared up to 5 blocks high (0..4), wood/glass up to 5 blocks high when airborne, 3 blocks high on ground
-          const maxWoodHeight = state.isAirborne ? 5 : 3;
+          // Foliage cleared up to 5 blocks high (0..4), wood/glass up to 3 blocks high
+          const maxWoodHeight = 3;
           for (let h = 0; h < 5; h++) {
             const py = baseY + h;
             const key = `${px},${py},${pz}`;
@@ -663,41 +625,6 @@ function isDeliberateRetrieval(event) {
   } catch {
     return false;
   }
-}
-
-// Driver Jump input: queue a Suspension Jump for the truck the player drives. Exported so
-// Scenario Runs can supply the same input a Simulated Driver cannot press (ADR-0016).
-export function requestDriverJump(player) {
-  try {
-    const tick = getCurrentTick();
-    let truck = player.getComponent("minecraft:riding")?.entityRidingOn;
-    if (!truck) {
-      const assignment = seatedDriverAssignments.get(player.id);
-      if (assignment && tick - assignment.tick <= 2) {
-        truck = world.getEntity(assignment.truckId);
-      }
-    }
-    if (truck?.typeId === "blake:monster_truck") {
-      pendingJumpRequests.set(truck.id, tick);
-      system.run(() => {
-        try {
-          // Re-seat only a driver the engine detached. Re-adding a seated rider is the
-          // suspected cause of the client showing the driver briefly outside the truck (#32).
-          const seated = player.getComponent("minecraft:riding")?.entityRidingOn?.id === truck.id;
-          if (truck.isValid && !seated && !player.isSneaking) {
-            truck.getComponent("minecraft:rideable")?.addRider(player);
-          }
-        } catch {}
-      });
-    }
-  } catch {}
-}
-
-if (world.afterEvents && world.afterEvents.playerButtonInput) {
-  world.afterEvents.playerButtonInput.subscribe((event) => {
-    if (event.button !== InputButton.Jump || event.newButtonState !== ButtonState.Pressed) return;
-    requestDriverJump(event.player);
-  });
 }
 
 if (world.beforeEvents && world.beforeEvents.entityHurt) {

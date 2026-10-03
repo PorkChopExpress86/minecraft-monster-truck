@@ -55,31 +55,6 @@ export function calculateDynamicPitch({
 }
 
 /**
- * Calculates front wheel steering angle based on yaw angular rate and centering spring.
- */
-export function calculateSteerAngle({
-  deltaYaw = 0.0,
-  currentSteer = 0.0,
-  hasDriver = false,
-  returnSpeed = 0.35,
-  steerSpeed = 0.30,
-  steerRate = 4.0
-}) {
-  if (!hasDriver || Math.abs(deltaYaw) < 0.05) {
-    // Centering spring
-    const centered = currentSteer * (1.0 - returnSpeed);
-    if (Math.abs(centered) < 0.5) return 0;
-    return Math.round(centered);
-  }
-
-  // Active turning
-  const targetSteer = Math.max(-MAX_STEER_DEGREES, Math.min(MAX_STEER_DEGREES, deltaYaw * steerRate));
-  const factor = Math.max(0.0, Math.min(1.0, steerSpeed));
-  const smoothed = currentSteer + (targetSteer - currentSteer) * factor;
-  return Math.round(smoothed);
-}
-
-/**
  * Calculates counter-phase rear wheel steering angle from front steer angle.
  */
 export function calculateRearSteerAngle(frontSteer) {

@@ -29,7 +29,7 @@ import {
   PNEUMATIC_VENT_SOUND,
   PNEUMATIC_DUST_PARTICLE,
   shouldAbsorbFallDamage,
-  isFallingOrAirborne,
+  isFalling,
   calculateWheelContactOffsets
 } from './behavior_packs/MonsterTruck_BP/scripts/suspension.js';
 
@@ -43,11 +43,10 @@ assert.equal(shouldAbsorbFallDamage("damage.fall", true), true, "Bedrock fall ca
 assert.equal(shouldAbsorbFallDamage("entity_attack", true), false, "Combat attacks must not be absorbed as fall damage");
 assert.equal(shouldAbsorbFallDamage("fall", false), false, "Non-riders/non-trucks must not absorb fall damage");
 
-// 3. Fall / Airborne state detection across jumps and cliff drops
-assert.equal(isFallingOrAirborne(true, 0, 0), true, "Active jump must be treated as airborne");
-assert.equal(isFallingOrAirborne(false, -0.35, 0), true, "Negative delta Y must be detected as falling");
-assert.equal(isFallingOrAirborne(false, 0, -0.40), true, "Negative vertical velocity must be detected as falling");
-assert.equal(isFallingOrAirborne(false, 0, 0), false, "Level ground travel must not be detected as falling");
+// 3. Fall detection for cliff and ramp drops
+assert.equal(isFalling(-0.35, 0), true, "Negative delta Y must be detected as falling");
+assert.equal(isFalling(0, -0.40), true, "Negative vertical velocity must be detected as falling");
+assert.equal(isFalling(0, 0), false, "Level ground travel must not be detected as falling");
 
 // 4. Wheel contact points for pneumatic dust cloud dissipation
 const wheelOffsets = calculateWheelContactOffsets({ x: 1, z: 0 }, { x: 0, z: 1 }, 1.3, 0.9);
@@ -71,11 +70,11 @@ def test_script_pneumatic_shock_absorption_integration():
     assert "PNEUMATIC_DUST_PARTICLE" in content, "main.js must reference PNEUMATIC_DUST_PARTICLE"
     assert "world.beforeEvents" in content, "main.js must register beforeEvents listener for pneumatic shock absorption"
     assert "recentRiders" not in content, "Fall protection must follow the vehicle event, not a broad time window"
-    assert "protectedRiders" in content, "Jump/drop lifecycle must explicitly own rider protection"
-    assert content.index("const airborneOrFalling") < content.index("// Rider dismount management")
+    assert "protectedRiders" in content, "Drop lifecycle must explicitly own rider protection"
+    assert content.index("const falling = isFalling(") < content.index("// Rider dismount management")
     assert "if (!player.isSneaking && rideable && rideable.addRider)" in content
     assert "protectRidersForLifecycle(state, truck.id, prevRiders)" in content
-    assert "state.isAirborne || state.isFalling ||" in content
+    assert "if (state.isFalling ||" in content
 
 
 def test_script_api_version_supports_required_input_and_before_hurt_events():
@@ -90,5 +89,5 @@ def test_script_api_version_supports_required_input_and_before_hurt_events():
     assert bedrock["script_api_version"] == "2.10.0"
 
     main = (REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "main.js").read_text(encoding="utf-8")
-    assert "playerButtonInput" in main
-    assert "InputButton.Jump" in main
+    # The held Jump button is the handbrake (ADR-0017).
+    assert "getButtonState(InputButton.Jump) === ButtonState.Pressed" in main

@@ -10,8 +10,9 @@ def test_airborne_demolition_and_crush_logic_contracts():
     assert main_script.exists()
     content = main_script.read_text(encoding="utf-8")
     
-    # Check airborne demolition bypass
-    assert "state.isAirborne" in content, "Must track airborne state for jump trajectory"
+    # Crush Stomp fires on landings from drops of 3+ blocks (ADR-0017)
+    assert "state.fallStartY = loc.y - dy" in content, "Must remember where a drop began"
+    assert "isCrushStompLanding(" in content
     assert "calculateCrushStompDamage" in content
     assert "calculateShockwaveImpulse" in content
     assert "isProtectedTarget" in content

@@ -12,9 +12,10 @@ def test_seat_configuration_and_ground_driving_authority():
     data = json.loads(bp_entity_path.read_text(encoding="utf-8"))
     comps = data["minecraft:entity"]["components"]
 
-    # 1. Ground driving authority must be present for WASD keyboard control
-    assert "minecraft:input_ground_controlled" in comps, "Must have minecraft:input_ground_controlled for WASD driving"
-    assert "minecraft:can_power_jump" not in comps, "Native charged jumping must not overlap script-owned Suspension Jump"
+    # 1. Script-driven driving owns WASD (ADR-0017): the engine must not steer by the mouse,
+    # strafe on A/D, or treat Space as a dismount or a native jump.
+    assert "minecraft:input_ground_controlled" not in comps, "Engine ground control would steer by the mouse"
+    assert "minecraft:can_power_jump" not in comps, "Space is the handbrake, not a native jump"
 
     # 2. Rideable seats
     rideable = comps["minecraft:rideable"]

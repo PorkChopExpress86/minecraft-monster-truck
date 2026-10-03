@@ -56,48 +56,15 @@ def test_amphibious_physics_helpers_via_node():
     script = r'''
 import assert from 'node:assert/strict';
 import {
-  CRUISING_AQUATIC_SPEED,
   LIQUID_DRAG_RETENTION,
-  aquaticVelocityTarget,
-  calculateAquaticImpulse,
-  calculateAquaticIntent,
   classifyShorelineColumn,
   detectShorelineBank,
   calculateShorelineStepImpulse
 } from './behavior_packs/MonsterTruck_BP/scripts/amphibious.js';
 
-// Speed target contract
-assert.equal(CRUISING_AQUATIC_SPEED, 1.1);
-
-// Aquatic forward impulse from standstill
-const impulseFromStop = calculateAquaticImpulse({ x: 0, z: 0 }, { x: 1, z: 0 }, 0.55);
-assert.ok(impulseFromStop.x > 0.1, "Impulse should push forward when speed is below 0.55");
-assert.equal(impulseFromStop.y, 0, "No vertical impulse during cruising");
-assert.equal(impulseFromStop.z, 0);
-
-// Zero impulse when already at cruising speed
-const impulseAtSpeed = calculateAquaticImpulse({ x: 0.55, z: 0 }, { x: 1, z: 0 }, 0.55);
-assert.equal(impulseAtSpeed.x, 0, "No added impulse when already at full speed");
-
-// Liquid drag is compensated: after drag the truck covers full overland cruising distance.
-for (const [inLava, liquid] of [[false, "water"], [true, "lava"]]) {
-  const target = aquaticVelocityTarget(inLava);
-  assert.ok(Math.abs(target * LIQUID_DRAG_RETENTION[liquid] - CRUISING_AQUATIC_SPEED) < 1e-9, liquid);
-  const afterDrag = CRUISING_AQUATIC_SPEED;
-  const restore = calculateAquaticImpulse({ x: afterDrag, z: 0 }, { x: 1, z: 0 }, target);
-  assert.ok(Math.abs(afterDrag + restore.x - target) < 1e-9, "steady state restores the drag loss in one tick: " + liquid);
-}
-assert.equal(aquaticVelocityTarget(false, 0.5), aquaticVelocityTarget(false) / 2, "partial throttle scales the target");
-
-// Player movement intent, not existing momentum, owns liquid propulsion.
-const forwardIntent = calculateAquaticIntent({ x: 0, y: 1 }, { x: 1, z: 0 });
-assert.equal(forwardIntent.active, true);
-assert.deepEqual(forwardIntent.heading, { x: 1, z: 0 });
-const steeringIntent = calculateAquaticIntent({ x: 1, y: 0 }, { x: 1, z: 0 });
-assert.equal(steeringIntent.active, true);
-assert.ok(steeringIntent.heading.z > 0, "Lateral input must steer away from stale momentum");
-assert.equal(calculateAquaticIntent({ x: 0, y: 0 }, { x: 1, z: 0 }).active, false,
-  "Released controls must stop adding propulsion");
+// Liquid drag retention measured by Scenario Runs; driving divides its velocity by it so
+// liquids are crossed at overland speed (flotation scenarios assert the outcome).
+assert.deepEqual(LIQUID_DRAG_RETENTION, { water: 0.86, lava: 0.72 });
 
 // Shoreline detection
 assert.equal(detectShorelineBank(true, true, false).isShoreline, true);

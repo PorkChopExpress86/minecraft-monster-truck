@@ -5,7 +5,7 @@ This domain encompasses the vehicle entities, player driving mechanics, audio sy
 ## Language
 
 **Monster Truck**:
-A high-clearance, two-seat ground vehicle entity (`blake:monster_truck`) capable of traversing 2-block stepped terrain with direct WASD player control.
+A high-clearance, two-seat ground vehicle entity (`blake:monster_truck`) capable of traversing 2-block stepped terrain, driven with W/S throttle, A/D steering, and a Space handbrake while the mouse only looks around.
 _Avoid_: Car, mob, mount, horse
 
 **Driver Seat**:
@@ -57,16 +57,16 @@ A headless verification run on a dedicated server in which a Simulated Driver op
 _Avoid_: Integration test, physics test, game run
 
 **Simulated Driver**:
-A server-side simulated player that boards the Driver Seat and supplies real movement, steering, and jump input, standing in for a human player during a Scenario Run.
+A server-side simulated player that boards the Driver Seat and supplies movement, steering, and handbrake input, standing in for a human player during a Scenario Run.
 _Avoid_: Bot, fake player, dummy, NPC
 
 **Scenario World**:
 The generated flat world used only by Scenario Runs, distinct from the Dedicated Test World and permitted to enable experimental test-only APIs that player worlds never use.
 _Avoid_: Test server world, BDS world
 
-**Suspension Jump**:
-The active, driver-triggered vertical launch that propels the vehicle upward to clear 3-block obstacles or ravines.
-_Avoid_: Jumping, hop, rocket jump, bounce
+**Handbrake Drift**:
+Holding Space locks the rear wheels: in a straight line the truck stops hard; while steering at speed the rear swings out so the truck turns faster than it travels and slides sideways, and on release the tires regain grip within about half a second. A parked truck with the handbrake held does not move.
+_Avoid_: Jump, e-brake, powerslide, skid
 
 **Amphibious Flotation**:
 The vehicle's continuous buoyancy and high-traction liquid propulsion enabling it to navigate and maneuver across water and lava surfaces at full overland cruising speed using giant tire displacement.
@@ -81,11 +81,11 @@ The superheated offensive state triggered by traversing lava, causing the truck'
 _Avoid_: Fire ram, flaming wheels, burn attack
 
 **Crush Stomp**:
-The high-impact downward kinetic force and radial knockback inflicted on entities beneath the vehicle when landing from a Suspension Jump.
+The high-impact downward kinetic force and radial knockback inflicted on entities beneath the vehicle when the vehicle lands from a drop of 3 or more blocks, such as off a cliff or ramp.
 _Avoid_: Ground pound, butt slam, crash landing
 
 **Pneumatic Shock Absorption**:
-The complete kinetic dampening provided by the vehicle's massive tires and heavy-duty suspension, providing 100% fall damage immunity to both the vehicle and its seated riders upon high drops and jumps, accompanied by pneumatic venting audio and impact dust particles.
+The complete kinetic dampening provided by the vehicle's massive tires and heavy-duty suspension, providing 100% fall damage immunity to both the vehicle and its seated riders upon high drops, accompanied by pneumatic venting audio and impact dust particles.
 _Avoid_: Fall damage negation, soft landing, cushioned fall
 
 **Dynamic Incline Pitch**:
@@ -93,7 +93,7 @@ The dual-axle terrain-contour visual pitch tilt of the vehicle chassis and wheel
 _Avoid_: Tilt, lean, slope lock, pitch glitch
 
 **Coordinated Four-Wheel Steering**:
-The counter-phase lateral angular deflection of front and rear wheel assemblies driven by turning rate with dynamic hydraulic spring-return centering.
+The counter-phase lateral angular deflection of front and rear wheel assemblies set by the driver's A/D steering input, with spring-return centering on release. The vehicle turns only while rolling, in a tighter arc at low speed than at high speed, and the driver's look direction never steers it.
 _Avoid_: Wheel turning, car turn, crab steering
 
 **Sixteen-Color Palette**:

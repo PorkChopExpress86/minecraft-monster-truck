@@ -13,7 +13,6 @@ def test_kinematics_pitch_and_steering_contracts():
 import assert from 'node:assert/strict';
 import {
   calculateDynamicPitch,
-  calculateSteerAngle,
   calculateRearSteerAngle,
   MAX_PITCH_DEGREES,
   MAX_STEER_DEGREES,
@@ -118,34 +117,8 @@ const airborneDescent = calculateDynamicPitch({
 });
 assert.ok(airborneDescent < 0, "Airborne descent must nose down");
 
-// 5. Coordinated Four-Wheel Steering
-// Turning left (deltaYaw > 0)
-const steerLeft = calculateSteerAngle({
-  deltaYaw: 5.0,
-  currentSteer: 0.0,
-  hasDriver: true,
-  steerSpeed: 1.0 // instant response
-});
-assert.ok(steerLeft > 0 && steerLeft <= 26, `Steer left should be positive, got ${steerLeft}`);
-
-// Maximum steering clamp
-const steerMax = calculateSteerAngle({
-  deltaYaw: 30.0,
-  currentSteer: 0.0,
-  hasDriver: true,
-  steerSpeed: 1.0
-});
-assert.equal(steerMax, 26, `Steering angle must clamp to 26, got ${steerMax}`);
-
-// Centering spring when driving straight
-const straightCentering = calculateSteerAngle({
-  deltaYaw: 0.0,
-  currentSteer: 20.0,
-  hasDriver: true,
-  returnSpeed: 0.35
-});
-assert.ok(straightCentering < 20.0 && straightCentering > 0.0, "Steering should return toward 0");
-
+// 5. Coordinated Four-Wheel Steering: A/D set the front angle (driving.js, tests/test_driving.py);
+// the rear wheels counter-steer from it.
 // Rear counter-steering ratio
 assert.equal(calculateRearSteerAngle(26), -18);
 assert.equal(calculateRearSteerAngle(-26), 18);

@@ -52,7 +52,7 @@ def test_readme_and_context_cover_all_sixteen_colors():
 def test_proving_ground_checklist_covers_kinematics_and_sixteen_colors():
     pg = (ROOT / "docs/PROVING_GROUND.md").read_text(encoding="utf-8")
     assert "15. 16 Paint Colors" in pg
-    assert "17. Suspension Jump" in pg
+    assert "17. Handbrake Drift" in pg
     assert "18. Crush Stomp Landing" in pg
     assert "19. Shock Absorption" in pg
     assert "20. Amphibious Flotation" in pg

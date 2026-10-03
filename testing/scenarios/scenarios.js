@@ -1,5 +1,6 @@
 import { ItemStack, world, EntityDamageCause } from "@minecraft/server";
-import { requestDriverJump } from "../main.js";
+import { driverInput } from "../main.js";
+import { headingVector } from "../driving.js";
 import {
   board, drive, fill, health, horizontal, park, resetArena, riders, spawnTruck, wait,
 } from "./arena.js";
@@ -35,7 +36,7 @@ async function recordTruckHits(fn) {
   const hits = [];
   const listener = world.afterEvents.entityHurt.subscribe(event => {
     if (event.damageSource.damagingEntity?.typeId === "blake:monster_truck") {
-      hits.push({ target: event.hurtEntity, typeId: event.hurtEntity.typeId, damage: event.damage });
+      hits.push({ target: event.hurtEntity, typeId: event.hurtEntity.typeId, damage: event.damage, cause: event.damageSource.cause });
     }
   });
   try {
@@ -63,10 +64,14 @@ async function seats({ dimension, origin, driver, run, spawnPlayer }) {
   await wait(10);
   await board(passenger, truck, 1);
   const parked = truck.location;
-  passenger.setBodyRotation(0);
-  passenger.moveRelative(0, 1, 1);
-  await wait(30);
-  passenger.stopMoving();
+  // Full forward input from the Passenger Seat must not drive the truck.
+  const { movement } = driverInput;
+  driverInput.movement = player => (player.id === passenger.id ? { x: 0, y: 1 } : movement(player));
+  try {
+    await wait(30);
+  } finally {
+    driverInput.movement = movement;
+  }
   const passengerMoved = horizontal(truck.location, parked);
   if (passengerMoved > 0.5) throw new Error(`Passenger Seat steered the truck ${passengerMoved.toFixed(2)} blocks`);
   const before = truck.location;
@@ -91,53 +96,36 @@ async function auto_step({ dimension, origin, driver, run }) {
     throw new Error(`Controlled Auto-Step failed on a 2-block ledge: z=${(truck.location.z - origin.z).toFixed(1)} y=${topY.toFixed(2)}`);
   }
   if (topY - GROUND_Y > 2.5) {
-    throw new Error(`Controlled Auto-Step launched the truck to +${(topY - GROUND_Y).toFixed(2)} on a 2-block ledge (Suspension Jump without jump input)`);
+    throw new Error(`Controlled Auto-Step launched the truck to +${(topY - GROUND_Y).toFixed(2)} on a 2-block ledge (launched instead of stepping up)`);
   }
   checks.push(`climbed a 2-block ledge while driven (reached +${(topY - GROUND_Y).toFixed(2)})`);
   truck.remove();
   park(driver, origin);
   await wait(5);
-  // Three-block wall: needs a Suspension Jump, so driving alone must not clear it.
+  // Three-block wall: beyond Controlled Auto-Step, so driving must not clear it.
   resetArena(dimension, origin);
   fill(dimension, at(origin, -3, 10), at(origin, 3, 10, GROUND_Y + 2), "stone");
   truck = spawnTruck(dimension, run, at(origin, 0, 2));
   await wait(10);
   await board(driver, truck, 0);
   await drive(driver, 30);
-  if (truck.location.z > origin.z + 10) throw new Error("Truck drove over a 3-block wall without a Suspension Jump");
-  checks.push("a 3-block wall stops the truck without a jump");
+  if (truck.location.z > origin.z + 10) throw new Error("Truck drove over a 3-block wall");
+  checks.push("a 3-block wall stops the truck");
   return checks;
 }
 
-async function suspension_jump({ dimension, origin, driver, run }) {
-  fill(dimension, at(origin, -4, 12), at(origin, 4, 12, GROUND_Y + 2), "stone");
-  const truck = spawnTruck(dimension, run, at(origin, 0, 2));
-  await wait(10);
-  await board(driver, truck, 0);
-  let peak = truck.location.y;
-  let jumped = false;
-  const tracker = retentionTracker(truck, driver);
-  await drive(driver, 50, {
-    onTick: tick => {
-      tracker.sample(tick);
-      peak = Math.max(peak, truck.location.y);
-      if (!jumped && truck.location.z >= origin.z + 7) {
-        requestDriverJump(driver);
-        jumped = true;
-      }
-      return truck.location.z > origin.z + 20;
-    },
-  });
-  if (!jumped) throw new Error("Truck never reached the jump point");
-  if (peak - GROUND_Y < 3) throw new Error(`Suspension Jump peaked only +${(peak - GROUND_Y).toFixed(2)} blocks`);
-  if (truck.location.z <= origin.z + 13) throw new Error("Suspension Jump did not clear the 3-block wall");
-  if (riders(truck)[0]?.id !== driver.id) throw new Error("Driver was ejected by the Suspension Jump");
-  return [`Suspension Jump peaked +${(peak - GROUND_Y).toFixed(2)} blocks`, "cleared a 3-block wall with the driver still seated",
-    tracker.verify("moving Suspension Jump")];
+const yawOf = truck => truck.getRotation().y;
+
+// Signed angle (degrees) from the truck's heading to the direction it actually moved.
+function slipAngle(truck, from) {
+  const move = { x: truck.location.x - from.x, z: truck.location.z - from.z };
+  if (Math.hypot(move.x, move.z) < 0.05) return 0;
+  const head = headingVector(yawOf(truck));
+  return Math.atan2(head.x * move.z - head.z * move.x, head.x * move.x + head.z * move.z) * 180 / Math.PI;
 }
 
 // Per-tick rider retention (#32): the driver must stay in the truck's rider list, keep its
-// riding link, and stay at its seat offset on every tick of a Suspension Jump.
+// riding link, and stay at its seat offset on every tick.
 function retentionTracker(truck, driver) {
   const offset = () => ({
     x: driver.location.x - truck.location.x,
@@ -164,49 +152,160 @@ function retentionTracker(truck, driver) {
   };
 }
 
-async function jump_rider_retention({ dimension, origin, driver, run }) {
-  const truck = spawnTruck(dimension, run, at(origin, 0, 4));
+async function steering({ dimension, origin, driver, run }) {
+  const checks = [];
+  // Parked: A turns the front wheels fully but the truck does not spin in place.
+  let truck = spawnTruck(dimension, run, at(origin, 0, 4));
   await wait(10);
   await board(driver, truck, 0);
+  await drive(driver, 15, { forward: 0, strafe: 1 });
+  const parkedSteer = truck.getProperty("blake:steer_angle");
+  if (parkedSteer !== -26) throw new Error("A did not turn the parked truck's wheels fully left: " + parkedSteer);
+  if (Math.abs(yawOf(truck)) > 0.5) throw new Error("Parked truck spun in place: yaw " + yawOf(truck));
+  await drive(driver, 10, { forward: 0 });
+  if (truck.getProperty("blake:steer_angle") !== 0) throw new Error("Wheels did not spring back to center");
+  checks.push("parked: A turns the wheels fully (-26), truck holds its heading, wheels re-center on release");
+
+  // The mouse only moves the camera: turning the driver does not steer the truck.
+  driver.setBodyRotation(90);
+  const start = truck.location;
+  await drive(driver, 20);
+  if (Math.abs(yawOf(truck)) > 0.5) throw new Error("Driver look direction steered the truck: yaw " + yawOf(truck));
+  if (truck.location.z - start.z < 5 || Math.abs(truck.location.x - start.x) > 0.5) {
+    throw new Error(`Truck did not drive straight ahead: dx ${(truck.location.x - start.x).toFixed(2)} dz ${(truck.location.z - start.z).toFixed(2)}`);
+  }
+  checks.push("driver looking sideways: the truck keeps driving straight (mouse does not steer)");
+  truck.remove();
+  driver.setBodyRotation(0);
+
+  // While driving, A turns left (toward +X when facing +Z) and D turns right.
+  for (const [strafe, key] of [[1, "A"], [-1, "D"]]) {
+    park(driver, origin);
+    resetArena(dimension, origin);
+    truck = spawnTruck(dimension, run, at(origin, 0, -4));
+    await wait(10);
+    await board(driver, truck, 0);
+    await drive(driver, 20, { forward: 0.5 });
+    const before = { ...truck.location, yaw: yawOf(truck) };
+    await drive(driver, 20, { forward: 0.5, strafe });
+    const turned = yawOf(truck) - before.yaw;
+    const sideways = truck.location.x - before.x;
+    const left = strafe > 0;
+    if (left ? turned > -30 : turned < 30) throw new Error(`${key} turned the truck ${turned.toFixed(1)} degrees`);
+    if (left ? sideways < 2 : sideways > -2) throw new Error(`${key} moved the truck ${sideways.toFixed(2)} blocks sideways`);
+    checks.push(`${key} while driving turns ${left ? "left" : "right"}: yaw ${turned.toFixed(1)} degrees, ${sideways.toFixed(1)} blocks along X`);
+    truck.remove();
+  }
+  return checks;
+}
+
+async function handbrake({ dimension, origin, driver, run }) {
+  const checks = [];
+  // Straight line: from cruising speed the handbrake stops the truck hard, without turning.
+  let truck = spawnTruck(dimension, run, at(origin, 0, -4));
   await wait(10);
+  await board(driver, truck, 0);
+  await drive(driver, 30);
+  let last = truck.location;
+  let stopTick;
+  await drive(driver, 40, {
+    forward: 0,
+    handbrake: true,
+    onTick: tick => {
+      const moved = horizontal(truck.location, last);
+      last = truck.location;
+      if (stopTick === undefined && moved < 0.01) stopTick = tick;
+      return false;
+    },
+  });
+  if (stopTick === undefined || stopTick > 30) throw new Error("Handbrake did not stop the truck within 1.5 s");
+  if (Math.abs(yawOf(truck)) > 0.5) throw new Error("Straight handbrake stop turned the truck: yaw " + yawOf(truck));
+  checks.push(`straight handbrake stop from speed in ${stopTick} ticks without turning`);
+  const parkedAt = truck.location;
+  await drive(driver, 20, { forward: 1, handbrake: true });
+  if (horizontal(truck.location, parkedAt) > 0.1) throw new Error("Truck crept forward with the handbrake held");
+  checks.push("handbrake held: W does not move a parked truck");
+  truck.remove();
+
+  // Drift: steering with the handbrake held at speed swings the rear out; release regains grip.
+  park(driver, origin);
+  resetArena(dimension, origin);
+  truck = spawnTruck(dimension, run, at(origin, 0, -4));
+  await wait(10);
+  await board(driver, truck, 0);
+  await drive(driver, 30);
   const tracker = retentionTracker(truck, driver);
-  // Three stationary jumps, each requested once the truck has been back on the ground 15 ticks.
-  let jumps = 0;
-  let grounded = 0;
-  for (let tick = 0; tick < 240 && jumps < 3; tick++) {
-    await wait(1);
-    tracker.sample(tick);
-    grounded = truck.location.y - GROUND_Y < 0.05 ? grounded + 1 : 0;
-    if (grounded >= 15) {
-      requestDriverJump(driver);
-      jumps++;
-      grounded = 0;
-    }
-  }
-  for (let tick = 0; tick < 60; tick++) {
-    await wait(1);
-    tracker.sample(240 + tick);
-  }
-  if (jumps < 3) throw new Error(`Only ${jumps} stationary jumps completed`);
-  return [tracker.verify("3 stationary Suspension Jumps")];
+  let maxSlip = 0;
+  last = truck.location;
+  const yawBefore = yawOf(truck);
+  await drive(driver, 12, {
+    forward: 1,
+    strafe: -1,
+    handbrake: true,
+    onTick: tick => {
+      tracker.sample(tick);
+      maxSlip = Math.max(maxSlip, Math.abs(slipAngle(truck, last)));
+      last = truck.location;
+      return false;
+    },
+  });
+  const driftTurn = yawOf(truck) - yawBefore;
+  if (maxSlip < 10) throw new Error(`Handbrake turn did not slide: max slip ${maxSlip.toFixed(1)} degrees`);
+  checks.push(`handbrake drift: truck turned ${driftTurn.toFixed(1)} degrees while sliding up to ${maxSlip.toFixed(1)} degrees off its heading`);
+  let finalSlip = 0;
+  await drive(driver, 12, {
+    forward: 1,
+    onTick: tick => {
+      tracker.sample(12 + tick);
+      finalSlip = slipAngle(truck, last);
+      last = truck.location;
+      return false;
+    },
+  });
+  if (Math.abs(finalSlip) > 3) throw new Error(`Grip did not return after release: slip ${finalSlip.toFixed(1)} degrees`);
+  checks.push(`grip regained within 0.6 s of release (slip ${finalSlip.toFixed(1)} degrees)`);
+  checks.push(tracker.verify("handbrake drift"));
+  return checks;
 }
 
 async function crush_stomp({ dimension, origin, driver, run }) {
-  const truck = spawnTruck(dimension, run, at(origin, 0, 4));
-  await wait(10);
-  await board(driver, truck, 0);
-  const hits = await recordTruckHits(async () => {
-    requestDriverJump(driver);
-    await wait(8);
-    // Place a mob under the descending truck's footprint.
-    dimension.spawnEntity("minecraft:zombie", { ...truck.location, x: truck.location.x + 1, y: GROUND_Y });
-    await wait(60);
-  });
-  const crush = hits.find(hit => hit.typeId === "minecraft:zombie");
-  if (!crush) throw new Error("Crush Stomp landing did not damage the mob beneath");
-  if (crush.damage < 60) throw new Error("Crush Stomp damage below lethal threshold: " + crush.damage);
-  if (health(driver) !== PLAYER_MAX_HEALTH) throw new Error("Driver was hurt by the landing: " + health(driver));
-  return [`Crush Stomp dealt ${crush.damage} damage to a mob beneath the landing`, "driver unhurt by the landing"];
+  const checks = [];
+  for (const height of [4, 2]) {
+    park(driver, origin);
+    resetArena(dimension, origin);
+    // A ledge of the given height; drive off it slowly and land on a mob placed beneath the
+    // truck just before touchdown, so no Tire Trample hit precedes the landing.
+    fill(dimension, at(origin, -4, 0), at(origin, 4, 8, GROUND_Y + height - 1), "stone");
+    const top = GROUND_Y + height;
+    const truck = spawnTruck(dimension, run, at(origin, 0, 3, top));
+    await wait(10);
+    await board(driver, truck, 0);
+    let placed = false;
+    const hits = await recordTruckHits(async () => {
+      await drive(driver, 40, {
+        forward: 0.3,
+        onTick: () => {
+          if (!placed && truck.location.y < GROUND_Y + 1.5) {
+            placed = true;
+            dimension.spawnEntity("minecraft:zombie", { x: truck.location.x, y: GROUND_Y, z: truck.location.z });
+          }
+          return placed && truck.location.y < GROUND_Y + 0.05;
+        },
+      });
+      await wait(10);
+    });
+    if (!placed) throw new Error(`Truck never drove off the ${height}-block ledge`);
+    // Crush Stomp deals contact damage; Tire Trample deals entity-attack damage.
+    const crush = hits.find(hit => hit.typeId === "minecraft:zombie" && hit.cause === EntityDamageCause.contact);
+    if (height >= 3 && !crush) throw new Error(`${height}-block drop did not Crush Stomp the mob beneath: ${JSON.stringify(hits.map(h => [h.cause, h.damage]))}`);
+    if (crush && crush.damage < 60) throw new Error("Crush Stomp damage below lethal threshold: " + crush.damage);
+    if (height < 3 && crush) throw new Error(`${height}-block drop Crush Stomped (drops under 3 blocks must not)`);
+    if (health(driver) !== PLAYER_MAX_HEALTH) throw new Error("Driver was hurt by the landing: " + health(driver));
+    checks.push(height >= 3
+      ? `${height}-block drop: Crush Stomp dealt ${crush.damage} damage to the mob beneath; driver unhurt`
+      : `${height}-block drop: no Crush Stomp`);
+  }
+  return checks;
 }
 
 async function shock_absorption({ dimension, origin, driver, run }) {
@@ -228,8 +327,8 @@ async function shock_absorption({ dimension, origin, driver, run }) {
 async function liquid_crossing({ dimension, origin, driver, run }, liquid) {
   // Liquid pool flush with the ground, then a long 1-block-high bank that doubles as the
   // overland reference lane: the truck must cross liquid at full overland cruising speed.
-  fill(dimension, at(origin, -5, 6, GROUND_Y - 3), at(origin, 5, 30, GROUND_Y - 1), liquid);
-  fill(dimension, at(origin, -5, 31, GROUND_Y), at(origin, 5, 79, GROUND_Y), "stone");
+  fill(dimension, at(origin, -5, 6, GROUND_Y - 3), at(origin, 5, 40, GROUND_Y - 1), liquid);
+  fill(dimension, at(origin, -5, 41, GROUND_Y), at(origin, 5, 79, GROUND_Y), "stone");
   const truck = spawnTruck(dimension, run, at(origin, 0, 2));
   await wait(10);
   await board(driver, truck, 0);
@@ -237,23 +336,25 @@ async function liquid_crossing({ dimension, origin, driver, run }, liquid) {
   let poolTicks = 0;
   let landTicks = 0;
   let steppedUp = false;
+  const trace = [];
   await drive(driver, 200, {
-    onTick: () => {
+    onTick: tick => {
       const z = truck.location.z - origin.z;
-      if (z > 9 && z < 28) {
-        lowest = Math.min(lowest, truck.location.y);
-        poolTicks++;
-      }
-      if (z > 33 && z < 38 && truck.location.y >= GROUND_Y + 0.9) steppedUp = true;
-      if (z > 45 && z < 64) landTicks++;
-      return z > 70;
+      if (z > 35) trace.push([tick, +z.toFixed(2), +(truck.location.y - GROUND_Y).toFixed(2), +truck.getVelocity().y.toFixed(2)]);
+      // Measured after the truck reaches cruising speed (~1.5 s from rest).
+      if (z > 9 && z < 38) lowest = Math.min(lowest, truck.location.y);
+      if (z > 19 && z < 38) poolTicks++;
+      if (z > 43 && z < 48 && truck.location.y >= GROUND_Y + 0.9) steppedUp = true;
+      if (z > 52 && z < 71) landTicks++;
+      return z > 74;
     },
   });
   const checks = [];
   if (lowest < GROUND_Y - 1.5) throw new Error(`Truck sank in ${liquid}: lowest y ${(lowest - GROUND_Y).toFixed(2)}`);
   checks.push(`floated across ${liquid} (lowest ${(lowest - GROUND_Y).toFixed(2)} relative to the surface)`);
   if (!steppedUp) {
-    throw new Error(`Shoreline Step-Up failed: z=${(truck.location.z - origin.z).toFixed(1)} y=${(truck.location.y - GROUND_Y).toFixed(2)}`);
+    throw new Error(`Shoreline Step-Up failed: z=${(truck.location.z - origin.z).toFixed(1)} y=${(truck.location.y - GROUND_Y).toFixed(2)} ` +
+      `[tick, z, y, vy] ${JSON.stringify(trace.slice(0, 40))}`);
   }
   checks.push("Shoreline Step-Up onto a 1-block bank without a jump");
   if (!landTicks) throw new Error(`Truck never drove the overland lane: z=${(truck.location.z - origin.z).toFixed(1)}`);
@@ -302,7 +403,7 @@ async function trample({ dimension, origin, driver, run }) {
   const firstHit = async (speed, dz) => {
     const target = dimension.spawnEntity("minecraft:pig", at(origin, 0, dz));
     const hits = await recordTruckHits(async hits => {
-      await drive(driver, 40, { speed, onTick: () => hits.some(hit => hit.target.id === target.id) });
+      await drive(driver, 40, { forward: speed, onTick: () => hits.some(hit => hit.target.id === target.id) });
     });
     return hits.find(hit => hit.target.id === target.id);
   };
@@ -432,8 +533,8 @@ async function incline_pitch({ dimension, origin, driver, run }) {
     const down = [];
     let previous = truck.getProperty("blake:pitch_angle");
     let maxStep = 0;
-    await drive(driver, 160, {
-      speed: 0.5,
+    await drive(driver, 260, {
+      forward: 0.5,
       onTick: () => {
         const pitch = truck.getProperty("blake:pitch_angle");
         maxStep = Math.max(maxStep, Math.abs(pitch - previous));
@@ -450,7 +551,9 @@ async function incline_pitch({ dimension, origin, driver, run }) {
     const { low, high } = pitchBand(rise, run_);
     const mean = values => values.reduce((a, b) => a + b, 0) / Math.max(values.length, 1);
     const label = `${rise}:${run_} (expected ${low.toFixed(1)}° to ${high.toFixed(1)}°)`;
-    if (!up.length || !down.length) throw new Error(`${label}: truck did not traverse the ramp (z=${(truck.location.z - origin.z).toFixed(1)})`);
+    if (!up.length || !down.length || truck.location.z - origin.z < downEnd + 1) {
+      throw new Error(`${label}: truck did not traverse the ramp to flat ground (z=${(truck.location.z - origin.z).toFixed(1)})`);
+    }
     if (mean(up) < low || mean(up) > high) throw new Error(`${label}: uphill mean pitch ${mean(up).toFixed(1)}° ${JSON.stringify(up)}`);
     if (-mean(down) < low || -mean(down) > high) throw new Error(`${label}: downhill mean pitch ${mean(down).toFixed(1)}° ${JSON.stringify(down)}`);
     if (settled !== 0) throw new Error(`${label}: pitch did not return to level on flat ground: ${settled}`);
@@ -464,7 +567,7 @@ async function incline_pitch({ dimension, origin, driver, run }) {
 }
 
 export const SCENARIOS = {
-  smoke, seats, auto_step, suspension_jump, jump_rider_retention, crush_stomp, shock_absorption,
+  smoke, seats, auto_step, steering, handbrake, crush_stomp, shock_absorption,
   flotation_water, flotation_lava, trample, demolition, foliage_shearing,
   dye_repaint, retrieval, incline_pitch,
 };

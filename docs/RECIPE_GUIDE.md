@@ -46,7 +46,7 @@ The recipe returns one **Monster Truck Vehicle Item**. Using it deploys a red tr
 - **Max Speed**: 0.55 (Heavy-duty cruising on land, water, and lava!)
 - **Auto-Step**: 2 Full Blocks (Controlled Auto-Step drives straight up ledges without jumping!)
 - **Health**: 1,000 HP (Armored monster chassis taking only 25% damage from attacks!)
-- **Fall Damage**: None (100% Pneumatic Shock Absorption on all drops and jumps!)
+- **Fall Damage**: None (100% Pneumatic Shock Absorption on all drops!)
 - **Seats**: 2 Players (1 Driver in Seat 0 + 1 Passenger in Seat 1 for buddy road trips!)
-- **Abilities**: Controlled Auto-Step, Wood Demolition, Foliage Shearing, Suspension Jump, Amphibious Flotation, 16-Color Customization.
-- **Controls**: Standard WASD keys to drive, Spacebar for Suspension Jump, Left Shift (Sneak) to dismount.
+- **Abilities**: Controlled Auto-Step, Wood Demolition, Foliage Shearing, Handbrake Drift, Crush Stomp, Amphibious Flotation, 16-Color Customization.
+- **Controls**: W/S to drive, brake, and reverse; A/D to steer; hold Space for the handbrake; Left Shift (Sneak) to dismount. The mouse only looks around.

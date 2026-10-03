@@ -15,7 +15,7 @@
     "server_api_version": "2.11.0-beta",
     "gametest_api_version": "1.0.0-beta",
     "scenarios": [
-      "smoke", "seats", "auto_step", "suspension_jump", "jump_rider_retention", "crush_stomp", "shock_absorption",
+      "smoke", "seats", "auto_step", "steering", "handbrake", "crush_stomp", "shock_absorption",
       "flotation_water", "flotation_lava", "trample", "demolition", "foliage_shearing",
       "dye_repaint", "retrieval", "incline_pitch"
     ],

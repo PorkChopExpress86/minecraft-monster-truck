@@ -465,7 +465,6 @@
           }
         ]
       },
-      "minecraft:input_ground_controlled": {},
       "minecraft:is_tamed": {},
       "minecraft:is_saddled": {},
       "minecraft:variable_max_auto_step": {

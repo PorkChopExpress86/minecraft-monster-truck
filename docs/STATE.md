@@ -1,15 +1,17 @@
 ## Goal
 Set up the add-on for Linux development, debug, install, and fully automate in-game testing of the monster truck.
 ## Now
-#38 all green (run d0db7b5cf32b400dbd619e6a1367370b, 15/15). Awaiting user OK to bump 1.0.4 + install (restarts minecraft-creative/survival).
+ADR-0017 script-driven driving implemented (2026-10-03): W/S throttle/brake/reverse, A/D steer wheels, Space held = Handbrake Drift, Suspension Jump retired, Crush Stomp on >=3-block drops. Run f40f40bfaf024a8b8cdb84a620f94133 15/15 PASS; pytest 141 passed. Installed 1.0.5 to local flatpak client only for user drive test (servers not yet).
 ## Next
-1. Bump to 1.0.4 and install: python scripts/install_addon.py --servers creative,survival; user retests #32 flicker in real client.
-2. Trim issues #27-#30 to visual-only residue; comment/close #38. 3. #39 CI.
+1. User drives in Playground: confirm A=left (movement x sign, driving.js LEFT_INPUT_SIGN), Space no longer dismounts, mouse only looks, drift feel. Tune DRIVING in driving.js per feedback.
+2. Then install to servers (--servers creative,survival), close #32 (superseded) and #38; trim #27-#30; #39 CI.
 ## Constraints
 - "Keep the version and install with #38" (no rev/install until #38 lands)
 - "if there is something strange then prompt me for input" (re: test thresholds/outcomes)
 - "do not look into the separt containers" (re: NetherNet errors on minecraft-creative/minecraft-survival)
 ## Decisions
+- DECISION: ADR-0017 script-driven driving: input_ground_controlled removed; driving.js owns yaw/velocity; impulses divided by retention (ground 0.91*slipperiness*friction_modifier 1.15, water 0.86, lava 0.72, air 0.91 during Shoreline Step-Up window) — user approved Q1-Q6 2026-10-03.
+- DECISION: Driving tuning lives in driving.js DRIVING (Bedrock scripts cannot read vehicle.config.json at runtime).
 - DECISION: Scenario driver runs inside a Scenario-World-only copy of the add-on BP (entry imports main.js + scenario_driver) on @minecraft/server 2.11.0-beta — simulated players only materialize in the spawning runtime (user approved).
 - DECISION: Production exports requestDriverJump(player), called by the Jump-button handler and by jump scenarios (user chose 2a).
 - DECISION: Linux Client Smoke Run verdict = world loaded with our packs (client stdout) + screenshots; gameplay stage not_verified on Linux; all gameplay pass/fail from BDS Scenario Runs — Android-based client never surfaces script console output (user chose option 1).
@@ -46,6 +48,7 @@ Set up the add-on for Linux development, debug, install, and fully automate in-g
 - Scenario server: official BDS zip sha256 f6348d84...71c6 cached in dist/bedrock-tests/cache; image itzg/minecraft-bedrock-server@sha256:42004bb6...; needs ONLINE_MODE=false, ALLOW_LIST=false, docker -t (else stdout block-buffered); modules @minecraft/server 2.11.0-beta + @minecraft/server-gametest 1.0.0-beta; spawnSimulatedPlayer(DimensionLocation, name, GameMode) top-level.
 - Desktop: KDE Wayland; spectacle installed; no xdotool/ydotool.
 ## Done
+- ADR-0017 driving — RESULT: run f40f40bfaf024a8b8cdb84a620f94133 15/15 (steering: A yaw -59.3 / D +59.3; handbrake straight stop 23 ticks, drift slip 57.5 deg, grip back 0.9 deg; driver seated every tick); pytest 141; Static build ok.
 - #38 finish — RESULT: run d0db7b5cf32b400dbd619e6a1367370b 15/15 PASS, pytest 136 passed. incline 1:3 down -23.6 inside band [13.4,29.0]; 1:1 ramp lengthened to 20 steps (was transient 27.8). Water/lava now 1.12 b/tick vs overland 1.06 (was 0.54/0.40): amphibious.js CRUISING_AQUATIC_SPEED 1.1, full-deficit impulse capped MAX_AQUATIC_ACCELERATION 0.5, aquaticVelocityTarget divides by LIQUID_DRAG_RETENTION {water 0.86, lava 0.72}. #32: jump_rider_retention + moving jump show driver listed+linked every tick, 0.00 drift server-side; requestDriverJump no longer re-adds an already-seated rider (suspected client flicker cause, client retest needed).
 - #37 — RESULT (run 1ec3980aa43a4a71b9a6aa43c4941866, 0 errors): driver seats at seat 0 via interactWithEntity; moveRelative drives truck 63.84 blocks/60 ticks; setBodyRotation steers (yaw 0->90, steer_angle=1); requestDriverJump(driver) -> Suspension Jump +4.92 blocks. Fixes: driver runs inside test copy of add-on runtime (server 2.11.0-beta + gametest); production exports requestDriverJump.
 - Playground world created: com.mojang/minecraftWorlds/monster-truck-playground (seed 8832057175689493418), helper pack spawns 16 trucks once + actionbar speedometer; BDS load check clean.
@@ -65,6 +68,9 @@ Set up the add-on for Linux development, debug, install, and fully automate in-g
 - NOTED (not done): main.js:166 `currentRiders.map((r) => r.id)` throws if getRiders() ever yields undefined (only seen with cross-runtime simulated players).
 - DONE (fix E) Pitch rounding in kinematics.js (Math.round after 0.2 smoothing) stalls up to ~2 deg short of target — check against the +-5 deg pitch tolerance in #38.
 ## Failed attempts
+- Shoreline ATTEMPT 2 [L1]: no driving suppression + no blocked-reset afloat -> still z=39.38 while rising to +1.56 above +1 bank: nothing pushes forward once out of liquid (old engine ground control pushed from W input mid-air).
+- Shoreline (ADR-0017 driving) ATTEMPT 1 [L1]: suppress driving for 8 ticks after a step impulse -> still stuck z=39.38; trace shows lift to +1.43 with zero forward motion (blocked-wall reset zeroes speed; no push while rising).
+- #32 ATTEMPT 1 [L1]: requestDriverJump stops re-adding an already-seated rider (1.0.4, commit 8609e23) -> user 2026-10-01: 'The player is still clipping out of the vehicle when the truck jumps.' Server-side driver stays listed/linked, 0.00 seat drift every tick (run d0db7b5c...).
 - #37 probe run d45e0504130947af80cbd899c710b7dc: interactWithEntity seats SimulatedDriver at seat 0 (riders visible from scenario pack); moveRelative moves truck 63.84 blocks/60 ticks (inputInfo.getMovementVector()=(0,0)); setBodyRotation turns truck yaw 0->90; jump() true but truck +0.00; production main.js:166 `currentRiders.map((r) => r.id)` throws 'cannot read property id of undefined' every tick while seated (340 log lines).
 - #37 ATTEMPT 1 [L1]: hypothesis 'production pack lacks @minecraft/server-gametest so simulated rider unwrappable' — test copy given server 2.11.0-beta + gametest 1.0.0-beta (run fd60486ab5f349a1b5a012f280213298) -> same TypeError at main.js:166 (170 lines). Refuted.
 - #37 L3 instrumentation run b8a348a016cf4e1bb7840aebdaaee7da: in the add-on runtime world.getAllPlayers() contains undefined for SimulatedDriver ('cannot read property name of undefined'); in the scenario pack runtime getRiders() -> SimulatedPlayer. CAUSE: simulated player objects only materialize in the script runtime that spawned them. Next: run scenario driver inside the add-on's runtime (test copy only).

@@ -22,8 +22,8 @@ def test_rideable_and_control_components():
     assert rideable["seats"][1]["position"] == [-0.45, 1.15, 0.15]
     assert rideable["seats"][1]["third_person_camera_radius"] == 7.5
     
-    # Ground WASD driving authority and script-owned Suspension Jump
-    assert "minecraft:input_ground_controlled" in comps, "Entity must use input_ground_controlled for responsive WASD driving"
+    # Script-driven WASD driving and handbrake (ADR-0017): no engine ground control or native jump
+    assert "minecraft:input_ground_controlled" not in comps, "Engine ground control steers by the mouse and dismounts on Space"
     assert "minecraft:can_power_jump" not in comps
     assert "minecraft:horse.jump_strength" not in comps
     assert "minecraft:behavior.player_ride_tamed" not in comps

@@ -53,22 +53,22 @@ export async function board(player, truck, seat) {
   }
 }
 
-// Hold forward input with the given heading; onTick(tick) may return true to stop early.
-// The add-on also reads the driver's movement vector (aquatic intent), which a Simulated
-// Driver never reports, so the same forward input is supplied through driverInput.
-export async function drive(driver, ticks, { yaw = 0, speed = 1, onTick } = {}) {
-  const reader = driverInput.movement;
-  driverInput.movement = player => (player.id === driver.id ? { x: 0, y: speed } : reader(player));
-  driver.setBodyRotation(yaw);
-  driver.moveRelative(0, 1, speed);
+// Hold driver input for the given ticks; onTick(tick) may return true to stop early.
+// forward/strafe follow the movement vector (strafe +1 is A, left); handbrake is the held Jump
+// button. A Simulated Driver's inputInfo never reports either, so they are supplied through the
+// add-on's driverInput seam for this driver only (ADR-0016).
+export async function drive(driver, ticks, { forward = 1, strafe = 0, handbrake = false, onTick } = {}) {
+  const { movement, handbrake: brake } = driverInput;
+  driverInput.movement = player => (player.id === driver.id ? { x: strafe, y: forward } : movement(player));
+  driverInput.handbrake = player => (player.id === driver.id ? handbrake : brake(player));
   try {
     for (let tick = 0; tick < ticks; tick++) {
       await wait(1);
       if (onTick && onTick(tick)) break;
     }
   } finally {
-    driver.stopMoving();
-    driverInput.movement = reader;
+    driverInput.movement = movement;
+    driverInput.handbrake = brake;
   }
 }
 

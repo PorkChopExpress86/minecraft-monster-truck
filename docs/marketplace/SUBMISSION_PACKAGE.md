@@ -9,7 +9,7 @@ Requested price: free, subject to Marketplace approval and partner pricing rules
 
 **Short description:** Craft a rugged two-seat Monster Truck, customize across sixteen paint colors, and conquer stepped terrain, waterways, and obstacles in your Bedrock worlds.
 
-**Long description:** Build an unstoppable Monster Truck for your next survival adventure! This lifted pickup features oversized octagonal tires, exposed suspension, an open cargo bed, and room for a driver and passenger. Repaint your truck on the fly using any of the 16 vanilla Minecraft dyes, or spawn random colors in Creative. Authentic engine audio and animated wheels bring the truck to life, while heavy-duty durability (1,000 HP), controlled two-block auto-stepping, dynamic incline pitch, coordinated four-wheel steering, suspension jumping, wood demolition, and amphibious liquid flotation empower you to conquer any terrain.
+**Long description:** Build an unstoppable Monster Truck for your next survival adventure! This lifted pickup features oversized octagonal tires, exposed suspension, an open cargo bed, and room for a driver and passenger. Repaint your truck on the fly using any of the 16 vanilla Minecraft dyes, or spawn random colors in Creative. Authentic engine audio and animated wheels bring the truck to life, while heavy-duty durability (1,000 HP), controlled two-block auto-stepping, dynamic incline pitch, coordinated four-wheel steering, handbrake drifts, wood demolition, and amphibious liquid flotation empower you to conquer any terrain.
 
 Description is grounded in the current README and production assets. Player controls, audible playback, and two-player usability still need manual acceptance before these claims are submitted. Do not claim compatibility with every platform, every world, or every other add-on without evidence.
 
@@ -27,7 +27,7 @@ These local materials form one project entry. They do not establish a public por
 
 ## Partner application narrative draft
 
-I am developing Monster Truck, a Minecraft Bedrock Add-On that introduces a craftable, two-seat vehicle with sixteen paint colors, engine audio, controlled terrain stepping, dynamic suspension jumping, and amphibious exploration. I would like to make it available as a free Add-On through the official Minecraft Marketplace.
+I am developing Monster Truck, a Minecraft Bedrock Add-On that introduces a craftable, two-seat vehicle with sixteen paint colors, engine audio, controlled terrain stepping, handbrake drifting, and amphibious exploration. I would like to make it available as a free Add-On through the official Minecraft Marketplace.
 
 The project includes repository-owned modeling and texture generation, synthesized audio, documented player instructions, automated validation, and dynamic Script API physics. A separate test-world harness checks vehicle behavior without distributing test scripts to players. I can provide a packaged build, gameplay screenshots, and test evidence for review.
 
@@ -46,7 +46,7 @@ Proposed 30-second gameplay trailer:
 | 0-5s | Three-quarter view of red truck | Monster Truck Add-On |
 | 5-10s | Sixteen-color showcase followed by real sneak-dye interaction | 16 paint colors |
 | 10-15s | Driving over two-block ledges with dynamic incline pitch | Built for rough terrain |
-| 15-20s | Wood demolition through trees and suspension jump over ravine | Jump & Demolish |
+| 15-20s | Wood demolition through trees and a handbrake drift through the clearing | Drift & Demolish |
 | 20-25s | Amphibious cruising across water/lava and shoreline step-up | Land and liquid traversal |
 | 25-28s | Two players boarding; crafting and deploying in Survival | Craft. Customize. Drive. |
 | 28-30s | Clean hero view | Creator name to be supplied |
