@@ -62,21 +62,9 @@ assert.ok(wheelOffsets.some(w => w.x < 0 && w.z < 0), "Rear left wheel");
                          cwd=str(REPO_ROOT), capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
 
-def test_script_pneumatic_shock_absorption_integration():
-    main_script = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "main.js"
-    assert main_script.exists()
-    content = main_script.read_text(encoding="utf-8")
-    
-    assert "shouldAbsorbFallDamage" in content, "main.js must use shouldAbsorbFallDamage"
-    assert "PNEUMATIC_VENT_SOUND" in content, "main.js must reference PNEUMATIC_VENT_SOUND"
-    assert "PNEUMATIC_DUST_PARTICLE" in content, "main.js must reference PNEUMATIC_DUST_PARTICLE"
-    assert "world.beforeEvents" in content, "main.js must register beforeEvents listener for pneumatic shock absorption"
-    assert "recentRiders" not in content, "Fall protection must follow the vehicle event, not a broad time window"
-    assert "protectedRiders" in content, "Drop lifecycle must explicitly own rider protection"
-    assert content.index("const falling = isFalling(") < content.index("// Rider dismount management")
-    assert "if (!player.isSneaking && rideable && rideable.addRider)" in content
-    assert "protectRidersForLifecycle(state, truck.id, prevRiders)" in content
-    assert "if (state.isFalling ||" in content
+# Pneumatic Shock Absorption in play (fall damage cancelled for the truck and for riders only
+# during a drop and its landing window, venting and wheel dust on landing, Sneak as the only
+# deliberate exit) is behaviour-tested in tests/js/truck_tick.test.mjs and tests/js/main.test.mjs.
 
 
 def test_script_api_version_supports_required_input_and_before_hurt_events():
@@ -89,7 +77,4 @@ def test_script_api_version_supports_required_input_and_before_hurt_events():
 
     bedrock = json.loads((REPO_ROOT / "testing" / "bedrock.json").read_text(encoding="utf-8"))
     assert bedrock["script_api_version"] == "2.10.0"
-
-    main = (REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "main.js").read_text(encoding="utf-8")
-    # The held Jump button is the handbrake (ADR-0017).
-    assert "getButtonState(InputButton.Jump) === ButtonState.Pressed" in main
+    # The held Jump button is the handbrake (ADR-0017): tests/js/main.test.mjs (driverInput).

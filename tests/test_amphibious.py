@@ -40,10 +40,8 @@ def test_amphibious_traction_and_navigation_configuration():
     
     buoyancy = comps["minecraft:buoyant"]
     assert buoyancy["movement_type"] == "waves", "Native buoyancy must use the engine-supported flotation mode"
+    # Driver intent owning liquid traction: tests/js/truck_tick.test.mjs (liquid propulsion).
 
-    main = (REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "main.js").read_text(encoding="utf-8")
-    assert "driver.inputInfo.getMovementVector()" in main, "Scripted Driver intent owns horizontal liquid traction"
-    
     nav = comps["minecraft:navigation.walk"]
     assert nav["can_path_over_water"] is True, "Navigation must allow pathing over water"
     assert nav["avoid_water"] is False, "Navigation must not avoid water"

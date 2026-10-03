@@ -38,10 +38,7 @@ def test_durability_and_loot():
     assert "blake:monster_truck_vehicle" not in serialized_loot
     assert "blake:monster_truck_spawn_egg" not in serialized_loot
     assert "minecraft:iron_ingot" in serialized_loot, "Catastrophic destruction must yield Scrap"
-
-    main = (REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "main.js").read_text(encoding="utf-8")
-    assert 'new ItemStack("blake:monster_truck_vehicle", 1)' in main
-    assert "isDeliberateRetrieval" in main
+    # Player-fatal retrieval returning one Vehicle Item: tests/js/main.test.mjs.
 
 def test_crafting_recipe():
     recipe_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "recipes" / "monster_truck.json"

@@ -46,17 +46,6 @@ assert.ok(shockwave.y > 0, "Shockwave must provide upward lift");
     assert res.returncode == 0, res.stderr
 
 
-def test_landing_uses_engine_ground_contact_instead_of_block_approximation():
-    main = (REPO_ROOT / "behavior_packs/MonsterTruck_BP/scripts/main.js").read_text(encoding="utf-8")
-    assert "Boolean(truck.isOnGround)" in main
-    assert "blockBelowIsSolid" not in main
-
-
-def test_fall_lifecycle_has_bounded_reseat_and_no_jump_input():
-    main = (REPO_ROOT / "behavior_packs/MonsterTruck_BP/scripts/main.js").read_text(encoding="utf-8")
-    assert "function restoreProtectedRiders" in main
-    assert "restoreProtectedRiders(state, rideable)" in main
-    assert "state.riderRetentionUntil = tickNumber + 8" in main
-    # Jump is the handbrake now: nothing queues or launches a Suspension Jump.
-    for retired in ("requestDriverJump", "pendingJumpRequests", "calculateJumpImpulse", "playerButtonInput"):
-        assert retired not in main, retired
+# Landing on engine ground contact, the bounded 8-tick rider reseat window, and Jump as the
+# handbrake (no Suspension Jump, no playerButtonInput) are behaviour-tested in
+# tests/js/truck_tick.test.mjs and tests/js/main.test.mjs.

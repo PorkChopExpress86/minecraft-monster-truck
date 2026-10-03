@@ -13,5 +13,4 @@ def test_heavy_duty_stats_and_impact_protections():
     assert 'minecraft:area_attack' not in c, (
         'Scripted Speed-Scaled Tire Trample must be the only contact-damage authority'
     )
-    main = (ROOT/'behavior_packs/MonsterTruck_BP/scripts/main.js').read_text(encoding='utf-8')
-    assert 'calculateTrampleDamage(effectiveSpeed)' in main
+    # Speed-scaled Tire Trample damage: tests/js/truck_tick.test.mjs.

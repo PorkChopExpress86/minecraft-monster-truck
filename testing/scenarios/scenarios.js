@@ -15,7 +15,7 @@ const TRUCK_MAX_HEALTH = 1000;
 const PITCH_TOLERANCE = 5;       // degrees, agreed in #33
 const PITCH_CLAMP = 35;          // degrees, ADR-0014
 const PITCH_MAX_STEP = 15;       // degrees per tick: 0.2 smoothing of a full 70 degree swing, rounded up
-const PITCH_SAMPLE_SPAN = 2.25;  // blocks between the front and rear ground samples (main.js, 1.125 each way)
+const PITCH_SAMPLE_SPAN = 2.25;  // blocks between the front and rear ground samples (truck_tick.js, 1.125 each way)
 const degrees = radians => radians * 180 / Math.PI;
 
 // Accepted settled pitch on a stair ramp. Stairs are not a smooth slope: when one stair is

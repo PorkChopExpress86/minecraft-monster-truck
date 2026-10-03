@@ -7,17 +7,9 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-def test_airborne_demolition_and_crush_logic_contracts():
-    main_script = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "main.js"
-    assert main_script.exists()
-    content = main_script.read_text(encoding="utf-8")
-    
-    # Crush Stomp fires on landings from drops of 3+ blocks (ADR-0017)
-    assert "state.fallStartY = loc.y - dy" in content, "Must remember where a drop began"
-    assert "isCrushStompLanding(" in content
-    assert "calculateCrushStompDamage" in content
-    assert "calculateShockwaveImpulse" in content
-    assert "isProtectedTarget" in content
+# Crush Stomp landings (drop of 3+ blocks measured from where the fall began, damage,
+# shockwave, protected targets) are behaviour-tested through tickTruck in
+# tests/js/truck_tick.test.mjs.
 
 def test_crush_stomp_protections_and_damage_via_node():
     node_exe = shutil.which("node")

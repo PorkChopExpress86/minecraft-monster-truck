@@ -35,15 +35,12 @@ def test_script_entry_point_exists_and_valid():
         assert res.returncode == 0, f"Script syntax error: {res.stderr}"
 
 def test_demolition_logic_contracts():
-    entry_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "main.js"
     demo_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "demolition.js"
-    main_content = entry_path.read_text(encoding="utf-8")
     demo_content = demo_path.read_text(encoding="utf-8")
-    
-    # Threshold check
-    assert "0.25" in main_content, "Momentum threshold of 0.25 blocks/tick must be present"
-    assert "air destroy" in main_content, "Must use air destroy to break blocks with survival drops"
-    
+
+    # The 0.25 blocks/tick momentum threshold and `air destroy` survival drops are
+    # behaviour-tested through tickTruck in tests/js/truck_tick.test.mjs.
+
     # Foliage and wood filtering keywords
     assert "leaves" in demo_content.lower()
     assert "log" in demo_content.lower()
