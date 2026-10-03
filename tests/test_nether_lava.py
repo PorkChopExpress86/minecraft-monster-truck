@@ -46,7 +46,7 @@ import assert from 'node:assert/strict';
 import {
   isLiquidBlock,
   getSafeDismountLocation
-} from './behavior_packs/MonsterTruck_BP/scripts/trample.js';
+} from './behavior_packs/MonsterTruck_BP/scripts/amphibious.js';
 
 // Liquid checks
 assert.ok(isLiquidBlock("minecraft:water"));

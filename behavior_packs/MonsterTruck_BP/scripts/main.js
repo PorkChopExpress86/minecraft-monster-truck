@@ -6,7 +6,7 @@ import {
   ItemStack
 } from "@minecraft/server";
 import { shouldShieldRiderFromHeat } from "./amphibious.js";
-import { shouldAbsorbFallDamage } from "./suspension.js";
+import { absorbsFallDamage } from "./landing.js";
 import { createTruckState, tickTruck } from "./truck_tick.js";
 
 // Track state of each truck across ticks
@@ -68,12 +68,7 @@ system.runInterval(onTick, 1);
 // Pneumatic Shock Absorption event handling for vehicle and riders
 function isPneumaticallyProtectedFall(event) {
   const cause = event.damageSource ? event.damageSource.cause : undefined;
-  const hurtEntity = event.hurtEntity;
-  if (!hurtEntity) return false;
-
-  const isTruck = hurtEntity.typeId === "blake:monster_truck";
-  const isRider = protectedRiders.has(hurtEntity.id);
-  return shouldAbsorbFallDamage(cause, isTruck || isRider);
+  return absorbsFallDamage(cause, event.hurtEntity, protectedRiders);
 }
 
 function isThermallyShieldedRider(event) {

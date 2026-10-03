@@ -8,8 +8,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 def test_trample_files_exist():
-    trample_script = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "trample.js"
-    assert trample_script.exists(), "trample.js must exist"
+    contact_script = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "contact.js"
+    assert contact_script.exists(), "contact.js must exist"
 
 def test_trample_math_and_protection_contracts():
     node_exe = shutil.which("node")
@@ -24,7 +24,7 @@ import {
   isInContactPerimeter,
   calculateKnockbackImpulse,
   isProtectedTarget
-} from './behavior_packs/MonsterTruck_BP/scripts/trample.js';
+} from './behavior_packs/MonsterTruck_BP/scripts/contact.js';
 
 // 1. Damage scaling tests
 // Parked / idling (speed 0): 0 damage

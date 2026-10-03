@@ -30,20 +30,24 @@ import assert from 'node:assert/strict';
 import {
   PNEUMATIC_VENT_SOUND,
   PNEUMATIC_DUST_PARTICLE,
-  shouldAbsorbFallDamage,
+  absorbsFallDamage,
   isFalling,
   calculateWheelContactOffsets
-} from './behavior_packs/MonsterTruck_BP/scripts/suspension.js';
+} from './behavior_packs/MonsterTruck_BP/scripts/landing.js';
 
 // 1. Audio and particle constants
 assert.equal(PNEUMATIC_VENT_SOUND, "random.fizz");
 assert.equal(PNEUMATIC_DUST_PARTICLE, "minecraft:campfire_smoke_particle");
 
 // 2. Fall damage absorption predicate
-assert.equal(shouldAbsorbFallDamage("fall", true), true, "Truck and riders must absorb fall damage");
-assert.equal(shouldAbsorbFallDamage("damage.fall", true), true, "Bedrock fall cause string must be absorbed");
-assert.equal(shouldAbsorbFallDamage("entity_attack", true), false, "Combat attacks must not be absorbed as fall damage");
-assert.equal(shouldAbsorbFallDamage("fall", false), false, "Non-riders/non-trucks must not absorb fall damage");
+const truck = { id: "truck1", typeId: "blake:monster_truck" };
+const rider = { id: "rider1", typeId: "minecraft:player" };
+const protectedRiders = new Map([["rider1", "truck1"]]);
+assert.equal(absorbsFallDamage("fall", truck, protectedRiders), true, "Truck and riders must absorb fall damage");
+assert.equal(absorbsFallDamage("fall", rider, protectedRiders), true, "Truck and riders must absorb fall damage");
+assert.equal(absorbsFallDamage("damage.fall", truck, protectedRiders), true, "Bedrock fall cause string must be absorbed");
+assert.equal(absorbsFallDamage("entity_attack", truck, protectedRiders), false, "Combat attacks must not be absorbed as fall damage");
+assert.equal(absorbsFallDamage("fall", { id: "zombie1", typeId: "minecraft:zombie" }, protectedRiders), false, "Non-riders/non-trucks must not absorb fall damage");
 
 // 3. Fall detection for cliff and ramp drops
 assert.equal(isFalling(-0.35, 0), true, "Negative delta Y must be detected as falling");

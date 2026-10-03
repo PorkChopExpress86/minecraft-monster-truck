@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import {
   isHeavyEntity,
   resolveHeavyCollision
-} from './behavior_packs/MonsterTruck_BP/scripts/trample.js';
+} from './behavior_packs/MonsterTruck_BP/scripts/contact.js';
 
 // 1. Heavy entity detection
 assert.ok(isHeavyEntity({ typeId: "minecraft:iron_golem" }));

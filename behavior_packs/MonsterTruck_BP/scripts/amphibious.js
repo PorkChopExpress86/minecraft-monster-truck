@@ -6,19 +6,22 @@
 // Driving divides its target velocity by this so liquids are crossed at overland speed.
 export const LIQUID_DRAG_RETENTION = { water: 0.86, lava: 0.72 };
 
-export function detectShorelineBank(
-  inLiquid = false,
-  frontBlockAtWaterIsSolid = false,
-  frontBlockAboveIsSolid = false
-) {
-  if (!inLiquid || !frontBlockAtWaterIsSolid) {
-    return { isShoreline: false, stepHeight: 0 };
-  }
+export function isLiquidBlock(typeId) {
+  if (!typeId) return false;
+  const id = typeId.replace("minecraft:", "").toLowerCase();
+  return id === "water" || id === "flowing_water" || id === "lava" || id === "flowing_lava";
+}
 
-  const stepHeight = frontBlockAboveIsSolid ? 2 : 1;
+// Where a rider who sneaks out over liquid is set down: on the cab roof / rear flatbed.
+export function getSafeDismountLocation(truckLoc, heading = { x: 1, z: 0 }) {
+  const hDist = Math.hypot(heading.x, heading.z) || 1;
+  const dirX = heading.x / hDist;
+  const dirZ = heading.z / hDist;
+
   return {
-    isShoreline: true,
-    stepHeight,
+    x: truckLoc.x - dirX * 0.8,
+    y: truckLoc.y + 2.3,
+    z: truckLoc.z - dirZ * 0.8,
   };
 }
 

@@ -1,9 +1,9 @@
-// One Monster Truck tick: driving, steering and pitch, liquids, the drop lifecycle (rider
-// retention, Crush Stomp, Pneumatic Shock Absorption), Tire Trample, and demolition.
+// One Monster Truck tick: driving, steering and pitch, liquids, then the drop lifecycle
+// (landing.js), Tire Trample and heavy collisions (contact.js), and demolition (demolition.js).
 // main.js calls tickTruck for every truck each tick with the real Script API Entity and
 // Dimension; tests pass fakes implementing the subset typed below. This module must not import
 // @minecraft/server, so node can load it.
-import { isFoliage, isDestructibleWoodOrGlass, canDemolishWood, canShearFoliage } from "./demolition.js";
+import { demolishAhead } from "./demolition.js";
 import {
   calculateDynamicPitch,
   sampleGroundHeight
@@ -11,35 +11,21 @@ import {
 import {
   classifyShorelineColumn,
   calculateShorelineStepImpulse,
+  isLiquidBlock,
   LIQUID_DRAG_RETENTION
 } from "./amphibious.js";
 import { createDrivingState, groundRetention, headingVector, stepDriving } from "./driving.js";
-import { AXLE_OFFSET, CONTACT_PERIMETER, TRUCK_LENGTH, TRUCK_WIDTH } from "./geometry.js";
-import {
-  calculateTrampleDamage,
-  canApplyTireTrample,
-  isInContactPerimeter,
-  calculateKnockbackImpulse,
-  isProtectedTarget,
-  isHeavyEntity,
-  resolveHeavyCollision,
-  isLiquidBlock,
-  getSafeDismountLocation
-} from "./trample.js";
-import {
-  calculateCrushStompDamage,
-  calculateShockwaveImpulse,
-  isCrushStompLanding,
-  PNEUMATIC_VENT_SOUND,
-  PNEUMATIC_DUST_PARTICLE,
-  isFalling,
-  calculateWheelContactOffsets
-} from "./suspension.js";
+import { AXLE_OFFSET } from "./geometry.js";
+import { MOLTEN_TIRE_TICKS, stepContact } from "./contact.js";
+import { createLandingState, stepLanding } from "./landing.js";
 
 /**
  * The Script API subset tickTruck uses. Production passes @minecraft/server objects.
  * @typedef {{ x: number, y: number, z: number }} Vector3
  * @typedef {{ x: number, y: number }} Vector2
+ * An EntityDamageCause member's string value (the enum itself lives in @minecraft/server).
+ * @typedef {`${import("@minecraft/server").EntityDamageCause}`} DamageCause
+ * @typedef {{ cause?: DamageCause, damagingEntity?: TruckEntity }} DamageOptions
  * @typedef {{
  *   id: string,
  *   typeId: string,
@@ -47,7 +33,7 @@ import {
  *   location: Vector3,
  *   isSneaking?: boolean,
  *   applyImpulse(vector: Vector3): void,
- *   applyDamage(amount: number, options?: { cause?: any, damagingEntity?: any }): boolean,
+ *   applyDamage(amount: number, options?: DamageOptions): boolean,
  *   setOnFire?(seconds: number, useEffects?: boolean): boolean,
  *   extinguishFire?(useEffects?: boolean): boolean,
  *   teleport?(location: Vector3, options?: { dimension?: any }): void,
@@ -91,45 +77,15 @@ import {
  *   protectedRiders: Map<string, string>,
  *   hitCooldowns: Map<string, number>,
  * }} TickInput
- * @typedef {Record<string, any>} TruckState
+ * landing: landing.js's slice (the drop lifecycle).
+ * @typedef {Record<string, any> & { landing: import("./landing.js").LandingState }} TruckState
  */
 
 const AIR_DRAG_RETENTION = 0.91; // horizontal velocity kept per tick while airborne
-// EntityDamageCause values (@minecraft/server), spelled out so node can load this module.
-const CONTACT_DAMAGE = "contact";
-const ENTITY_ATTACK_DAMAGE = "entityAttack";
 
 /** @returns {TruckState} */
 export function createTruckState() {
-  return {};
-}
-
-function protectRidersForLifecycle(protectedRiders, state, truckId, riderIds) {
-  state.protectedRiderIds = new Set(riderIds);
-  for (const riderId of state.protectedRiderIds) {
-    protectedRiders.set(riderId, truckId);
-  }
-}
-
-function clearProtectedRiders(protectedRiders, state) {
-  for (const riderId of state.protectedRiderIds || []) {
-    protectedRiders.delete(riderId);
-  }
-  state.protectedRiderIds = new Set();
-}
-
-function restoreProtectedRiders(getEntity, state, rideable) {
-  if (!rideable?.addRider || !state.protectedRiderIds?.size) return;
-  const seated = new Set((rideable.getRiders?.() || []).map((rider) => rider.id));
-  for (const riderId of state.protectedRiderIds) {
-    if (seated.has(riderId)) continue;
-    try {
-      const rider = getEntity(riderId);
-      if (rider?.isValid && rider.typeId === "minecraft:player" && !rider.isSneaking) {
-        rideable.addRider(rider);
-      }
-    } catch {}
-  }
+  return { landing: createLandingState() };
 }
 
 /**
@@ -216,7 +172,7 @@ export function tickTruck(truck, dimension, state, input, tick) {
 
   // Thermal shielding in lava: extinguish fire ticks on riders
   if (inLava) {
-    state.moltenUntil = tickNumber + 200; // 10s molten tire trample upon exiting lava
+    state.moltenUntil = tickNumber + MOLTEN_TIRE_TICKS;
     for (const rider of currentRiders) {
       try {
         if (rider.extinguishFire) rider.extinguishFire(false);
@@ -307,7 +263,7 @@ export function tickTruck(truck, dimension, state, input, tick) {
     frontHeight,
     rearHeight,
     currentPitch: state.pitchAngle || 0,
-    isAirborne: Boolean(state.isFalling),
+    isAirborne: Boolean(state.landing.isFalling),
     inLiquid: inWater || inLava,
     verticalVelocity,
     horizontalSpeed: effectiveSpeed
@@ -369,250 +325,36 @@ export function tickTruck(truck, dimension, state, input, tick) {
     } catch {}
   }
 
-  const velY = vel ? vel.y : dy;
-  const falling = isFalling(dy, velY);
+  // The drop lifecycle: rider retention, free fall, Pneumatic Shock Absorption, Crush Stomp.
+  stepLanding(truck, dimension, state.landing, {
+    location: loc,
+    dy,
+    verticalVelocity,
+    heading: { x: dirX, z: dirZ },
+    rideable,
+    riderIds: state.riders,
+    prevRiderIds: prevRiders,
+    inLiquid: inLava || inWater,
+    tick: tickNumber,
+    getEntity,
+    protectedRiders
+  });
 
-  // Rider dismount management: Sneak (Shift) is the only deliberate exit
-  if (prevRiders.length > currentRiders.length) {
-    const currentRiderIds = new Set(currentRiders.map((r) => r.id));
-    const dismountedIds = prevRiders.filter((id) => !currentRiderIds.has(id));
-    const safePos = getSafeDismountLocation(loc, { x: dirX, z: dirZ });
-    for (const playerId of dismountedIds) {
-      try {
-        const player = getEntity(playerId);
-        if (player && player.isValid && player.typeId === "minecraft:player") {
-          if (!player.isSneaking && rideable && rideable.addRider) {
-            // Sneak is the only deliberate exit. Keep any other engine
-            // detachment tied to a bounded vehicle lifecycle.
-            if (!state.protectedRiderIds?.size) {
-              protectRidersForLifecycle(protectedRiders, state, truck.id, prevRiders);
-            }
-            state.riderRetentionUntil = tickNumber + 8;
-            if (falling && !state.isFalling) {
-              state.isFalling = true;
-              state.fallStartY = loc.y - dy;
-            }
-            rideable.addRider(player);
-          } else if (inLava || inWater) {
-            // Deliberate sneak dismount over liquid: teleport to safe shoreline
-            player.teleport(safePos, { dimension });
-            protectedRiders.delete(playerId);
-            state.protectedRiderIds?.delete(playerId);
-          } else {
-            protectedRiders.delete(playerId);
-            state.protectedRiderIds?.delete(playerId);
-          }
-        }
-      } catch {}
-    }
-  }
+  // Tire Trample, Molten Tire Trample, and heavy collisions with what the truck touches.
+  stepContact(truck, dimension, {
+    location: loc,
+    heading: { x: dirX, z: dirZ },
+    speed: effectiveSpeed,
+    moltenUntil: state.moltenUntil,
+    hitCooldowns,
+    tick: tickNumber
+  });
 
-  if (state.isFalling ||
-      (state.riderRetentionUntil && tickNumber <= state.riderRetentionUntil)) {
-    restoreProtectedRiders(getEntity, state, rideable);
-  } else if (state.riderRetentionUntil && tickNumber > state.riderRetentionUntil) {
-    clearProtectedRiders(protectedRiders, state);
-    delete state.riderRetentionUntil;
-  }
-
-  // Free-fall tracking: remember where the drop began for Crush Stomp
-  if (falling && !state.isFalling) {
-    state.isFalling = true;
-    state.fallStartY = loc.y - dy;
-    if (!state.protectedRiderIds?.size) {
-      protectRidersForLifecycle(protectedRiders, state, truck.id, state.riders);
-    }
-  }
-
-  // Pneumatic Shock Absorption & Landing Detection
-  if (state.isFalling) {
-    const grounded = Boolean(truck.isOnGround);
-    if (grounded && dy <= 0) {
-      const crushes = isCrushStompLanding((state.fallStartY ?? loc.y) - loc.y);
-      state.isFalling = false;
-      state.riderRetentionUntil = tickNumber + 8;
-
-      // Dissipate impact energy with pneumatic venting audio and quad wheel dust particles
-      try {
-        dimension.playSound(PNEUMATIC_VENT_SOUND, loc, { volume: 1.0, pitch: 0.85 });
-        const wheelOffsets = calculateWheelContactOffsets({ x: dirX, z: dirZ }, { x: perpX, z: perpZ });
-        for (const offset of wheelOffsets) {
-          dimension.spawnParticle(PNEUMATIC_DUST_PARTICLE, {
-            x: loc.x + offset.x,
-            y: loc.y + 0.15,
-            z: loc.z + offset.z
-          });
-        }
-      } catch {}
-
-      if (crushes) {
-        const crushDamage = calculateCrushStompDamage();
-        try {
-          const nearby = dimension.getEntities({ location: loc, maxDistance: 3.5 });
-          for (const target of nearby) {
-            if (isProtectedTarget(target, truck)) continue;
-
-            const shockImpulse = calculateShockwaveImpulse(target.location, loc, 1.5);
-            try { target.applyImpulse(shockImpulse); } catch {}
-
-            const damageOptions = {};
-            damageOptions.cause = CONTACT_DAMAGE;
-            damageOptions.damagingEntity = truck;
-            try { target.applyDamage(crushDamage, damageOptions); } catch {
-              try { target.applyDamage(crushDamage); } catch {}
-            }
-          }
-
-          dimension.playSound("random.explode", loc, { volume: 0.8, pitch: 1.4 });
-          dimension.spawnParticle("minecraft:large_explosion", { x: loc.x, y: loc.y + 0.3, z: loc.z });
-        } catch {}
-      }
-    }
-  }
-
-  // Tire trample check (within 1.6 blocks contact perimeter)
-  if (canApplyTireTrample(effectiveSpeed, false)) {
-    try {
-      const nearbyEntities = dimension.getEntities({
-        location: loc,
-        maxDistance: 4.5,
-      });
-
-      for (const target of nearbyEntities) {
-        if (isProtectedTarget(target, truck)) continue;
-
-        if (
-          isInContactPerimeter(
-            target.location,
-            loc,
-            { x: dirX, z: dirZ },
-            TRUCK_WIDTH,
-            TRUCK_LENGTH,
-            CONTACT_PERIMETER
-          )
-        ) {
-          const lastHit = hitCooldowns.get(target.id) || 0;
-          if (tickNumber - lastHit < 6) continue;
-          hitCooldowns.set(target.id, tickNumber);
-
-          if (isHeavyEntity(target)) {
-            const heavyRes = resolveHeavyCollision(effectiveSpeed, { x: dirX, z: dirZ });
-            if (heavyRes.truckHalted) {
-              try {
-                truck.clearVelocity();
-                truck.applyImpulse(heavyRes.truckPenaltyImpulse);
-              } catch {}
-              state.prevX = loc.x;
-              state.prevY = loc.y;
-              state.prevZ = loc.z;
-            } else if (heavyRes.targetShoved) {
-              try {
-                target.applyImpulse(heavyRes.targetImpulse);
-                truck.applyImpulse(heavyRes.truckPenaltyImpulse);
-              } catch {}
-            }
-
-            const damage = heavyRes.damage;
-            if (damage > 0) {
-              const damageOptions = {};
-              damageOptions.cause = ENTITY_ATTACK_DAMAGE;
-              damageOptions.damagingEntity = truck;
-              try {
-                target.applyDamage(damage, damageOptions);
-              } catch {
-                try { target.applyDamage(damage); } catch {}
-              }
-
-              // Molten Tire Trample ignition on heavy entity
-              if (state.moltenUntil && tickNumber < state.moltenUntil) {
-                try {
-                  target.setOnFire(6, true);
-                } catch {}
-              }
-            }
-          } else {
-            // Regular trample knockback and damage without halting the truck
-            const damage = calculateTrampleDamage(effectiveSpeed);
-            if (damage > 0) {
-              const impulse = calculateKnockbackImpulse(
-                target.location,
-                loc,
-                effectiveSpeed
-              );
-              try {
-                target.applyImpulse(impulse);
-              } catch {}
-
-              const damageOptions = {};
-              damageOptions.cause = ENTITY_ATTACK_DAMAGE;
-              damageOptions.damagingEntity = truck;
-
-              try {
-                target.applyDamage(damage, damageOptions);
-              } catch {
-                try {
-                  target.applyDamage(damage);
-                } catch {}
-              }
-
-              // Molten Tire Trample ignition
-              if (state.moltenUntil && tickNumber < state.moltenUntil) {
-                try {
-                  target.setOnFire(6, true);
-                } catch {}
-              }
-            }
-          }
-        }
-      }
-    } catch {}
-  }
-
-  // Foliage shearing at any speed with driver; structural wood requires > 0.25 momentum
-  const hasDriver = Boolean(driver);
-  const canWood = canDemolishWood(effectiveSpeed);
-  const canFoliage = canShearFoliage(hasDriver);
-
-  if (!canWood && !canFoliage) {
-    return;
-  }
-
-  const sampledBlocks = new Set();
-  const forwardDistances = [0.0, 0.6, 1.2, 1.8, 2.5];
-  const lateralOffsets = [-1.2, -0.6, 0.0, 0.6, 1.2];
-  const baseY = Math.floor(loc.y + 0.05);
-
-  for (const fwd of forwardDistances) {
-    for (const lat of lateralOffsets) {
-      const px = Math.floor(loc.x + dirX * fwd + perpX * lat);
-      const pz = Math.floor(loc.z + dirZ * fwd + perpZ * lat);
-
-      // Foliage cleared up to 5 blocks high (0..4), wood/glass up to 3 blocks high
-      const maxWoodHeight = 3;
-      for (let h = 0; h < 5; h++) {
-        const py = baseY + h;
-        const key = `${px},${py},${pz}`;
-        if (sampledBlocks.has(key)) continue;
-        sampledBlocks.add(key);
-
-        try {
-          const block = dimension.getBlock({ x: px, y: py, z: pz });
-          if (!block || block.isAir || block.typeId === "minecraft:air") continue;
-
-          const typeId = block.typeId;
-
-          // Foliage vaporization (clean without item drops - active at any speed with driver)
-          if (canFoliage && isFoliage(typeId)) {
-            block.setType("minecraft:air");
-          }
-          // Structural wood & glass demolition (drops survival items, plays break sound/particles)
-          else if (canWood && h < maxWoodHeight && isDestructibleWoodOrGlass(typeId)) {
-            dimension.runCommand(`setblock ${px} ${py} ${pz} air destroy`);
-          }
-        } catch {
-          // Ignore blocks outside active simulation
-        }
-      }
-    }
-  }
+  // Foliage Shearing at any speed with a driver; Wood Demolition needs momentum.
+  demolishAhead(dimension, {
+    location: loc,
+    heading: { x: dirX, z: dirZ },
+    speed: effectiveSpeed,
+    hasDriver: Boolean(driver)
+  });
 }

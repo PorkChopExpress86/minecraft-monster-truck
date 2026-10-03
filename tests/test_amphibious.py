@@ -58,7 +58,6 @@ import assert from 'node:assert/strict';
 import {
   LIQUID_DRAG_RETENTION,
   classifyShorelineColumn,
-  detectShorelineBank,
   calculateShorelineStepImpulse
 } from './behavior_packs/MonsterTruck_BP/scripts/amphibious.js';
 
@@ -66,12 +65,7 @@ import {
 // liquids are crossed at overland speed (flotation scenarios assert the outcome).
 assert.deepEqual(LIQUID_DRAG_RETENTION, { water: 0.86, lava: 0.72 });
 
-// Shoreline detection
-assert.equal(detectShorelineBank(true, true, false).isShoreline, true);
-assert.equal(detectShorelineBank(true, true, false).stepHeight, 1);
-assert.equal(detectShorelineBank(true, true, true).stepHeight, 2);
-assert.equal(detectShorelineBank(false, true, false).isShoreline, false, "Not shoreline if truck is not in liquid");
-assert.equal(detectShorelineBank(true, false, false).isShoreline, false, "Not shoreline if front block is liquid/air");
+// Shoreline detection (Shoreline Step-Up through tickTruck: tests/js/truck_tick.test.mjs)
 assert.deepEqual(classifyShorelineColumn([true, false, false, false]), { isShoreline: true, stepHeight: 1 });
 assert.deepEqual(classifyShorelineColumn([true, true, false, false]), { isShoreline: true, stepHeight: 2 });
 assert.deepEqual(classifyShorelineColumn([true, true, true, false]), { isShoreline: false, stepHeight: 3 });

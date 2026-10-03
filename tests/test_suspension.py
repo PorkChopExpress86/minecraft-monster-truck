@@ -14,12 +14,12 @@ def test_suspension_jump_and_crush_stomp_contracts():
 
     script = r'''
 import assert from 'node:assert/strict';
-import * as suspension from './behavior_packs/MonsterTruck_BP/scripts/suspension.js';
-const { calculateCrushStompDamage, calculateShockwaveImpulse, isCrushStompLanding, CRUSH_STOMP_MIN_DROP } = suspension;
+import * as landing from './behavior_packs/MonsterTruck_BP/scripts/landing.js';
+const { calculateCrushStompDamage, calculateShockwaveImpulse, isCrushStompLanding, CRUSH_STOMP_MIN_DROP } = landing;
 
 // 1. The Suspension Jump is retired (ADR-0017): no jump helpers remain.
 for (const name of ["calculateJumpImpulse", "canTriggerJump", "advanceJumpPhase", "JUMP_COOLDOWN_TICKS"]) {
-  assert.equal(suspension[name], undefined, name + " must be removed");
+  assert.equal(landing[name], undefined, name + " must be removed");
 }
 
 // 2. Crush Stomp needs a real drop: 3 blocks or more.

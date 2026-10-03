@@ -21,8 +21,8 @@ import assert from 'node:assert/strict';
 import {
   calculateCrushStompDamage,
   calculateShockwaveImpulse
-} from './behavior_packs/MonsterTruck_BP/scripts/suspension.js';
-import { isProtectedTarget } from './behavior_packs/MonsterTruck_BP/scripts/trample.js';
+} from './behavior_packs/MonsterTruck_BP/scripts/landing.js';
+import { isProtectedTarget } from './behavior_packs/MonsterTruck_BP/scripts/contact.js';
 
 // 1. Crush Stomp damage >= 60
 const damage = calculateCrushStompDamage();

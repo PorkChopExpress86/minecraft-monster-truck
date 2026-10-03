@@ -1,6 +1,111 @@
-// Speed-scaled tire trample and knockback calculations
+// What the truck's tires and bumper do to the entities they touch: Tire Trample, Molten Tire
+// Trample, heavy collisions (ADR-0008), and the per-entity hit cooldown. truck_tick.js calls
+// stepContact once per tick; landing.js reuses isProtectedTarget and damageEntity for Crush
+// Stomp. Must not import @minecraft/server, so node can load it.
 
 import { CONTACT_PERIMETER, TRUCK_LENGTH, TRUCK_WIDTH } from "./geometry.js";
+
+// EntityDamageCause value (@minecraft/server), spelled out so node can load this module.
+/** @type {import("./truck_tick.js").DamageCause} */
+const ENTITY_ATTACK_DAMAGE = "entityAttack";
+// Entities near enough to the truck to be checked against the contact perimeter.
+const CONTACT_SEARCH_RADIUS = 4.5;
+// Ticks before the same entity can be trampled again.
+export const HIT_COOLDOWN_TICKS = 6;
+// Ticks after leaving lava during which the tires ignite what they trample (10 s).
+export const MOLTEN_TIRE_TICKS = 200;
+const MOLTEN_BURN_SECONDS = 6;
+
+/**
+ * Damage an entity as the truck, falling back to a plain hit if the engine rejects the options.
+ * @param {Pick<import("./truck_tick.js").WorldEntity, "applyDamage">} target
+ * @param {number} amount
+ * @param {import("./truck_tick.js").DamageCause} cause
+ * @param {import("./truck_tick.js").TruckEntity} truck
+ */
+export function damageEntity(target, amount, cause, truck) {
+  /** @type {import("./truck_tick.js").DamageOptions} */
+  const damageOptions = { cause, damagingEntity: truck };
+  try {
+    target.applyDamage(amount, damageOptions);
+  } catch {
+    try { target.applyDamage(amount); } catch {}
+  }
+}
+
+function igniteIfMolten(target, moltenUntil, tick) {
+  if (moltenUntil && tick < moltenUntil) {
+    try {
+      target.setOnFire(MOLTEN_BURN_SECONDS, true);
+    } catch {}
+  }
+}
+
+/**
+ * Trample or ram every unprotected entity inside the contact perimeter this tick.
+ * @param {import("./truck_tick.js").TruckEntity} truck
+ * @param {import("./truck_tick.js").WorldDimension} dimension
+ * @param {{
+ *   location: import("./truck_tick.js").Vector3,
+ *   heading: { x: number, z: number },
+ *   speed: number,
+ *   moltenUntil?: number,
+ *   hitCooldowns: Map<string, number>,
+ *   tick: number,
+ * }} contact heading is the unit direction of travel; speed is blocks/tick; moltenUntil is
+ *   the tick Molten Tire Trample ends; hitCooldowns maps entity id -> tick last trampled.
+ */
+export function stepContact(truck, dimension, { location, heading, speed, moltenUntil, hitCooldowns, tick }) {
+  if (!canApplyTireTrample(speed, false)) return;
+  try {
+    const nearbyEntities = dimension.getEntities({
+      location,
+      maxDistance: CONTACT_SEARCH_RADIUS,
+    });
+
+    for (const target of nearbyEntities) {
+      if (isProtectedTarget(target, truck)) continue;
+      if (!isInContactPerimeter(target.location, location, heading, TRUCK_WIDTH, TRUCK_LENGTH, CONTACT_PERIMETER)) {
+        continue;
+      }
+
+      const lastHit = hitCooldowns.get(target.id) || 0;
+      if (tick - lastHit < HIT_COOLDOWN_TICKS) continue;
+      hitCooldowns.set(target.id, tick);
+
+      if (isHeavyEntity(target)) {
+        const heavyRes = resolveHeavyCollision(speed, heading);
+        if (heavyRes.truckHalted) {
+          try {
+            truck.clearVelocity();
+            truck.applyImpulse(heavyRes.truckPenaltyImpulse);
+          } catch {}
+        } else if (heavyRes.targetShoved) {
+          try {
+            target.applyImpulse(heavyRes.targetImpulse);
+            truck.applyImpulse(heavyRes.truckPenaltyImpulse);
+          } catch {}
+        }
+
+        if (heavyRes.damage > 0) {
+          damageEntity(target, heavyRes.damage, ENTITY_ATTACK_DAMAGE, truck);
+          igniteIfMolten(target, moltenUntil, tick);
+        }
+      } else {
+        // Regular trample knockback and damage without halting the truck
+        const damage = calculateTrampleDamage(speed);
+        if (damage > 0) {
+          const impulse = calculateKnockbackImpulse(target.location, location, speed);
+          try {
+            target.applyImpulse(impulse);
+          } catch {}
+          damageEntity(target, damage, ENTITY_ATTACK_DAMAGE, truck);
+          igniteIfMolten(target, moltenUntil, tick);
+        }
+      }
+    }
+  } catch {}
+}
 
 export function calculateTrampleDamage(speed) {
   // Parked, idling, or crawling (<0.08 blocks/tick) inflicts no damage
@@ -170,24 +275,5 @@ export function resolveHeavyCollision(speed, heading = { x: 1, z: 0 }) {
     damage: calculateTrampleDamage(speed),
     targetImpulse: { x: 0, y: 0, z: 0 },
     truckPenaltyImpulse: { x: -dirX * 0.05, y: 0, z: -dirZ * 0.05 },
-  };
-}
-
-export function isLiquidBlock(typeId) {
-  if (!typeId) return false;
-  const id = typeId.replace("minecraft:", "").toLowerCase();
-  return id === "water" || id === "flowing_water" || id === "lava" || id === "flowing_lava";
-}
-
-export function getSafeDismountLocation(truckLoc, heading = { x: 1, z: 0 }) {
-  const hDist = Math.hypot(heading.x, heading.z) || 1;
-  const dirX = heading.x / hDist;
-  const dirZ = heading.z / hDist;
-
-  // Place rider safely on top of truck cab roof / rear flatbed
-  return {
-    x: truckLoc.x - dirX * 0.8,
-    y: truckLoc.y + 2.3,
-    z: truckLoc.z - dirZ * 0.8,
   };
 }

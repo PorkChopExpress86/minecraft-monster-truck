@@ -49,8 +49,67 @@ export function canDemolishWood(effectiveSpeed, isAirborne = false) {
   return isAirborne || effectiveSpeed > WOOD_MOMENTUM_THRESHOLD;
 }
 
-export function canShearFoliage(hasDriver = true) {
-  return Boolean(hasDriver);
+/**
+ * Clear what is in front of the truck this tick: Foliage Shearing (no drops) whenever a driver
+ * is seated, Wood Demolition (survival drops) above WOOD_MOMENTUM_THRESHOLD.
+ * @param {import("./truck_tick.js").WorldDimension} dimension
+ * @param {{
+ *   location: import("./truck_tick.js").Vector3,
+ *   heading: { x: number, z: number },
+ *   speed: number,
+ *   hasDriver: boolean,
+ * }} ahead heading: unit direction of travel; speed: blocks/tick.
+ */
+export function demolishAhead(dimension, { location: loc, heading, speed, hasDriver }) {
+  const canWood = canDemolishWood(speed);
+  const canFoliage = Boolean(hasDriver);
+
+  if (!canWood && !canFoliage) {
+    return;
+  }
+
+  const dirX = heading.x;
+  const dirZ = heading.z;
+  const perpX = -dirZ;
+  const perpZ = dirX;
+  const sampledBlocks = new Set();
+  const forwardDistances = [0.0, 0.6, 1.2, 1.8, 2.5];
+  const lateralOffsets = [-1.2, -0.6, 0.0, 0.6, 1.2];
+  const baseY = Math.floor(loc.y + 0.05);
+
+  for (const fwd of forwardDistances) {
+    for (const lat of lateralOffsets) {
+      const px = Math.floor(loc.x + dirX * fwd + perpX * lat);
+      const pz = Math.floor(loc.z + dirZ * fwd + perpZ * lat);
+
+      // Foliage cleared up to 5 blocks high (0..4), wood/glass up to 3 blocks high
+      const maxWoodHeight = 3;
+      for (let h = 0; h < 5; h++) {
+        const py = baseY + h;
+        const key = `${px},${py},${pz}`;
+        if (sampledBlocks.has(key)) continue;
+        sampledBlocks.add(key);
+
+        try {
+          const block = dimension.getBlock({ x: px, y: py, z: pz });
+          if (!block || block.isAir || block.typeId === "minecraft:air") continue;
+
+          const typeId = block.typeId;
+
+          // Foliage vaporization (clean without item drops - active at any speed with driver)
+          if (canFoliage && isFoliage(typeId)) {
+            block.setType("minecraft:air");
+          }
+          // Structural wood & glass demolition (drops survival items, plays break sound/particles)
+          else if (canWood && h < maxWoodHeight && isDestructibleWoodOrGlass(typeId)) {
+            dimension.runCommand(`setblock ${px} ${py} ${pz} air destroy`);
+          }
+        } catch {
+          // Ignore blocks outside active simulation
+        }
+      }
+    }
+  }
 }
 
 
