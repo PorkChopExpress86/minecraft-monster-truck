@@ -10,13 +10,13 @@ from scripts.version_manager import (
     version_to_str,
     str_to_version,
     check_version_sync,
-    find_com_mojang_roots,
     sync_world_pack_versions,
-    BP_UUID,
-    RP_UUID,
 )
+from scripts.addon_packs import AddonPacks
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+PACKS = AddonPacks.load(REPO_ROOT)
+BP_UUID, RP_UUID = PACKS.bp.uuid, PACKS.rp.uuid
 
 def test_version_helpers():
     assert version_to_str([1, 2, 3]) == "1.2.3"
@@ -108,18 +108,24 @@ def test_bump_version_in_temp_repo(tmp_path):
     assert get_repo_version(tmp_path) == [3, 4, 5]
 
 def test_sync_world_pack_versions(tmp_path):
+    bp_uuid, rp_uuid = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
+    for folder, pack_id in (("bp", bp_uuid), ("rp", rp_uuid)):
+        (tmp_path / folder).mkdir()
+        (tmp_path / folder / "manifest.json").write_text(
+            json.dumps({"header": {"uuid": pack_id, "version": [1, 0, 0]}}), encoding="utf-8")
+    packs = AddonPacks.load(tmp_path, {"behavior_pack": "bp", "resource_pack": "rp"})
     world_dir = tmp_path / "test_world"
     world_dir.mkdir()
 
-    wbp = [{"pack_id": BP_UUID, "version": [1, 0, 0]}]
-    wrp = [{"pack_id": RP_UUID, "version": [1, 0, 0]}]
+    wbp = [{"pack_id": bp_uuid, "version": [1, 0, 0]}]
+    wrp = [{"pack_id": rp_uuid, "version": [1, 0, 0]}]
 
     wbp_file = world_dir / "world_behavior_packs.json"
     wrp_file = world_dir / "world_resource_packs.json"
     wbp_file.write_text(json.dumps(wbp), encoding="utf-8")
     wrp_file.write_text(json.dumps(wrp), encoding="utf-8")
 
-    updated = sync_world_pack_versions(world_dir, [1, 0, 2])
+    updated = sync_world_pack_versions(world_dir, [1, 0, 2], packs)
     assert updated is True
 
     updated_wbp = json.loads(wbp_file.read_text(encoding="utf-8"))
@@ -149,18 +155,3 @@ def test_check_version_sync_detection(tmp_path):
     res_mismatch = check_version_sync(repo_root=REPO_ROOT, mojang_roots=[mojang_root])
     assert res_mismatch["in_sync"] is False
     assert "OUT OF SYNC" in res_mismatch["summary"]
-
-def test_find_com_mojang_roots_discovers_linux_launcher(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("APPDATA", str(tmp_path / "missing"))
-    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "missing"))
-    flatpak = tmp_path / ".var/app/io.mrarm.mcpelauncher/data/mcpelauncher/games/com.mojang"
-    native = tmp_path / ".local/share/mcpelauncher/games/com.mojang"
-
-    assert find_com_mojang_roots() == []
-
-    flatpak.mkdir(parents=True)
-    assert find_com_mojang_roots() == [flatpak.resolve()]
-
-    native.mkdir(parents=True)
-    assert find_com_mojang_roots() == [flatpak.resolve(), native.resolve()]

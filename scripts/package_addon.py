@@ -3,6 +3,11 @@ import sys
 import zipfile
 from pathlib import Path
 
+try:
+    from .addon_packs import AddonPacks, PackConfigError
+except ImportError:
+    from addon_packs import AddonPacks, PackConfigError
+
 def zip_directory(source_dir: Path, output_zip: Path):
     output_zip.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -17,16 +22,17 @@ def build_addon(repo_root=None, dist_dir=None):
     dist = Path(dist_dir) if dist_dir else (root / "dist")
     dist.mkdir(parents=True, exist_ok=True)
     
-    bp_dir = root / "behavior_packs" / "MonsterTruck_BP"
-    rp_dir = root / "resource_packs" / "MonsterTruck_RP"
+    packs = AddonPacks.load(root)
+    bp_dir = packs.bp.path
+    rp_dir = packs.rp.path
     
     if not bp_dir.exists():
         raise FileNotFoundError(f"Behavior pack directory not found: {bp_dir}")
     if not rp_dir.exists():
         raise FileNotFoundError(f"Resource pack directory not found: {rp_dir}")
         
-    bp_mcpack = dist / "MonsterTruck_BP.mcpack"
-    rp_mcpack = dist / "MonsterTruck_RP.mcpack"
+    bp_mcpack = dist / f"{packs.bp.name}.mcpack"
+    rp_mcpack = dist / f"{packs.rp.name}.mcpack"
     mcaddon = dist / "MonsterTruck.mcaddon"
     
     try:
@@ -55,4 +61,7 @@ def build_addon(repo_root=None, dist_dir=None):
     return mcaddon
 
 if __name__ == "__main__":
-    build_addon()
+    try:
+        build_addon()
+    except PackConfigError as error:
+        sys.exit(f"Packaging FAILED: {error}")

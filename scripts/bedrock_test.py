@@ -17,8 +17,10 @@ import uuid
 
 if __package__:
     from . import bedrock_linux as linux
+    from .addon_packs import AddonPacks, com_mojang_installs, read_json, write_json
 else:
     import bedrock_linux as linux
+    from addon_packs import AddonPacks, com_mojang_installs, read_json, write_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,16 +31,6 @@ WINDOWS = os.name == "nt"
 
 class SetupError(Exception):
     pass
-
-
-def read_json(path):
-    return json.loads(Path(path).read_text(encoding="utf-8-sig"))
-
-
-def write_json(path, data):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 def load_config(root):
@@ -64,15 +56,19 @@ def discover():
     for path in (roaming / "logs", legacy / "logs"):
         if path.is_dir():
             result["log_directories"].append(str(path.resolve()))
-    users = roaming / "Users"
-    roots = list(users.glob("*/games/com.mojang/minecraftWorlds")) if users.is_dir() else []
-    roots.append(legacy / "games/com.mojang/minecraftWorlds")
-    for data_root in linux.com_mojang_roots():
-        if (data_root / "logs").is_dir():
-            result["log_directories"].append(str(data_root / "logs"))
-        roots.append(data_root / "minecraftWorlds")
-    for root in roots:
-        for world in sorted(root.glob("*")):
+    roots = []
+    for install, paths in com_mojang_installs():
+        for path in paths:
+            # Windows game folders are listed as found; on Linux only initialized launcher accounts count.
+            if not path.is_dir() or (install == "linux" and not (path / "minecraftpe/options.txt").is_file()):
+                continue
+            if path.resolve() not in roots:
+                roots.append(path.resolve())
+                # Windows keeps logs beside the account folders (above); mcpelauncher keeps them in com.mojang.
+                if install == "linux" and (path / "logs").is_dir():
+                    result["log_directories"].append(str(path.resolve() / "logs"))
+    for data_root in roots:
+        for world in sorted((data_root / "minecraftWorlds").glob("*")):
             if (world / "level.dat").is_file():
                 name = world / "levelname.txt"
                 result["worlds"].append({
@@ -146,12 +142,6 @@ def checked_destination(world, relative):
     return target
 
 
-def pack_entries(root, config):
-    bp = read_json(root / config["behavior_pack"] / "manifest.json")
-    rp = read_json(root / config["resource_pack"] / "manifest.json")
-    return bp, rp
-
-
 def dedicated_pack_ids(config):
     namespace = uuid.UUID(config["harness_uuid"])
     return str(uuid.uuid5(namespace, "behavior-pack")), str(uuid.uuid5(namespace, "resource-pack"))
@@ -162,7 +152,8 @@ def deploy(root, config, world, run_id):
     owner = checked_destination(world, OWNER)
     if not owner.exists() or read_json(owner) != owner_data(root, config):
         raise SetupError("World ownership is not configured for this repository")
-    bp, rp = pack_entries(root, config)
+    packs = AddonPacks.load(root, config)
+    bp, rp = packs.bp.manifest, packs.rp.manifest
     test_bp_id, test_rp_id = dedicated_pack_ids(config)
     for name, allowed in (
         ("world_behavior_packs.json", {bp["header"]["uuid"], test_bp_id, config["harness_uuid"]}),
@@ -180,19 +171,6 @@ def deploy(root, config, world, run_id):
     for target in destinations:
         if target.exists():
             shutil.rmtree(target)
-    shutil.copytree(root / config["behavior_pack"], destinations[0])
-    shutil.copytree(root / config["resource_pack"], destinations[1])
-    deployed_bp_manifest = destinations[0] / "manifest.json"
-    deployed_rp_manifest = destinations[1] / "manifest.json"
-    deployed_bp = read_json(deployed_bp_manifest)
-    deployed_rp = read_json(deployed_rp_manifest)
-    deployed_bp["header"]["uuid"] = test_bp_id
-    deployed_rp["header"]["uuid"] = test_rp_id
-    for dependency in deployed_bp.get("dependencies", []):
-        if dependency.get("uuid") == rp["header"]["uuid"]:
-            dependency["uuid"] = test_rp_id
-    write_json(deployed_bp_manifest, deployed_bp)
-    write_json(deployed_rp_manifest, deployed_rp)
     harness = destinations[2]
     shutil.copytree(root / "testing/harness", harness / "scripts")
     write_json(harness / "manifest.json", {
@@ -215,16 +193,9 @@ def deploy(root, config, world, run_id):
            "showcase": config.get("showcase", False)}
     if "expected_seat_count" in config:
         run["expected_seat_count"] = config["expected_seat_count"]
-    (harness / "scripts/run_config.js").write_text(
-        "export const run = " + json.dumps(run) + ";\n", encoding="utf-8",
-    )
-    write_json(world / "world_behavior_packs.json", [
-        {"pack_id": test_bp_id, "version": bp["header"]["version"]},
-        {"pack_id": config["harness_uuid"], "version": [1, 0, 0]},
-    ])
-    write_json(world / "world_resource_packs.json", [
-        {"pack_id": test_rp_id, "version": rp["header"]["version"]},
-    ])
+    packs.stage_test_pack(world, destinations[0], destinations[1], run, harness / "scripts/run_config.js",
+                          pack_ids=(test_bp_id, test_rp_id),
+                          extra_behavior_packs=[{"pack_id": config["harness_uuid"], "version": [1, 0, 0]}])
 
 
 def configure(root, config, world, logs):

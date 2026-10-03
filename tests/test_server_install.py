@@ -5,12 +5,13 @@ from pathlib import Path
 
 import pytest
 
+from scripts.addon_packs import AddonPacks
 from scripts.install_addon import install_to_server
-from scripts.version_manager import BP_UUID, RP_UUID
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-BP_SRC = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP"
-RP_SRC = REPO_ROOT / "resource_packs" / "MonsterTruck_RP"
+PACKS = AddonPacks.load(REPO_ROOT)
+BP_UUID, RP_UUID = PACKS.bp.uuid, PACKS.rp.uuid
+BP_SRC, RP_SRC = PACKS.bp.path, PACKS.rp.path
 WORLD = "/data/worlds/Survival World"
 
 
@@ -49,7 +50,7 @@ def make_docker(properties="level-name=Survival World\ntexturepack-required=true
 def test_install_to_server_activates_packs_and_restarts_on_yes():
     docker = make_docker()
 
-    install_to_server("survival", [1, 0, 3], BP_SRC, RP_SRC, run=docker, confirm=lambda _: "y")
+    install_to_server("survival", [1, 0, 3], PACKS, run=docker, confirm=lambda _: "y")
 
     behavior = json.loads(docker.files[f"{WORLD}/world_behavior_packs.json"])
     resource = json.loads(docker.files[f"{WORLD}/world_resource_packs.json"])
@@ -64,7 +65,7 @@ def test_install_to_server_activates_packs_and_restarts_on_yes():
 def test_install_to_server_skips_restart_without_confirmation_and_requires_texture_pack():
     docker = make_docker("level-name=Survival World\ntexturepack-required=false\n")
 
-    install_to_server("survival", [1, 0, 3], BP_SRC, RP_SRC, run=docker, confirm=lambda _: "")
+    install_to_server("survival", [1, 0, 3], PACKS, run=docker, confirm=lambda _: "")
 
     assert "texturepack-required=true" in docker.files["/data/server.properties"]
     assert ("restart", "minecraft-survival") not in docker.calls
@@ -74,7 +75,7 @@ def test_install_to_server_rejects_missing_level_name():
     docker = FakeDocker({"/data/server.properties": "gamemode=survival\n"})
 
     with pytest.raises(RuntimeError, match="level-name"):
-        install_to_server("survival", [1, 0, 3], BP_SRC, RP_SRC, run=docker, confirm=lambda _: "y")
+        install_to_server("survival", [1, 0, 3], PACKS, run=docker, confirm=lambda _: "y")
     assert not any(call[0] == "cp" for call in docker.calls)
 
 

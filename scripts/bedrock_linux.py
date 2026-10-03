@@ -29,12 +29,6 @@ def data_dir():
     return Path.home() / ".var/app" / APP_ID / "data/mcpelauncher"
 
 
-def com_mojang_roots():
-    """Initialized flatpak and native mcpelauncher accounts."""
-    candidates = (data_dir() / "games/com.mojang", Path.home() / ".local/share/mcpelauncher/games/com.mojang")
-    return [path.resolve() for path in candidates if (path / "minecraftpe/options.txt").is_file()]
-
-
 def client_running():
     try:
         listing = subprocess.run(["flatpak", "ps", "--columns=application"], capture_output=True,

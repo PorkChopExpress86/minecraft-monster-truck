@@ -1,13 +1,21 @@
 import os
 import sys
-import json
 from pathlib import Path
+
+try:
+    from .addon_packs import AddonPacks, PackConfigError, read_json
+except ImportError:
+    from addon_packs import AddonPacks, PackConfigError, read_json
 
 class ProjectValidator:
     def __init__(self, repo_root=None):
         self.repo_root = Path(repo_root) if repo_root else Path(__file__).resolve().parent.parent
         self.errors = []
         self.warnings = []
+
+    @property
+    def packs(self):
+        return AddonPacks.load(self.repo_root)
         
     def log_error(self, message):
         self.errors.append(message)
@@ -20,8 +28,7 @@ class ProjectValidator:
             self.log_error(f"File not found: {path.relative_to(self.repo_root) if path.is_relative_to(self.repo_root) else path}")
             return None
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+            return read_json(path)
         except Exception as e:
             self.log_error(f"Failed to parse JSON in {path}: {e}")
             return None
@@ -35,8 +42,9 @@ class ProjectValidator:
         return config
 
     def validate_manifests(self):
-        bp_manifest_path = self.repo_root / "behavior_packs" / "MonsterTruck_BP" / "manifest.json"
-        rp_manifest_path = self.repo_root / "resource_packs" / "MonsterTruck_RP" / "manifest.json"
+        packs = self.packs
+        bp_manifest_path = packs.bp.manifest_path
+        rp_manifest_path = packs.rp.manifest_path
         
         bp_manifest = self.load_json(bp_manifest_path)
         rp_manifest = self.load_json(rp_manifest_path)
@@ -76,8 +84,9 @@ class ProjectValidator:
             return
         identifier = f"{config['namespace']}:{config['entity_id']}"
         
-        bp_entity_path = self.repo_root / "behavior_packs" / "MonsterTruck_BP" / "entities" / f"{config['entity_id']}.entity.json"
-        rp_entity_path = self.repo_root / "resource_packs" / "MonsterTruck_RP" / "entity" / f"{config['entity_id']}.entity.json"
+        packs = self.packs
+        bp_entity_path = packs.bp.path / "entities" / f"{config['entity_id']}.entity.json"
+        rp_entity_path = packs.rp.path / "entity" / f"{config['entity_id']}.entity.json"
         
         bp_entity = self.load_json(bp_entity_path)
         rp_entity = self.load_json(rp_entity_path)
@@ -112,8 +121,9 @@ class ProjectValidator:
                 self.log_error(f"RP client entity identifier mismatch: expected {identifier}, got {desc.get('identifier')}")
 
     def validate_animations_and_geometry(self):
-        geo_path = self.repo_root / "resource_packs" / "MonsterTruck_RP" / "models" / "entity" / "monster_truck.geo.json"
-        anim_path = self.repo_root / "resource_packs" / "MonsterTruck_RP" / "animations" / "monster_truck.animation.json"
+        rp = self.packs.rp.path
+        geo_path = rp / "models" / "entity" / "monster_truck.geo.json"
+        anim_path = rp / "animations" / "monster_truck.animation.json"
         
         geo = self.load_json(geo_path)
         anim = self.load_json(anim_path)
@@ -139,11 +149,12 @@ class ProjectValidator:
         icon_w = config.get("art", {}).get("pack_icon_width", 64) if config else 64
         icon_h = config.get("art", {}).get("pack_icon_height", 64) if config else 64
         
+        packs = self.packs
         image_expectations = [
-            (self.repo_root / "resource_packs" / "MonsterTruck_RP" / "textures" / "entity" / "monster_truck.png", (tex_w, tex_h)),
-            (self.repo_root / "resource_packs" / "MonsterTruck_RP" / "textures" / "items" / "monster_truck_spawn_egg.png", (egg_w, egg_h)),
-            (self.repo_root / "behavior_packs" / "MonsterTruck_BP" / "pack_icon.png", (icon_w, icon_h)),
-            (self.repo_root / "resource_packs" / "MonsterTruck_RP" / "pack_icon.png", (icon_w, icon_h)),
+            (packs.rp.path / "textures" / "entity" / "monster_truck.png", (tex_w, tex_h)),
+            (packs.rp.path / "textures" / "items" / "monster_truck_spawn_egg.png", (egg_w, egg_h)),
+            (packs.bp.path / "pack_icon.png", (icon_w, icon_h)),
+            (packs.rp.path / "pack_icon.png", (icon_w, icon_h)),
         ]
         
         for path, expected_size in image_expectations:
@@ -160,6 +171,12 @@ class ProjectValidator:
         self.warnings.clear()
         
         config = self.validate_config()
+        try:
+            self.packs
+        except PackConfigError as error:
+            # Every remaining check reads a pack, so report the config problem alone.
+            self.log_error(str(error))
+            return self.errors
         self.validate_manifests()
         self.validate_entities(config)
         self.validate_animations_and_geometry()

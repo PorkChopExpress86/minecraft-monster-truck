@@ -1,15 +1,15 @@
 """Version manager and sync verification for the Monster Truck Minecraft Bedrock Add-on."""
 import argparse
-import json
-import os
 from pathlib import Path
 import re
 import sys
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+try:
+    from .addon_packs import AddonPacks, com_mojang_roots, read_json, write_json
+except ImportError:
+    from addon_packs import AddonPacks, com_mojang_roots, read_json, write_json
 
-BP_UUID = "bc617e1c-0c92-4f91-ab9b-241d7ef141d0"
-RP_UUID = "f6fc3675-bf88-45bd-9348-2c75d1e8573e"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 def version_to_str(ver):
     """Convert version array [major, minor, patch] to string 'major.minor.patch'."""
@@ -28,20 +28,20 @@ def str_to_version(ver_str):
 def get_repo_version(repo_root=None):
     """Get the canonical add-on version from behavior pack manifest or config."""
     root = Path(repo_root) if repo_root else REPO_ROOT
-    bp_manifest_path = root / "behavior_packs" / "MonsterTruck_BP" / "manifest.json"
-    if bp_manifest_path.is_file():
-        try:
-            data = json.loads(bp_manifest_path.read_text(encoding="utf-8"))
-            ver = data.get("header", {}).get("version")
+    # A broken testing/bedrock.json raises here, as it does in set_repo_version; only manifest problems fall back.
+    bp = AddonPacks.load(root).bp
+    try:
+        if bp.manifest_path.is_file():
+            ver = bp.manifest.get("header", {}).get("version")
             if isinstance(ver, list) and len(ver) == 3:
                 return [int(x) for x in ver]
-        except Exception:
-            pass
+    except Exception:
+        pass
 
     cfg_json = root / "vehicle.config.json"
     if cfg_json.is_file():
         try:
-            data = json.loads(cfg_json.read_text(encoding="utf-8"))
+            data = read_json(cfg_json)
             ver = data.get("version")
             if isinstance(ver, list) and len(ver) == 3:
                 return [int(x) for x in ver]
@@ -59,38 +59,15 @@ def set_repo_version(new_version, repo_root=None):
     if len(new_ver) != 3:
         raise ValueError(f"Version must have 3 integers [major, minor, patch], got {new_version}")
 
-    # 1. Behavior Pack manifest
-    bp_manifest_path = root / "behavior_packs" / "MonsterTruck_BP" / "manifest.json"
-    if bp_manifest_path.is_file():
-        bp_data = json.loads(bp_manifest_path.read_text(encoding="utf-8"))
-        if "header" in bp_data:
-            bp_data["header"]["version"] = new_ver
-        if "modules" in bp_data:
-            for mod in bp_data["modules"]:
-                mod["version"] = new_ver
-        if "dependencies" in bp_data:
-            for dep in bp_data["dependencies"]:
-                if dep.get("uuid") == RP_UUID or "version" in dep and isinstance(dep.get("version"), list):
-                    dep["version"] = new_ver
-        bp_manifest_path.write_text(json.dumps(bp_data, indent=2) + "\n", encoding="utf-8")
+    # 1. Behavior and resource pack manifests
+    AddonPacks.load(root).set_version(new_ver)
 
-    # 2. Resource Pack manifest
-    rp_manifest_path = root / "resource_packs" / "MonsterTruck_RP" / "manifest.json"
-    if rp_manifest_path.is_file():
-        rp_data = json.loads(rp_manifest_path.read_text(encoding="utf-8"))
-        if "header" in rp_data:
-            rp_data["header"]["version"] = new_ver
-        if "modules" in rp_data:
-            for mod in rp_data["modules"]:
-                mod["version"] = new_ver
-        rp_manifest_path.write_text(json.dumps(rp_data, indent=2) + "\n", encoding="utf-8")
-
-    # 3. vehicle.config.json
+    # 2. vehicle.config.json
     cfg_json_path = root / "vehicle.config.json"
     if cfg_json_path.is_file():
-        cfg_json = json.loads(cfg_json_path.read_text(encoding="utf-8"))
+        cfg_json = read_json(cfg_json_path)
         cfg_json["version"] = new_ver
-        cfg_json_path.write_text(json.dumps(cfg_json, indent=2) + "\n", encoding="utf-8")
+        write_json(cfg_json_path, cfg_json)
 
     return new_ver
 
@@ -110,42 +87,20 @@ def bump_version(part="patch", repo_root=None, explicit_version=None):
 
     return set_repo_version(new_ver, repo_root)
 
-def find_com_mojang_roots():
-    """Find all local com.mojang directories on the machine."""
-    roots = []
-    # GDK Roaming path
-    roaming_users = Path(os.environ.get("APPDATA", "")) / "Minecraft Bedrock/Users"
-    if roaming_users.is_dir():
-        for user_dir in roaming_users.glob("*/games/com.mojang"):
-            if user_dir.parent.name != "Shared":
-                roots.append(user_dir.resolve())
-
-    # Legacy UWP LocalAppData path
-    legacy = (Path(os.environ.get("LOCALAPPDATA", "")) /
-              "Packages/Microsoft.MinecraftUWP_8wekyb3d8bbwe/LocalState/games/com.mojang")
-    if legacy.is_dir() and legacy.resolve() not in roots:
-        roots.append(legacy.resolve())
-
-    # Linux mcpelauncher data directories (flatpak, then native install)
-    home = Path.home()
-    for linux_root in (home / ".var/app/io.mrarm.mcpelauncher/data/mcpelauncher/games/com.mojang",
-                       home / ".local/share/mcpelauncher/games/com.mojang"):
-        if linux_root.is_dir() and linux_root.resolve() not in roots:
-            roots.append(linux_root.resolve())
-
-    return roots
-
-def get_installed_versions(mojang_roots=None):
+def get_installed_versions(mojang_roots=None, packs=None):
     """Scan local Minecraft Bedrock installation and retrieve versions across all targets."""
-    roots = mojang_roots if mojang_roots is not None else find_com_mojang_roots()
+    roots = mojang_roots if mojang_roots is not None else com_mojang_roots()
+    if packs is None:
+        packs = AddonPacks.load()
+    bp_uuid, rp_uuid = packs.bp.uuid, packs.rp.uuid
     targets = []
 
     for root in roots:
         # 1. Global Dev Behavior Pack
-        dev_bp = root / "development_behavior_packs" / "MonsterTruck_BP" / "manifest.json"
+        dev_bp = root / "development_behavior_packs" / packs.bp.name / "manifest.json"
         if dev_bp.is_file():
             try:
-                data = json.loads(dev_bp.read_text(encoding="utf-8"))
+                data = read_json(dev_bp)
                 ver = data.get("header", {}).get("version")
                 targets.append({
                     "target": "development_behavior_packs",
@@ -157,10 +112,10 @@ def get_installed_versions(mojang_roots=None):
                 pass
 
         # 2. Global Dev Resource Pack
-        dev_rp = root / "development_resource_packs" / "MonsterTruck_RP" / "manifest.json"
+        dev_rp = root / "development_resource_packs" / packs.rp.name / "manifest.json"
         if dev_rp.is_file():
             try:
-                data = json.loads(dev_rp.read_text(encoding="utf-8"))
+                data = read_json(dev_rp)
                 ver = data.get("header", {}).get("version")
                 targets.append({
                     "target": "development_resource_packs",
@@ -184,9 +139,9 @@ def get_installed_versions(mojang_roots=None):
                 wbp_file = world / "world_behavior_packs.json"
                 if wbp_file.is_file():
                     try:
-                        packs = json.loads(wbp_file.read_text(encoding="utf-8"))
-                        for p in packs:
-                            if p.get("pack_id") == BP_UUID:
+                        entries = read_json(wbp_file)
+                        for p in entries:
+                            if p.get("pack_id") == bp_uuid:
                                 targets.append({
                                     "target": f"world_bp_entry:{wname}",
                                     "location": str(world),
@@ -201,9 +156,9 @@ def get_installed_versions(mojang_roots=None):
                 wrp_file = world / "world_resource_packs.json"
                 if wrp_file.is_file():
                     try:
-                        packs = json.loads(wrp_file.read_text(encoding="utf-8"))
-                        for p in packs:
-                            if p.get("pack_id") == RP_UUID:
+                        entries = read_json(wrp_file)
+                        for p in entries:
+                            if p.get("pack_id") == rp_uuid:
                                 targets.append({
                                     "target": f"world_rp_entry:{wname}",
                                     "location": str(world),
@@ -216,22 +171,25 @@ def get_installed_versions(mojang_roots=None):
 
     return targets
 
-def sync_world_pack_versions(world_dir: Path, new_version: list):
+def sync_world_pack_versions(world_dir: Path, new_version: list, packs=None):
     """Synchronize pack version inside world_behavior_packs.json and world_resource_packs.json."""
     new_ver = [int(x) for x in new_version]
+    if packs is None:
+        packs = AddonPacks.load()
+    bp_uuid, rp_uuid = packs.bp.uuid, packs.rp.uuid
     updated = False
 
     wbp_file = world_dir / "world_behavior_packs.json"
     if wbp_file.is_file():
         try:
-            packs = json.loads(wbp_file.read_text(encoding="utf-8"))
+            entries = read_json(wbp_file)
             found = False
-            for p in packs:
-                if p.get("pack_id") == BP_UUID:
+            for p in entries:
+                if p.get("pack_id") == bp_uuid:
                     p["version"] = new_ver
                     found = True
             if found:
-                wbp_file.write_text(json.dumps(packs, indent=2) + "\n", encoding="utf-8")
+                write_json(wbp_file, entries)
                 updated = True
         except Exception:
             pass
@@ -239,14 +197,14 @@ def sync_world_pack_versions(world_dir: Path, new_version: list):
     wrp_file = world_dir / "world_resource_packs.json"
     if wrp_file.is_file():
         try:
-            packs = json.loads(wrp_file.read_text(encoding="utf-8"))
+            entries = read_json(wrp_file)
             found = False
-            for p in packs:
-                if p.get("pack_id") == RP_UUID:
+            for p in entries:
+                if p.get("pack_id") == rp_uuid:
                     p["version"] = new_ver
                     found = True
             if found:
-                wrp_file.write_text(json.dumps(packs, indent=2) + "\n", encoding="utf-8")
+                write_json(wrp_file, entries)
                 updated = True
         except Exception:
             pass
@@ -257,7 +215,7 @@ def check_version_sync(repo_root=None, mojang_roots=None):
     """Compare latest finished repo version against all installed Minecraft targets."""
     repo_ver = get_repo_version(repo_root)
     repo_str = version_to_str(repo_ver)
-    targets = get_installed_versions(mojang_roots)
+    targets = get_installed_versions(mojang_roots, AddonPacks.load(repo_root))
 
     if not targets:
         return {

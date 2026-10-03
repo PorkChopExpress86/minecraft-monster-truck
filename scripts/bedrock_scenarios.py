@@ -3,7 +3,6 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
@@ -12,9 +11,11 @@ import urllib.request
 import zipfile
 
 try:
-    from .bedrock_world import customize_level, template_bytes
+    from .addon_packs import AddonPacks
+    from .bedrock_world import check_archive, customize_level, template_bytes
 except ImportError:
-    from bedrock_world import customize_level, template_bytes
+    from addon_packs import AddonPacks
+    from bedrock_world import check_archive, customize_level, template_bytes
 
 
 MARKER = "[SCENARIO]"
@@ -30,11 +31,6 @@ def docker(*args):
         return subprocess.run(["docker", *args], capture_output=True, text=True, errors="replace", timeout=120)
     except FileNotFoundError as error:
         raise ScenarioError("Docker is required for Scenario Runs") from error
-
-
-def write_json(path, data):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 def server_zip(root, server):
@@ -61,10 +57,7 @@ def prepare_server(root, config, run_id, output):
     server = config["scenario_server"]
     data = output / "server"
     with zipfile.ZipFile(server_zip(root, server)) as archive:
-        for item in archive.infolist():
-            path = Path(item.filename)
-            if path.is_absolute() or ".." in path.parts:
-                raise ScenarioError("Unsafe path in server archive")
+        safe_archive(archive, "server archive")
         archive.extractall(data)
     binary = data / f"bedrock_server-{server['version']}"
     (data / "bedrock_server").rename(binary)
@@ -72,44 +65,40 @@ def prepare_server(root, config, run_id, output):
 
     world = data / "worlds" / LEVEL
     with zipfile.ZipFile(io.BytesIO(template_bytes(root))) as archive:
-        for item in archive.infolist():
-            path = Path(item.filename)
-            if path.is_absolute() or ".." in path.parts or "\\" in item.filename:
-                raise ScenarioError("Unsafe path in world starter")
+        safe_archive(archive, "world starter")
         archive.extractall(world)
     (world / "level.dat").write_bytes(customize_level((world / "level.dat").read_bytes(), LEVEL, beta_apis=True))
     (world / "levelname.txt").write_text(LEVEL, encoding="utf-8")
 
-    bp = json.loads((root / config["behavior_pack"] / "manifest.json").read_text(encoding="utf-8"))
-    rp = json.loads((root / config["resource_pack"] / "manifest.json").read_text(encoding="utf-8"))
-    pack = world / "behavior_packs/MonsterTruck_BP"
-    shutil.copytree(root / config["behavior_pack"], pack)
-    shutil.copytree(root / config["resource_pack"], world / "resource_packs/MonsterTruck_RP")
-    # A Simulated Driver only exists as a player object in the script runtime that spawned it,
-    # so the scenario driver runs inside this test copy of the add-on's runtime (ADR-0016).
-    shutil.copytree(root / "testing/scenarios", pack / "scripts/scenario_driver")
-    (pack / "scripts/scenario_entry.js").write_text(
-        'import "./main.js";\nimport "./scenario_driver/main.js";\n', encoding="utf-8")
-    manifest = json.loads((pack / "manifest.json").read_text(encoding="utf-8"))
-    for module in manifest["modules"]:
-        if module["type"] == "script":
-            module["entry"] = "scripts/scenario_entry.js"
-    manifest["dependencies"] = [dependency for dependency in manifest["dependencies"]
-                                if dependency.get("module_name") != "@minecraft/server"] + [
-        {"module_name": "@minecraft/server", "version": server["server_api_version"]},
-        {"module_name": "@minecraft/server-gametest", "version": server["gametest_api_version"]},
-    ]
-    write_json(pack / "manifest.json", manifest)
+    packs = AddonPacks.load(root, config)
+    pack = world / "behavior_packs" / packs.bp.name
+
+    def add_scenario_driver(pack, manifest):
+        # A Simulated Driver only exists as a player object in the script runtime that spawned it,
+        # so the scenario driver runs inside this test copy of the add-on's runtime (ADR-0016).
+        shutil.copytree(root / "testing/scenarios", pack / "scripts/scenario_driver")
+        (pack / "scripts/scenario_entry.js").write_text(
+            'import "./main.js";\nimport "./scenario_driver/main.js";\n', encoding="utf-8")
+        for module in manifest["modules"]:
+            if module["type"] == "script":
+                module["entry"] = "scripts/scenario_entry.js"
+        manifest["dependencies"] = [dependency for dependency in manifest["dependencies"]
+                                    if dependency.get("module_name") != "@minecraft/server"] + [
+            {"module_name": "@minecraft/server", "version": server["server_api_version"]},
+            {"module_name": "@minecraft/server-gametest", "version": server["gametest_api_version"]},
+        ]
+
     run = {"run_id": run_id, "entity_id": config["entity_id"], "scenarios": server["scenarios"]}
-    (pack / "scripts/scenario_driver/run_config.js").write_text(
-        "export const run = " + json.dumps(run) + ";\n", encoding="utf-8")
-    write_json(world / "world_behavior_packs.json", [
-        {"pack_id": bp["header"]["uuid"], "version": bp["header"]["version"]},
-    ])
-    write_json(world / "world_resource_packs.json", [
-        {"pack_id": rp["header"]["uuid"], "version": rp["header"]["version"]},
-    ])
+    packs.stage_test_pack(world, pack, world / "resource_packs" / packs.rp.name, run,
+                          pack / "scripts/scenario_driver/run_config.js", customize_bp=add_scenario_driver)
     return data
+
+
+def safe_archive(archive, label):
+    try:
+        check_archive(archive, label)
+    except ValueError as error:
+        raise ScenarioError(str(error)) from error
 
 
 def parse_markers(text, run_id):

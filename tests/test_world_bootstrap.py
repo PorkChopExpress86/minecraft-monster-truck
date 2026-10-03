@@ -105,3 +105,24 @@ def test_malformed_logging_setting_is_refused(starter):
     with pytest.raises(ValueError, match="malformed content_log_file"):
         world.enable_logging(root, data_root)
     assert options.read_text() == "content_log_file:unexpected\n"
+
+
+def archive_with(name, data=b"x"):
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w") as zipped:
+        zipped.writestr(name, data)
+    return zipfile.ZipFile(payload)
+
+
+@pytest.mark.parametrize("name", ["../escaped.txt", "/abs.txt", "dir\\escaped.txt"])
+def test_check_archive_rejects_member_paths_that_could_escape(name):
+    with pytest.raises(ValueError, match="Unsafe path in fixture archive"):
+        world.check_archive(archive_with(name), "fixture archive")
+
+
+def test_check_archive_rejects_oversized_members_only_when_a_limit_is_given():
+    archive = archive_with("level.dat", b"x" * 11)
+    world.check_archive(archive, "fixture archive")
+    world.check_archive(archive, "fixture archive", max_file_size=11)
+    with pytest.raises(ValueError, match="Unexpectedly large file in fixture archive"):
+        world.check_archive(archive, "fixture archive", max_file_size=10)

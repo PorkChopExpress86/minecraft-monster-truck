@@ -90,6 +90,19 @@ def test_prepared_scenario_world_runs_the_driver_inside_a_test_copy_of_the_addon
     assert active == [production["header"]["uuid"]]
 
 
+@pytest.mark.parametrize("archive_name", ["server_zip", "template_bytes"])
+def test_an_unsafe_server_or_world_starter_archive_blocks_the_run(server_files, tmp_path, monkeypatch, archive_name):
+    bad = tmp_path / "bad.zip"
+    with zipfile.ZipFile(bad, "w") as zipped:
+        zipped.writestr("bedrock_server", b"binary")
+        zipped.writestr("../escaped.txt", "bad")
+    replacement = (lambda root, server: bad) if archive_name == "server_zip" else (lambda root: bad.read_bytes())
+    monkeypatch.setattr(scenarios, archive_name, replacement)
+    with pytest.raises(scenarios.ScenarioError, match="Unsafe path"):
+        scenarios.prepare_server(REPO_ROOT, server_files, RUN, tmp_path / "out")
+    assert not (tmp_path / "escaped.txt").exists() and not (tmp_path / "out/escaped.txt").exists()
+
+
 class FakeDocker:
     def __init__(self, logs):
         self.logs = logs
@@ -141,6 +154,14 @@ def test_only_narrows_scenarios_in_configured_order_and_rejects_unknown_names():
 
 def test_only_is_rejected_outside_scenarios_mode(tmp_path):
     from scripts import bedrock_test
-    assert bedrock_test.main(["static", "--only", "smoke"], root=REPO_ROOT) == 2
-    report = json.loads((REPO_ROOT / "dist/bedrock-tests/latest.json").read_text())
+    # A tmp repo with this repo's config and pack manifests, so the run report is never written into the real repo.
+    root = tmp_path / "repo"
+    config = json.loads((REPO_ROOT / "testing/bedrock.json").read_text())
+    (root / "testing").mkdir(parents=True)
+    (root / "testing/bedrock.json").write_text(json.dumps(config))
+    for key in ("behavior_pack", "resource_pack"):
+        (root / config[key]).mkdir(parents=True)
+        (root / config[key] / "manifest.json").write_bytes((REPO_ROOT / config[key] / "manifest.json").read_bytes())
+    assert bedrock_test.main(["static", "--only", "smoke"], root=root) == 2
+    report = json.loads((root / "dist/bedrock-tests/latest.json").read_text())
     assert report["error"] == "--only is only accepted by scenarios"

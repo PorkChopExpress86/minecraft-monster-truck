@@ -15,9 +15,9 @@ import zipfile
 import nbtlib
 
 try:
-    from .bedrock_linux import com_mojang_roots as linux_roots
+    from .addon_packs import com_mojang_roots
 except ImportError:
-    from bedrock_linux import com_mojang_roots as linux_roots
+    from addon_packs import com_mojang_roots
 
 
 WORLD_URL = (
@@ -29,21 +29,10 @@ SOURCE_MARKER = ".addon-test-world-source.json"
 
 
 def account_root():
-    candidates = []
-    if os.environ.get("APPDATA"):
-        users = Path(os.environ["APPDATA"]) / "Minecraft Bedrock/Users"
-        candidates = [path for path in users.glob("*/games/com.mojang")
-                      if path.parents[1].name != "Shared" and (path / "minecraftpe/options.txt").is_file()]
-    if os.environ.get("LOCALAPPDATA"):
-        legacy = (Path(os.environ["LOCALAPPDATA"]) /
-                  "Packages/Microsoft.MinecraftUWP_8wekyb3d8bbwe/LocalState/games/com.mojang")
-        if not candidates and (legacy / "minecraftpe/options.txt").is_file():
-            candidates = [legacy]
-    if not candidates:
-        candidates = linux_roots()
+    candidates = com_mojang_roots(require_options=True)
     if len(candidates) != 1:
         raise ValueError("Automatic setup requires one initialized Minecraft account; use Configure for multiple accounts")
-    return candidates[0].resolve()
+    return candidates[0]
 
 
 def enable_logging(root, data_root):
@@ -118,6 +107,16 @@ def customize_level(data, name, beta_apis=False):
     return struct.pack("<II", version, len(payload)) + payload
 
 
+def check_archive(archive, label, max_file_size=None):
+    """Refuse a zip whose members could land outside the extraction directory (or are oversized) before extracting."""
+    for item in archive.infolist():
+        path = Path(item.filename)
+        if path.is_absolute() or ".." in path.parts or "\\" in item.filename:
+            raise ValueError("Unsafe path in " + label)
+        if max_file_size is not None and item.file_size > max_file_size:
+            raise ValueError("Unexpectedly large file in " + label)
+
+
 def create_world(root, config, data_root=None):
     root = Path(root).resolve()
     data_root = Path(data_root).resolve() if data_root else account_root()
@@ -137,12 +136,7 @@ def create_world(root, config, data_root=None):
     else:
         data = template_bytes(root)
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            for item in archive.infolist():
-                path = Path(item.filename)
-                if path.is_absolute() or ".." in path.parts or "\\" in item.filename:
-                    raise ValueError("Unsafe path in world starter")
-                if item.file_size > 10_000_000:
-                    raise ValueError("Unexpectedly large file in world starter")
+            check_archive(archive, "world starter", max_file_size=10_000_000)
             with tempfile.TemporaryDirectory(prefix=".addon-world-", dir=worlds) as staging:
                 stage = Path(staging)
                 if not stage.resolve().is_relative_to(worlds.resolve()):

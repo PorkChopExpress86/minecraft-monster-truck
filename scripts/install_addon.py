@@ -1,13 +1,9 @@
 """Deploy the Monster Truck add-on directly to local Minecraft Bedrock installation with version revving and sync verification."""
 import argparse
 import json
-import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -16,30 +12,26 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 try:
+    from scripts.addon_packs import AddonPacks, com_mojang_roots, read_json
     from scripts.version_manager import (
         get_repo_version,
         set_repo_version,
         bump_version,
         version_to_str,
-        find_com_mojang_roots,
         sync_world_pack_versions,
         check_version_sync,
         print_status_report,
-        BP_UUID,
-        RP_UUID,
     )
 except ImportError:
+    from addon_packs import AddonPacks, com_mojang_roots, read_json
     from version_manager import (
         get_repo_version,
         set_repo_version,
         bump_version,
         version_to_str,
-        find_com_mojang_roots,
         sync_world_pack_versions,
         check_version_sync,
         print_status_report,
-        BP_UUID,
-        RP_UUID,
     )
 
 # Opt-in Docker Bedrock Dedicated Server targets (itzg/minecraft-bedrock-server containers).
@@ -50,7 +42,7 @@ def docker(*args, input=None):
     return subprocess.run(["docker", *args], input=input, capture_output=True, text=True)
 
 
-def install_to_server(name, version, bp_src, rp_src, run=docker, confirm=input):
+def install_to_server(name, version, packs, run=docker, confirm=input):
     """Deploy both packs into a server container, activate them in its world, then confirm a restart."""
     container = SERVER_CONTAINERS[name]
 
@@ -65,7 +57,8 @@ def install_to_server(name, version, bp_src, rp_src, run=docker, confirm=input):
     if not world:
         raise RuntimeError(f"{container}: level-name missing from server.properties")
 
-    for src, kind, uuid in ((bp_src, "behavior", BP_UUID), (rp_src, "resource", RP_UUID)):
+    for pack, kind in ((packs.bp, "behavior"), (packs.rp, "resource")):
+        src, uuid = pack.path, pack.uuid
         dest = f"/data/{kind}_packs/{src.name}"
         check(run("exec", container, "rm", "-rf", dest), f"removing old {dest}")
         check(run("cp", f"{src}/.", f"{container}:{dest}"), f"copying {src.name}")
@@ -73,14 +66,14 @@ def install_to_server(name, version, bp_src, rp_src, run=docker, confirm=input):
 
         list_path = f"/data/worlds/{world}/world_{kind}_packs.json"
         existing = run("exec", container, "cat", list_path)
-        packs = json.loads(existing.stdout) if existing.returncode == 0 and existing.stdout.strip() else []
-        entry = next((p for p in packs if p.get("pack_id") == uuid), None)
+        entries = json.loads(existing.stdout) if existing.returncode == 0 and existing.stdout.strip() else []
+        entry = next((p for p in entries if p.get("pack_id") == uuid), None)
         if entry is None:
-            packs.append({"pack_id": uuid, "version": list(version)})
+            entries.append({"pack_id": uuid, "version": list(version)})
         else:
             entry["version"] = list(version)
         check(run("exec", "-i", container, "sh", "-c", 'cat > "$1"', "sh", list_path,
-                  input=json.dumps(packs, indent=2) + "\n"), f"writing {list_path}")
+                  input=json.dumps(entries, indent=2) + "\n"), f"writing {list_path}")
         print(f"  [OK] {container}: {src.name} v{version_to_str(version)} active in world '{world}'")
 
     if "texturepack-required=true" not in props.splitlines():
@@ -120,14 +113,13 @@ def install(rev=True, rev_part="patch", explicit_version=None, servers=(), assum
         target_ver = current_ver
         print(f"[VERSION] Installing without version rev (v{version_to_str(target_ver)})")
 
-    bp_src = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP"
-    rp_src = REPO_ROOT / "resource_packs" / "MonsterTruck_RP"
+    packs = AddonPacks.load(REPO_ROOT)
 
-    if not bp_src.is_dir() or not rp_src.is_dir():
+    if not packs.bp.path.is_dir() or not packs.rp.path.is_dir():
         print(f"[ERROR] Source packs missing in {REPO_ROOT}", file=sys.stderr)
         return 1
 
-    mojang_roots = find_com_mojang_roots()
+    mojang_roots = com_mojang_roots()
     if not mojang_roots:
         print("[ERROR] No local Minecraft Bedrock installation found.", file=sys.stderr)
         return 1
@@ -137,18 +129,10 @@ def install(rev=True, rev_part="patch", explicit_version=None, servers=(), assum
         print(f"\nInstalling to Minecraft root: {root}")
 
         # 1. Global development packs
-        dev_bp = root / "development_behavior_packs" / "MonsterTruck_BP"
-        dev_rp = root / "development_resource_packs" / "MonsterTruck_RP"
-
-        dev_bp.parent.mkdir(parents=True, exist_ok=True)
-        dev_rp.parent.mkdir(parents=True, exist_ok=True)
-
-        if dev_bp.exists():
-            shutil.rmtree(dev_bp)
-        if dev_rp.exists():
-            shutil.rmtree(dev_rp)
-        shutil.copytree(bp_src, dev_bp)
-        shutil.copytree(rp_src, dev_rp)
+        dev_bp = root / "development_behavior_packs" / packs.bp.name
+        dev_rp = root / "development_resource_packs" / packs.rp.name
+        packs.bp.copy_to(dev_bp)
+        packs.rp.copy_to(dev_rp)
         print(f"  [OK] Installed global dev behavior pack (v{version_to_str(target_ver)}): {dev_bp}")
         print(f"  [OK] Installed global dev resource pack (v{version_to_str(target_ver)}): {dev_rp}")
         deployed_count += 1
@@ -165,8 +149,8 @@ def install(rev=True, rev_part="patch", explicit_version=None, servers=(), assum
                 has_truck_pack = False
                 if wb_json.is_file():
                     try:
-                        packs = json.loads(wb_json.read_text(encoding="utf-8"))
-                        if any(BP_UUID in p.get("pack_id", "") for p in packs):
+                        entries = read_json(wb_json)
+                        if any(packs.bp.uuid in p.get("pack_id", "") for p in entries):
                             has_truck_pack = True
                     except Exception:
                         pass
@@ -182,19 +166,17 @@ def install(rev=True, rev_part="patch", explicit_version=None, servers=(), assum
                 if w_bp.is_dir():
                     for bp_folder in w_bp.glob("*"):
                         if (bp_folder / "entities/monster_truck.entity.json").exists() or "MonsterTru" in bp_folder.name:
-                            shutil.rmtree(bp_folder)
-                            shutil.copytree(bp_src, bp_folder)
+                            packs.bp.copy_to(bp_folder)
                             updated_world = True
 
                 if w_rp.is_dir():
                     for rp_folder in w_rp.glob("*"):
                         if (rp_folder / "entity/monster_truck.entity.json").exists() or "MonsterTru" in rp_folder.name:
-                            shutil.rmtree(rp_folder)
-                            shutil.copytree(rp_src, rp_folder)
+                            packs.rp.copy_to(rp_folder)
                             updated_world = True
 
                 # Synchronize world pack versions in world_behavior_packs.json & world_resource_packs.json
-                synced_manifests = sync_world_pack_versions(world, target_ver)
+                synced_manifests = sync_world_pack_versions(world, target_ver, packs)
 
                 if updated_world or has_truck_pack or synced_manifests:
                     print(f"  [OK] Updated active world '{wname}' ({world.name}) -> pack version v{version_to_str(target_ver)}")
@@ -220,7 +202,7 @@ def install(rev=True, rev_part="patch", explicit_version=None, servers=(), assum
     for name in servers:
         print(f"\nInstalling to server: {SERVER_CONTAINERS[name]}")
         try:
-            install_to_server(name, target_ver, bp_src, rp_src, confirm=restart_confirmer(assume_yes))
+            install_to_server(name, target_ver, packs, confirm=restart_confirmer(assume_yes))
         except (RuntimeError, OSError, json.JSONDecodeError) as error:
             print(f"[ERROR] {error}", file=sys.stderr)
             failed = True
