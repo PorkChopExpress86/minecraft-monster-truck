@@ -664,14 +664,16 @@ def run_game(root, config, run_id, output):
     return result
 
 
-def run_scenario_stage(root, config, run_id, output):
+def run_scenario_stage(root, config, run_id, output, only=None):
     if __package__:
-        from .bedrock_scenarios import ScenarioError, run_scenarios
+        from .bedrock_scenarios import ScenarioError, run_scenarios, select_scenarios
     else:
-        from bedrock_scenarios import ScenarioError, run_scenarios
+        from bedrock_scenarios import ScenarioError, run_scenarios, select_scenarios
     if "scenario_server" not in config:
         raise SetupError("testing/bedrock.json has no scenario_server settings")
     try:
+        if only is not None:
+            config = select_scenarios(config, only)
         return run_scenarios(root, config, run_id, output)
     except ScenarioError as error:
         raise SetupError(str(error)) from error
@@ -704,6 +706,7 @@ def main(argv=None, root=ROOT):
     parser.add_argument("mode", choices=["doctor", "bootstrap", "configure", "static", "scenarios", "game", "all"])
     parser.add_argument("--world", help="Existing fresh dedicated world directory; configure only")
     parser.add_argument("--log-directory", help="Content log directory; configure only")
+    parser.add_argument("--only", help="Comma-separated scenario names; scenarios mode only")
     args = parser.parse_args(argv)
     root = Path(root).resolve()
     run_id = uuid.uuid4().hex
@@ -729,13 +732,16 @@ def main(argv=None, root=ROOT):
         else:
             if args.world or args.log_directory:
                 raise SetupError("World/log overrides are only accepted by configure")
+            if args.only is not None and args.mode != "scenarios":
+                raise SetupError("--only is only accepted by scenarios")
+            report["only"] = args.only
             if args.mode in ("static", "all"):
                 report["static"] = run_static(root, config, output)
                 if report["static"]["status"] != "passed":
                     report.update(status="failed", exit_code=1)
                     return report["exit_code"]
             if args.mode == "scenarios" or (args.mode == "all" and "scenario_server" in config and not WINDOWS):
-                report["scenarios"] = run_scenario_stage(root, config, run_id, output)
+                report["scenarios"] = run_scenario_stage(root, config, run_id, output, args.only)
                 if report["scenarios"]["status"] != "passed":
                     report.update(status="failed", exit_code=1)
                     return report["exit_code"]

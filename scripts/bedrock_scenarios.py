@@ -150,6 +150,17 @@ def evaluate(text, run_id, scenarios):
             "errors": errors, "done": done}
 
 
+def select_scenarios(config, only):
+    """Return a config copy that runs only the named scenarios, in configured order."""
+    names = [name.strip() for name in only.split(",") if name.strip()]
+    configured = config["scenario_server"]["scenarios"]
+    unknown = [name for name in names if name not in configured]
+    if not names or unknown:
+        raise ScenarioError(f"Unknown scenario(s) {unknown or only!r}; choose from: {', '.join(configured)}")
+    return {**config, "scenario_server": {**config["scenario_server"],
+                                          "scenarios": [name for name in configured if name in names]}}
+
+
 def run_scenarios(root, config, run_id, output, run=docker, clock=time.monotonic, sleep=time.sleep):
     server = config["scenario_server"]
     name = "monster-truck-scenario-" + run_id

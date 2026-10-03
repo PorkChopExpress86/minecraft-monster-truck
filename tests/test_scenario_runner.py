@@ -128,3 +128,19 @@ def test_container_is_removed_even_when_reading_logs_fails(server_files, tmp_pat
     with pytest.raises(OSError):
         scenarios.run_scenarios(REPO_ROOT, server_files, RUN, tmp_path, run=failing, sleep=lambda _: None)
     assert docker.calls[-1] == ("rm", "monster-truck-scenario-" + RUN)
+
+
+def test_only_narrows_scenarios_in_configured_order_and_rejects_unknown_names():
+    config = {"scenario_server": {"scenarios": ["smoke", "seats", "handbrake"]}}
+    assert scenarios.select_scenarios(config, "handbrake, smoke")["scenario_server"]["scenarios"] == ["smoke", "handbrake"]
+    assert config["scenario_server"]["scenarios"] == ["smoke", "seats", "handbrake"], "the loaded config is not mutated"
+    for bad in ("jump", "", "smoke,jump"):
+        with pytest.raises(scenarios.ScenarioError, match="choose from: smoke, seats, handbrake"):
+            scenarios.select_scenarios(config, bad)
+
+
+def test_only_is_rejected_outside_scenarios_mode(tmp_path):
+    from scripts import bedrock_test
+    assert bedrock_test.main(["static", "--only", "smoke"], root=REPO_ROOT) == 2
+    report = json.loads((REPO_ROOT / "dist/bedrock-tests/latest.json").read_text())
+    assert report["error"] == "--only is only accepted by scenarios"

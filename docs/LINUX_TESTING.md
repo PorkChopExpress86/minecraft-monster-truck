@@ -18,6 +18,7 @@ Linux runs use the flatpak [Minecraft Bedrock Launcher](https://mcpelauncher.rea
 ./test-addon.sh Bootstrap  # Create/refresh the Dedicated Test World only
 ./test-addon.sh Static     # Script API type check, pytest, validation, packaging; no game launch
 ./test-addon.sh Scenarios  # Headless Scenario Runs only (Docker)
+./test-addon.sh Scenarios --only flotation_water,handbrake  # Just these scenarios, in configured order
 ./test-addon.sh Game       # Client Smoke Run only
 ./test-addon.sh Doctor     # Read-only discovery of worlds and log directories
 ```
@@ -50,4 +51,4 @@ Scenario Runs assert gameplay headlessly (ADR-0016). Settings live under `scenar
 4. The scenario pack loads a ticking area at world spawn, spawns the **Simulated Driver**, runs each scenario listed in `scenario_server.scenarios`, and prints `[SCENARIO]` PASS/FAIL markers and a final DONE marker.
 5. The container is stopped and removed, the unpacked server directory is deleted, and `scenario-server.log` is kept. Any scenario failure, missing result, or other server WARN/ERROR line fails the run.
 
-Add scenarios in `testing/scenarios/scenarios.js` and list them in `scenario_server.scenarios`. The user's long-lived server containers are never used.
+Add scenarios in `testing/scenarios/scenarios.js` and list them in `scenario_server.scenarios`. While iterating on one failure, rerun only it with `--only`; run the full list before committing. The user's long-lived server containers are never used.
