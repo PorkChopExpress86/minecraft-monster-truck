@@ -61,13 +61,19 @@ export function stepContact(truck, dimension, { location, heading, speed, molten
     if (tick - lastHit >= HIT_COOLDOWN_TICKS) hitCooldowns.delete(targetId);
   }
   if (!canApplyTireTrample(speed, false)) return;
+  let nearbyEntities;
   try {
-    const nearbyEntities = dimension.getEntities({
+    nearbyEntities = dimension.getEntities({
       location,
       maxDistance: CONTACT_SEARCH_RADIUS,
     });
+  } catch {
+    return;
+  }
 
-    for (const target of nearbyEntities) {
+  // Each target gets its own try: one that throws (say, it became invalid) spares no others.
+  for (const target of nearbyEntities) {
+    try {
       if (isProtectedTarget(target, truck)) continue;
       if (!isInContactPerimeter(target.location, location, heading, TRUCK_WIDTH, TRUCK_LENGTH, CONTACT_PERIMETER)) {
         continue;
@@ -107,8 +113,8 @@ export function stepContact(truck, dimension, { location, heading, speed, molten
           igniteIfMolten(target, moltenUntil, tick);
         }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 }
 
 export function calculateTrampleDamage(speed) {

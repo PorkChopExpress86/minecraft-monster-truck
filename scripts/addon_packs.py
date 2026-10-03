@@ -155,7 +155,7 @@ class AddonPacks:
                    [{"pack_id": rp_id, "version": source_rp["header"]["version"]}])
 
 
-def com_mojang_installs():
+def _installs():
     """Candidate com.mojang directories per install, in order: ("gdk", Windows GDK users), ("legacy", UWP),
     ("linux", mcpelauncher flatpak then native). Paths are unresolved and may not exist."""
     gdk, legacy = [], []
@@ -168,23 +168,39 @@ def com_mojang_installs():
     return [("gdk", gdk), ("legacy", legacy), ("linux", linux)]
 
 
-def com_mojang_roots(require_options=False):
-    """Existing local com.mojang directories, resolved, in com_mojang_installs() order.
+def _has_options(path):
+    return (path / "minecraftpe/options.txt").is_file()
+
+
+def com_mojang_roots(require_options=False, *, discovery=False):
+    """Existing local com.mojang directories, resolved, in install order: Windows GDK users, legacy UWP,
+    then the Linux mcpelauncher flatpak and native installs.
 
     require_options=True returns only initialized player accounts (minecraftpe/options.txt present; the GDK
     Shared folder is never one), taken from the first of those three installs that has any, so a stale
     legacy UWP account does not compete with a GDK one.
+
+    discovery=True is the read-only view bedrock_test.discover reports: Windows game folders as found but
+    only initialized Linux launcher accounts, as (root, logs) pairs. logs is the root's own logs folder
+    when it exists and the root is a launcher install (mcpelauncher keeps logs inside com.mojang; Windows
+    keeps them beside the account folders), else None.
     """
-    installs = com_mojang_installs()
+    installs = _installs()
     if require_options:
         for _, install in installs:
             accounts = [path.resolve() for path in install
-                        if (path / "minecraftpe/options.txt").is_file() and path.parents[1].name != "Shared"]
+                        if _has_options(path) and path.parents[1].name != "Shared"]
             if accounts:
                 return accounts
         return []
-    roots = []
-    for path in (path for _, install in installs for path in install):
-        if path.is_dir() and path.resolve() not in roots:
+    roots, found = [], []
+    for name, install in installs:
+        for path in install:
+            if not path.is_dir() or path.resolve() in roots:
+                continue
+            if discovery and name == "linux" and not _has_options(path):
+                continue
             roots.append(path.resolve())
-    return roots
+            logs = path.resolve() / "logs"
+            found.append((path.resolve(), logs if name == "linux" and logs.is_dir() else None))
+    return found if discovery else roots

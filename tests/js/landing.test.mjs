@@ -86,3 +86,30 @@ test("a Crush Stomp the engine rejects with damage options still lands as a plai
   assert.ok(zombie.damage[0].amount >= 60);
   assert.equal(zombie.damage[0].options, undefined);
 });
+
+function crushStompScene() {
+  const world = scene();
+  world.landing.isFalling = true;
+  world.landing.fallStartY = GROUND_Y + 3;
+  return world;
+}
+
+test("an entity that throws when read does not spare the others from a Crush Stomp", () => {
+  const world = crushStompScene();
+  const broken = createFakeEntity({ location: { x: 1, y: GROUND_Y, z: 0.5 } });
+  Object.defineProperty(broken, "typeId", { get() { throw new Error("entity is no longer valid"); } });
+  const zombie = createFakeEntity({ location: { x: 2, y: GROUND_Y, z: 0.5 } });
+  world.dimension.entities.push(broken, zombie);
+  stepLanding(world.truck, world.dimension, world.landing, frame(world, { dy: -0.5 }));
+  assert.equal(zombie.damage.length, 1, "the zombie is still crushed");
+  assert.ok(world.dimension.sounds.some((sound) => sound.soundId === "random.explode"), "the stomp is still heard");
+  assert.ok(world.dimension.particles.some((p) => p.effectName === "minecraft:large_explosion"), "and seen");
+});
+
+test("a Crush Stomp whose entity query fails still sounds and shows the explosion", () => {
+  const world = crushStompScene();
+  world.dimension.getEntities = () => { throw new Error("query rejected"); };
+  stepLanding(world.truck, world.dimension, world.landing, frame(world, { dy: -0.5 }));
+  assert.ok(world.dimension.sounds.some((sound) => sound.soundId === "random.explode"));
+  assert.ok(world.dimension.particles.some((p) => p.effectName === "minecraft:large_explosion"));
+});

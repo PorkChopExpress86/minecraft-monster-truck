@@ -12,11 +12,11 @@ import time
 import uuid
 
 if __package__:
-    from .addon_packs import com_mojang_installs, read_json, write_json
+    from .addon_packs import com_mojang_roots, read_json, write_json
     from .bedrock_client import client_for_platform
     from .bedrock_world import SetupError, bootstrap, configure, deploy
 else:
-    from addon_packs import com_mojang_installs, read_json, write_json
+    from addon_packs import com_mojang_roots, read_json, write_json
     from bedrock_client import client_for_platform
     from bedrock_world import SetupError, bootstrap, configure, deploy
 
@@ -49,16 +49,10 @@ def discover():
         if path.is_dir():
             result["log_directories"].append(str(path.resolve()))
     roots = []
-    for install, paths in com_mojang_installs():
-        for path in paths:
-            # Windows game folders are listed as found; on Linux only initialized launcher accounts count.
-            if not path.is_dir() or (install == "linux" and not (path / "minecraftpe/options.txt").is_file()):
-                continue
-            if path.resolve() not in roots:
-                roots.append(path.resolve())
-                # Windows keeps logs beside the account folders (above); mcpelauncher keeps them in com.mojang.
-                if install == "linux" and (path / "logs").is_dir():
-                    result["log_directories"].append(str(path.resolve() / "logs"))
+    for root, logs in com_mojang_roots(discovery=True):
+        roots.append(root)
+        if logs is not None:
+            result["log_directories"].append(str(logs))
     for data_root in roots:
         for world in sorted((data_root / "minecraftWorlds").glob("*")):
             if (world / "level.dat").is_file():

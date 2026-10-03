@@ -246,18 +246,26 @@ export function stepLanding(truck, dimension, landing, frame) {
 
       if (crushes) {
         const crushDamage = calculateCrushStompDamage();
+        let nearby = [];
         try {
-          const nearby = dimension.getEntities({ location: loc, maxDistance: CRUSH_STOMP_RADIUS });
-          for (const target of nearby) {
+          nearby = dimension.getEntities({ location: loc, maxDistance: CRUSH_STOMP_RADIUS });
+        } catch {}
+        // Each target gets its own try: one that throws (say, it became invalid) spares no others.
+        for (const target of nearby) {
+          try {
             if (isProtectedTarget(target, truck)) continue;
 
             const shockImpulse = calculateShockwaveImpulse(target.location, loc, 1.5);
             try { target.applyImpulse(shockImpulse); } catch {}
 
             damageEntity(target, crushDamage, CONTACT_DAMAGE, truck);
-          }
+          } catch {}
+        }
 
+        try {
           dimension.playSound("random.explode", loc, { volume: 0.8, pitch: 1.4 });
+        } catch {}
+        try {
           dimension.spawnParticle("minecraft:large_explosion", { x: loc.x, y: loc.y + 0.3, z: loc.z });
         } catch {}
       }

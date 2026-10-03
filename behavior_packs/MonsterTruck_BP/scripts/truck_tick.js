@@ -83,7 +83,9 @@ import { createLandingState, releaseLanding, stepLanding } from "./landing.js";
  * }} TruckState
  */
 
-const AIR_DRAG_RETENTION = 0.91; // horizontal velocity kept per tick while airborne
+// Horizontal velocity the engine keeps per tick while airborne; measured in
+// docs/agents/bedrock-physics.md (Air row) — read it before retuning.
+const AIR_DRAG_RETENTION = 0.91;
 
 /** @returns {TruckState} */
 export function createTruckState() {

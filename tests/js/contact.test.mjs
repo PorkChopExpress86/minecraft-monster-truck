@@ -83,3 +83,13 @@ test("expired cooldowns are pruned, even on a tick the truck is too slow to tram
   contact(0, { tick: 1006 });
   assert.equal(hitCooldowns.size, 0, "expired at +6 and forgotten");
 });
+
+test("an entity that throws when read does not spare the entities after it", () => {
+  const { truck, target } = scene();
+  const broken = createFakeEntity({ location: AHEAD });
+  Object.defineProperty(broken, "typeId", { get() { throw new Error("entity is no longer valid"); } });
+  const dimension = createFakeDimension();
+  dimension.entities.push(truck, broken, target);
+  stepContact(truck, dimension, { location: AT, heading: { x: 0, z: 1 }, speed: 0.5, hitCooldowns: new Map(), tick: 1000 });
+  assert.equal(target.damage.length, 1, "the next entity is still trampled");
+});
