@@ -68,6 +68,9 @@ export function createDrivingState(yaw = 0) {
  * grounded: wheels on ground or floating (no control while airborne).
  * measuredSpeed: signed distance actually covered along the motion direction last tick.
  * Returns the next state plus the planar velocity the truck should move with this tick.
+ * @param {{ speed: number, yaw: number, steer: number, slip: number, sliding: boolean }} state
+ * @param {{ forward?: number, strafe?: number, handbrake?: boolean }} [input]
+ * @param {{ grounded?: boolean, measuredSpeed?: number, config?: typeof DRIVING }} [options]
  */
 export function stepDriving(state, { forward = 0, strafe = 0, handbrake = false } = {}, {
   grounded = true,

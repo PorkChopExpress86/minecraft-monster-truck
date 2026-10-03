@@ -7,7 +7,7 @@ Linux runs use the flatpak [Minecraft Bedrock Launcher](https://mcpelauncher.rea
 - The launcher is installed, signed in, and has downloaded the client version named by `linux_client_version` in `testing/bedrock.json` (currently 1.26.52.3).
 - Minecraft is closed at the start of each run; the runner launches it.
 - `spectacle` and `qdbus6` (KDE) are available for screenshots and window control.
-- Python 3.11 or later.
+- Python 3.11 or later, and Node.js with npm (script syntax checks, Script API type check).
 - Docker, with the pinned `itzg/minecraft-bedrock-server` image available locally, for Scenario Runs.
 
 ## Commands
@@ -16,11 +16,13 @@ Linux runs use the flatpak [Minecraft Bedrock Launcher](https://mcpelauncher.rea
 ./test-addon.sh            # All: static checks, Scenario Runs, then the Client Smoke Run
 ./test-addon.sh Setup      # Create .venv-testing, then Bootstrap
 ./test-addon.sh Bootstrap  # Create/refresh the Dedicated Test World only
-./test-addon.sh Static     # pytest, validation, packaging; no game launch
+./test-addon.sh Static     # Script API type check, pytest, validation, packaging; no game launch
 ./test-addon.sh Scenarios  # Headless Scenario Runs only (Docker)
 ./test-addon.sh Game       # Client Smoke Run only
 ./test-addon.sh Doctor     # Read-only discovery of worlds and log directories
 ```
+
+Bootstrap, Static, and All also install the dev tooling in `package.json` (`@minecraft/server` types pinned to the pack's runtime, and TypeScript) and enable the pre-commit hook in `.githooks/`. The hook runs `node --check` on every script, `npm run typecheck` (`tsc --checkJs` over the behavior pack scripts, catching misspelled Script API members and wrong argument types that the scripts' `try`/`catch` blocks would otherwise swallow in game), and pytest with `REQUIRE_NODE=1` so node-backed contract tests cannot silently skip. `.github/workflows/static.yml` runs the same checks plus validation and packaging in CI. For a real Script API signature, read `node_modules/@minecraft/server/index.d.ts`.
 
 Bootstrap creates the Dedicated Test World `addon-test-<harness uuid>` in `~/.var/app/io.mrarm.mcpelauncher/data/mcpelauncher/games/com.mojang/minecraftWorlds/` from the same pinned Mojang starter as Windows, and enables `content_log_file` after backing up `options.txt` under `dist/bedrock-tests/setup/`. Other worlds are never modified.
 

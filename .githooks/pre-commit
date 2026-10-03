@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Static guardrail: script syntax, Script API types, and the unit/contract tests.
+# Enabled by `./test-addon.sh Setup` (git config core.hooksPath .githooks).
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+git ls-files -z 'behavior_packs/*.js' 'testing/scenarios/*.js' | xargs -0 -n1 node --check
+node_modules/.bin/tsc -p jsconfig.json
+REQUIRE_NODE=1 .venv-testing/bin/python -m pytest -q

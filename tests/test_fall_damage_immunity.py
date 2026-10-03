@@ -3,6 +3,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 def test_entity_pneumatic_shock_absorption_sensor_contract():
@@ -21,7 +23,7 @@ def test_entity_pneumatic_shock_absorption_sensor_contract():
 def test_pneumatic_shock_absorption_contracts_via_node():
     node_exe = shutil.which("node")
     if not node_exe:
-        return
+        pytest.skip("node is not installed")
 
     script = r'''
 import assert from 'node:assert/strict';

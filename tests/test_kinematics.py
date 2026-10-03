@@ -2,12 +2,14 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 def test_kinematics_pitch_and_steering_contracts():
     node_exe = shutil.which("node")
     if not node_exe:
-        return
+        pytest.skip("node is not installed")
 
     script = r'''
 import assert from 'node:assert/strict';
@@ -132,7 +134,7 @@ assert.equal(calculateRearSteerAngle(0), 0);
 def test_pitch_levels_fully_holds_on_ground_misses_and_riders_are_heat_shielded():
     node_exe = shutil.which("node")
     if not node_exe:
-        return
+        pytest.skip("node is not installed")
 
     script = r'''
 import assert from 'node:assert/strict';

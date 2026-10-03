@@ -3,6 +3,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 def test_airborne_demolition_and_crush_logic_contracts():
@@ -20,7 +22,7 @@ def test_airborne_demolition_and_crush_logic_contracts():
 def test_crush_stomp_protections_and_damage_via_node():
     node_exe = shutil.which("node")
     if not node_exe:
-        return
+        pytest.skip("node is not installed")
 
     script = r'''
 import assert from 'node:assert/strict';

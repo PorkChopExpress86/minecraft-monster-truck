@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 def test_amphibious_buoyancy_configuration():
@@ -51,7 +53,7 @@ def test_amphibious_physics_helpers_via_node():
     import subprocess
     node_exe = shutil.which("node")
     if not node_exe:
-        return
+        pytest.skip("node is not installed")
         
     script = r'''
 import assert from 'node:assert/strict';

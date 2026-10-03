@@ -20,4 +20,14 @@ if [[ "$mode" =~ ^(Setup|Bootstrap|All|Game)$ || ! -x "$test_python" ]]; then
   [[ "$mode" == Setup ]] && mode=Bootstrap
 fi
 
+if [[ "$mode" =~ ^(Bootstrap|Static|All)$ ]]; then
+  # Dev tooling for the Script API type check, and the pre-commit guardrail.
+  [[ -d "$root/node_modules" ]] || (cd "$root" && npm ci --silent)
+  git -C "$root" config core.hooksPath .githooks
+fi
+
+if [[ "$mode" =~ ^(Static|All)$ ]]; then
+  "$root/node_modules/.bin/tsc" -p "$root/jsconfig.json"
+fi
+
 exec "$test_python" "$root/scripts/bedrock_test.py" "${mode,,}" "$@"
