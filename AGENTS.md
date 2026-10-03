@@ -12,6 +12,10 @@ Canonical roles: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-hum
 
 Single-context (`CONTEXT.md` and `docs/adr/` at repo root). See `docs/agents/domain.md`.
 
-### Game Installation & Version Rev Prompt
+### Game installation and version rev
 
-Whenever you complete work, bug fixes, or changes to the add-on files (`behavior_packs/`, `resource_packs/`, or `scripts/`), you MUST proactively prompt the user asking whether they would like to rev the version and install the updated add-on directly to the Minecraft Bedrock game installed on their computer (running `python scripts/install_addon.py` upon confirmation). The installation script will rev the version, deploy to global development packs and active worlds, synchronize world pack manifests, and verify that the installed game version matches the finished repository version.
+After finishing changes to `behavior_packs/`, `resource_packs/`, or `scripts/`, offer to rev the version and install with `python scripts/install_addon.py`. A local install (no `--servers`) is already approved when the user's approved plan includes testing in game; otherwise ask first. Always ask before `--servers`: it restarts the user's Docker servers and disconnects players (add `--yes` once they agree).
+
+### Testing
+
+Before treating a passing Scenario Run as proof that a player-reported bug is fixed, read the blind spots in `docs/LINUX_TESTING.md`.

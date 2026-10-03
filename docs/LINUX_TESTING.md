@@ -51,4 +51,15 @@ Scenario Runs assert gameplay headlessly (ADR-0016). Settings live under `scenar
 4. The scenario pack loads a ticking area at world spawn, spawns the **Simulated Driver**, runs each scenario listed in `scenario_server.scenarios`, and prints `[SCENARIO]` PASS/FAIL markers and a final DONE marker.
 5. The container is stopped and removed, the unpacked server directory is deleted, and `scenario-server.log` is kept. Any scenario failure, missing result, or other server WARN/ERROR line fails the run.
 
-Add scenarios in `testing/scenarios/scenarios.js` and list them in `scenario_server.scenarios`. While iterating on one failure, rerun only it with `--only`; run the full list before committing. The user's long-lived server containers are never used.
+Add scenarios in `testing/scenarios/scenarios.js` and list them in `scenario_server.scenarios`. While iterating on one failure, rerun only it with `--only`; run the full list before committing. Engine behavior that scenario checks depend on (drag, collisions, the damage immunity window) is in `docs/agents/bedrock-physics.md`. The user's long-lived server containers are never used.
+
+## Scenario Run blind spots
+
+A green Scenario Run proves server-side state. A player-reported bug in any area below needs the real client to confirm the fix; treat the scenario as necessary, not sufficient.
+
+- **Key mapping and engine input handling.** The Simulated Driver sends no key presses: its movement and held Jump button reach the add-on only through the `driverInput` seam in `main.js`. Which key gives which movement-vector sign (`LEFT_INPUT_SIGN` in `driving.js`), and how entity components make the client treat a key (with `minecraft:input_ground_controlled`, Space dismounted the rider on the client, #32), never show up server-side.
+- **Client rendering.** Rider position, seat flicker, animations, and the camera. During #32 the server kept the driver seated and linked on every tick while the player saw them leave the truck.
+- **Feel.** Acceleration, drift, and turning radius are asserted as numbers; whether they feel right is the player's call.
+
+For bugs in these areas, look for engine or component explanations first: ADRs, and `git log -S '<component>'` for earlier fixes of the same symptom.
+

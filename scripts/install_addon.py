@@ -96,7 +96,18 @@ def install_to_server(name, version, bp_src, rp_src, run=docker, confirm=input):
         print(f"  [SKIP] {container}: not restarted; the new version loads on its next restart")
 
 
-def install(rev=True, rev_part="patch", explicit_version=None, servers=()):
+def restart_confirmer(assume_yes):
+    """Answer each container-restart prompt: interactively, or 'y' under --yes."""
+    if not assume_yes:
+        return input
+
+    def confirm(prompt):
+        print(prompt + "y (--yes)")
+        return "y"
+    return confirm
+
+
+def install(rev=True, rev_part="patch", explicit_version=None, servers=(), assume_yes=False):
     # 1. Version revving if requested
     current_ver = get_repo_version(REPO_ROOT)
     if explicit_version:
@@ -209,7 +220,7 @@ def install(rev=True, rev_part="patch", explicit_version=None, servers=()):
     for name in servers:
         print(f"\nInstalling to server: {SERVER_CONTAINERS[name]}")
         try:
-            install_to_server(name, target_ver, bp_src, rp_src)
+            install_to_server(name, target_ver, bp_src, rp_src, confirm=restart_confirmer(assume_yes))
         except (RuntimeError, OSError, json.JSONDecodeError) as error:
             print(f"[ERROR] {error}", file=sys.stderr)
             failed = True
@@ -225,6 +236,8 @@ def main():
     parser.add_argument("--check", action="store_true", help="Only verify version sync between repo and installed game")
     parser.add_argument("--servers", default="",
                         help="Also deploy to Docker servers, comma-separated: " + ",".join(SERVER_CONTAINERS))
+    parser.add_argument("--yes", action="store_true",
+                        help="Restart each --servers container without asking (disconnects connected players)")
 
     args = parser.parse_args()
     servers = [s.strip() for s in args.servers.split(",") if s.strip()]
@@ -242,7 +255,8 @@ def main():
     elif args.rev_minor:
         part = "minor"
 
-    return install(rev=args.rev, rev_part=part, explicit_version=args.set_version, servers=servers)
+    return install(rev=args.rev, rev_part=part, explicit_version=args.set_version, servers=servers,
+                   assume_yes=args.yes)
 
 if __name__ == "__main__":
     sys.exit(main())

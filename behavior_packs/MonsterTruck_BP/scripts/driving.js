@@ -1,6 +1,8 @@
 // Script-driven driving (ADR-0017): W/S throttle, brake, and reverse; A/D steer the front
 // wheels; holding Jump locks the rear wheels for a Handbrake Drift. The mouse only moves the
 // camera. Speeds are blocks/tick, angles degrees, yaw in Minecraft convention (0 faces +Z).
+// The engine behavior these numbers rely on (drag before the move, retention values, collisions)
+// is measured in docs/agents/bedrock-physics.md; read it before retuning.
 
 import { MAX_STEER_DEGREES } from "./kinematics.js";
 

@@ -76,3 +76,10 @@ def test_install_to_server_rejects_missing_level_name():
     with pytest.raises(RuntimeError, match="level-name"):
         install_to_server("survival", [1, 0, 3], BP_SRC, RP_SRC, run=docker, confirm=lambda _: "y")
     assert not any(call[0] == "cp" for call in docker.calls)
+
+
+def test_yes_answers_restart_prompts_and_default_stays_interactive(capsys):
+    from scripts.install_addon import restart_confirmer
+    assert restart_confirmer(False) is input
+    assert restart_confirmer(True)("Restart minecraft-survival now? [y/N] ") == "y"
+    assert "y (--yes)" in capsys.readouterr().out
