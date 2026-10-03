@@ -51,21 +51,85 @@ def test_launch_refuses_a_version_the_launcher_has_not_downloaded(launcher, tmp_
         linux.launch("world", "1.26.99.1", tmp_path / "client.log")
 
 
-def test_close_requests_window_close_then_terminates_only_the_launched_session(monkeypatch, tmp_path):
-    signals = []
-    monkeypatch.setattr(linux.os, "killpg", lambda pid, sig: signals.append((pid, sig)))
-    monkeypatch.setattr(linux, "run_kwin_script", lambda *a: signals.append("window close"))
+class Sandbox:
+    """The launched process group: outer bwrap (the Popen'd leader), inner bwrap (sandbox init) and the game."""
 
-    class Hung:
-        pid = 4242
+    def __init__(self, monkeypatch, exits_on=("window close",)):
+        self.members = [(4242, "bwrap"), (4250, "bwrap"), (4251, "MINECRAFT MAIN ")]
+        self.events = []
+        self.exits_on = exits_on
+        self.clock = 0.0
+        monkeypatch.setattr(linux, "process_group", lambda pgid: list(self.members) if pgid == 4242 else [])
+        monkeypatch.setattr(linux, "run_kwin_script", lambda *a: self.event("window close"))
+        monkeypatch.setattr(linux.os, "kill", lambda pid, sig: self.event((pid, sig)))
+        monkeypatch.setattr(linux.os, "killpg", lambda *a: self.events.append(("killpg",) + a))
+        monkeypatch.setattr(linux.time, "monotonic", lambda: self.clock)
+        monkeypatch.setattr(linux.time, "sleep", self.sleep)
+
+    def event(self, event):
+        self.events.append(event)
+        if event in self.exits_on:
+            self.members = []
+
+    def sleep(self, seconds):
+        self.clock += seconds
+
+
+class Launched:
+    pid = 4242
+
+    def poll(self):
+        return None
+
+
+def test_close_waits_for_the_whole_sandbox_after_a_normal_window_close(monkeypatch, tmp_path):
+    sandbox = Sandbox(monkeypatch)
+    linux.close(Launched(), tmp_path, timeout=1)
+    assert sandbox.events == ["window close"]
+
+
+def test_close_terminates_the_game_process_when_the_window_close_is_ignored(monkeypatch, tmp_path):
+    # SIGTERM to the group ended only the outer bwrap: the inner bwrap is the sandbox's PID-namespace
+    # init and ignores it, so the game kept running while close() reported success.
+    sandbox = Sandbox(monkeypatch, exits_on=[(4251, signal.SIGTERM)])
+    linux.close(Launched(), tmp_path, timeout=1)
+    assert sandbox.events == ["window close", (4251, signal.SIGTERM)]
+
+
+def test_close_still_closes_the_sandbox_after_the_launched_leader_exited(monkeypatch, tmp_path):
+    sandbox = Sandbox(monkeypatch)
+
+    class Exited(Launched):
         def poll(self):
-            return None
-        def wait(self, timeout):
-            raise subprocess.TimeoutExpired("client", timeout)
+            return 0
 
-    with pytest.raises(linux.ClientError, match="no process was force-stopped"):
-        linux.close(Hung(), tmp_path, timeout=1)
-    assert signals == ["window close", (4242, signal.SIGTERM)]
+    linux.close(Exited(), tmp_path, timeout=1)
+    assert sandbox.events == ["window close"]
+
+
+def test_close_reports_a_game_that_survives_sigterm_and_never_force_stops_it(monkeypatch, tmp_path):
+    sandbox = Sandbox(monkeypatch, exits_on=())
+    with pytest.raises(linux.ClientError, match=r"no process was force-stopped.*4251"):
+        linux.close(Launched(), tmp_path, timeout=1)
+    assert sandbox.events == ["window close", (4251, signal.SIGTERM)]
+
+
+def test_close_does_nothing_when_the_sandbox_is_already_gone(monkeypatch, tmp_path):
+    sandbox = Sandbox(monkeypatch)
+    sandbox.members = []
+    linux.close(Launched(), tmp_path, timeout=1)
+    linux.close(None, tmp_path, timeout=1)
+    assert sandbox.events == []
+
+
+def test_process_group_lists_live_members_with_names_containing_spaces():
+    child = subprocess.Popen(["sleep", "30"], start_new_session=True)
+    try:
+        assert linux.process_group(child.pid) == [(child.pid, "sleep")]
+    finally:
+        child.kill()
+        child.wait()
+    assert linux.process_group(child.pid) == []
 
 
 def test_running_client_blocks_deployment(monkeypatch):

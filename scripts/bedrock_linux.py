@@ -63,21 +63,58 @@ def launch(world_name, version, log_path):
                                 start_new_session=True)
 
 
+def process_group(pgid):
+    """Live (non-zombie) processes in a process group, as (pid, name)."""
+    members = []
+    for stat in Path("/proc").glob("[0-9]*/stat"):
+        try:
+            text = stat.read_text()
+        except OSError:
+            continue
+        name = text[text.index("(") + 1:text.rindex(")")]
+        state, _ppid, group = text[text.rindex(")") + 2:].split()[:3]
+        if int(group) == pgid and state != "Z":
+            members.append((int(stat.parent.name), name))
+    return sorted(members)
+
+
 def close(process, work_dir, timeout=30):
-    """Close the game window normally (the world is saved), then SIGTERM only the launched sandbox; never force-kill."""
-    if process is None or process.poll() is not None:
+    """Close the game window normally (the world is saved), then SIGTERM only the launched game; never force-kill.
+
+    The launched leader is the outer bwrap, but the sandbox's inner bwrap and the game share its process group
+    and can outlive it, so the client counts as closed only once that whole group has exited. SIGTERM goes to the
+    game itself: the inner bwrap is the sandbox's PID-namespace init and ignores it.
+    """
+    if process is None or _wait_for_group_exit(process, 0):
         return
     try:
         run_kwin_script(work_dir, "close-minecraft.js", CLOSE_JS)
-        process.wait(timeout)
-        return
     except (ClientError, OSError, subprocess.SubprocessError):
         pass
-    os.killpg(process.pid, signal.SIGTERM)
-    try:
-        process.wait(timeout)
-    except subprocess.TimeoutExpired as error:
-        raise ClientError(f"Minecraft did not close within {timeout} seconds; no process was force-stopped") from error
+    if _wait_for_group_exit(process, timeout):
+        return
+    for pid, name in process_group(process.pid):
+        if name != "bwrap":
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+    if _wait_for_group_exit(process, timeout):
+        return
+    survivors = ", ".join(f"{pid} {name.strip()}" for pid, name in process_group(process.pid))
+    raise ClientError(f"Minecraft did not close within {timeout} seconds; no process was force-stopped "
+                      f"(still running: {survivors})")
+
+
+def _wait_for_group_exit(process, timeout):
+    deadline = time.monotonic() + timeout
+    while True:
+        process.poll()  # reap the leader so it does not linger as a zombie
+        if not process_group(process.pid):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.5)
 
 
 def activate_window(work_dir):
