@@ -1,36 +1,28 @@
 """Repository-owned Bedrock smoke runner (Windows and Linux). See docs/WINDOWS_TESTING.md and docs/LINUX_TESTING.md."""
 
 import argparse
-import ctypes
-from ctypes import wintypes
 import datetime
 import json
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
 import time
-from urllib.parse import quote
 import uuid
 
 if __package__:
-    from . import bedrock_linux as linux
-    from .addon_packs import AddonPacks, com_mojang_installs, read_json, write_json
+    from .addon_packs import com_mojang_installs, read_json, write_json
+    from .bedrock_client import client_for_platform
+    from .bedrock_world import SetupError, bootstrap, configure, deploy
 else:
-    import bedrock_linux as linux
-    from addon_packs import AddonPacks, com_mojang_installs, read_json, write_json
+    from addon_packs import com_mojang_installs, read_json, write_json
+    from bedrock_client import client_for_platform
+    from bedrock_world import SetupError, bootstrap, configure, deploy
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MARKER = "[ADDON_TEST]"
-OWNER = ".addon-test-owner.json"
 WINDOWS = os.name == "nt"
-
-
-class SetupError(Exception):
-    pass
 
 
 def load_config(root):
@@ -78,473 +70,17 @@ def discover():
     return result
 
 
-def minecraft_running():
-    # Read the native process snapshot without launching a competing PowerShell process.
-    class ProcessEntry(ctypes.Structure):
-        _fields_ = [("size", wintypes.DWORD), ("usage", wintypes.DWORD),
-                    ("pid", wintypes.DWORD), ("heap", ctypes.c_size_t),
-                    ("module", wintypes.DWORD), ("threads", wintypes.DWORD),
-                    ("parent", wintypes.DWORD), ("priority", wintypes.LONG),
-                    ("flags", wintypes.DWORD), ("name", wintypes.WCHAR * 260)]
-    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
-    kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
-    kernel.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(ProcessEntry)]
-    kernel.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(ProcessEntry)]
-    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-    snapshot = kernel.CreateToolhelp32Snapshot(2, 0)
-    if snapshot == ctypes.c_void_p(-1).value:
-        raise SetupError("Windows process snapshot failed")
-    try:
-        entry = ProcessEntry()
-        entry.size = ctypes.sizeof(entry)
-        found = kernel.Process32FirstW(snapshot, ctypes.byref(entry))
-        while found:
-            if entry.name.lower() in ("minecraft.windows.exe", "minecraft.exe"):
-                return True
-            found = kernel.Process32NextW(snapshot, ctypes.byref(entry))
-        return False
-    finally:
-        kernel.CloseHandle(snapshot)
-
-
-def require_closed_client():
-    if WINDOWS:
-        running = minecraft_running()
-    else:
-        try:
-            running = linux.client_running()
-        except linux.ClientError as error:
-            raise SetupError(str(error)) from error
-    if running:
-        raise SetupError("Close Minecraft before deployment; the runner will launch the dedicated world")
-
-
-def owner_data(root, config):
-    return {"repository": str(root.resolve()), "harness_uuid": config["harness_uuid"]}
-
-
-def validate_world(world):
-    if not world.is_dir() or not (world / "level.dat").is_file():
-        raise SetupError("Select an existing dedicated test world containing level.dat")
-    if world.parent.name != "minecraftWorlds":
-        raise SetupError("The dedicated world must be installed in a minecraftWorlds directory")
-    if world.resolve() != world.absolute():
-        raise SetupError("Use the real world path, without junctions or symlinks")
-
-
-def checked_destination(world, relative):
-    """Resolve every replacement target before any recursive removal."""
-    target = world / relative
-    resolved = target.resolve()
-    if resolved != target.absolute() or not resolved.is_relative_to(world.resolve()):
-        raise SetupError(f"Refusing redirected deployment path: {target}")
-    return target
-
-
-def dedicated_pack_ids(config):
-    namespace = uuid.UUID(config["harness_uuid"])
-    return str(uuid.uuid5(namespace, "behavior-pack")), str(uuid.uuid5(namespace, "resource-pack"))
-
-
-def deploy(root, config, world, run_id):
-    validate_world(world)
-    owner = checked_destination(world, OWNER)
-    if not owner.exists() or read_json(owner) != owner_data(root, config):
-        raise SetupError("World ownership is not configured for this repository")
-    packs = AddonPacks.load(root, config)
-    bp, rp = packs.bp.manifest, packs.rp.manifest
-    test_bp_id, test_rp_id = dedicated_pack_ids(config)
-    for name, allowed in (
-        ("world_behavior_packs.json", {bp["header"]["uuid"], test_bp_id, config["harness_uuid"]}),
-        ("world_resource_packs.json", {rp["header"]["uuid"], test_rp_id}),
-    ):
-        metadata = checked_destination(world, name)
-        if metadata.exists() and any(entry["pack_id"] not in allowed for entry in read_json(metadata)):
-            raise SetupError("Dedicated world has unrelated active packs; deployment refused")
-    suffix = config["harness_uuid"]
-    destinations = [
-        checked_destination(world, f"behavior_packs/addon-test-{suffix}"),
-        checked_destination(world, f"resource_packs/addon-test-{suffix}"),
-        checked_destination(world, f"behavior_packs/addon-harness-{suffix}"),
-    ]
-    for target in destinations:
-        if target.exists():
-            shutil.rmtree(target)
-    harness = destinations[2]
-    shutil.copytree(root / "testing/harness", harness / "scripts")
-    write_json(harness / "manifest.json", {
-        "format_version": 2,
-        "header": {
-            "name": config["name"] + " Automated Tests (test world only)",
-            "description": "Runtime smoke assertions; excluded from the distributable add-on",
-            "uuid": config["harness_uuid"], "version": [1, 0, 0],
-            "min_engine_version": bp["header"]["min_engine_version"],
-        },
-        "modules": [{"type": "script", "language": "javascript", "entry": "scripts/main.js",
-                     "uuid": config["harness_module_uuid"], "version": [1, 0, 0]}],
-        "dependencies": [
-            {"module_name": "@minecraft/server", "version": config["script_api_version"]},
-            {"uuid": test_bp_id, "version": bp["header"]["version"]},
-        ],
-    })
-    run = {"run_id": run_id, "entity_id": config["entity_id"],
-           "required_components": config.get("required_components", []),
-           "showcase": config.get("showcase", False)}
-    if "expected_seat_count" in config:
-        run["expected_seat_count"] = config["expected_seat_count"]
-    packs.stage_test_pack(world, destinations[0], destinations[1], run, harness / "scripts/run_config.js",
-                          pack_ids=(test_bp_id, test_rp_id),
-                          extra_behavior_packs=[{"pack_id": config["harness_uuid"], "version": [1, 0, 0]}])
-
-
-def configure(root, config, world, logs):
-    require_closed_client()
-    world = Path(world).absolute()
-    validate_world(world)
-    if world.resolve() != world:
-        raise SetupError("Use the real world path, without junctions or symlinks")
-    logs = Path(logs).resolve()
-    if not logs.is_dir():
-        raise SetupError("Content log directory does not exist; enable Content Log Files in Minecraft")
-    owner = checked_destination(world, OWNER)
-    if owner.exists() and read_json(owner) != owner_data(root, config):
-        raise SetupError("This test world belongs to another repository")
-    if not owner.exists():
-        # A fresh world is required: do not silently take over an existing add-on setup.
-        for name in ("world_behavior_packs.json", "world_resource_packs.json"):
-            metadata = checked_destination(world, name)
-            if metadata.exists() and read_json(metadata):
-                raise SetupError("Choose a fresh dedicated world with no active add-on packs")
-        backup = root / "dist/bedrock-tests/setup" / uuid.uuid4().hex
-        for name in ("world_behavior_packs.json", "world_resource_packs.json"):
-            if (world / name).exists():
-                backup.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(world / name, backup / name)
-        for relative in (f"behavior_packs/addon-test-{config['harness_uuid']}",
-                         f"resource_packs/addon-test-{config['harness_uuid']}",
-                         f"behavior_packs/addon-harness-{config['harness_uuid']}"):
-            if checked_destination(world, relative).exists():
-                raise SetupError("A deployment destination already exists in an unowned world")
-        write_json(owner, owner_data(root, config))
-    deploy(root, config, world, "setup-" + uuid.uuid4().hex)
-    write_json(root / "testing/bedrock.local.json", {"world": str(world), "log_directory": str(logs)})
-    print("Configured dedicated world. Close Minecraft before each run; the runner opens it automatically.")
-
-
-def log_files(directory):
-    return sorted(set(directory.glob("*.log")) | set(directory.glob("*.txt")))
-
-
-def bootstrap(root, config):
-    require_closed_client()
-    if __package__:
-        from .bedrock_world import create_world, enable_logging
-    else:
-        from bedrock_world import create_world, enable_logging
-    local_path = root / "testing/bedrock.local.json"
-    try:
-        if local_path.exists():
-            local = read_json(local_path)
-            world = Path(local["world"])
-            validate_world(world)
-            if read_json(checked_destination(world, OWNER)) != owner_data(root, config):
-                raise SetupError("Configured world belongs to another repository")
-            local["log_directory"] = str(enable_logging(root, world.parent.parent))
-            write_json(local_path, local)
-        else:
-            local = create_world(root, config)
-            configure(root, config, local["world"], local["log_directory"])
-    except ValueError as error:
-        raise SetupError(str(error)) from error
-    print("Automatic world setup ready: " + local["world"], flush=True)
-    return local
-
-
-class FreshLogs:
-    """Read only new bytes, handling newly created, truncated, and rotated logs."""
-
-    def __init__(self, directory):
-        self.directory = Path(directory)
-        self.state = {}
-        self.pending = {}
-        for path in log_files(self.directory):
-            stat = path.stat()
-            self.state[path] = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
-
-    def read(self):
-        lines = []
-        for path in log_files(self.directory):
-            stat = path.stat()
-            old_inode, offset, old_mtime = self.state.get(path, (stat.st_ino, 0, 0))
-            if stat.st_ino != old_inode or stat.st_size < offset or (stat.st_size == offset and stat.st_mtime_ns != old_mtime):
-                offset = 0
-                self.pending.pop(path, None)
-            with path.open("rb") as stream:
-                stream.seek(offset)
-                data = stream.read()
-                end = stream.tell()
-            self.state[path] = (stat.st_ino, end, stat.st_mtime_ns)
-            data = self.pending.get(path, b"") + data
-            parts = data.split(b"\n")
-            self.pending[path] = parts.pop()
-            lines.extend((str(path), part.decode("utf-8", errors="replace").rstrip("\r")) for part in parts)
-        return lines
-
-
-def evaluate_lines(lines, run_id, entity_id):
-    errors, warnings, markers = [], [], []
-    for _, line in lines:
-        if MARKER in line:
-            marker = None
-            try:
-                marker, _ = json.JSONDecoder().raw_decode(line.split(MARKER, 1)[1].lstrip())
-            except (ValueError, TypeError):
-                pass
-            if isinstance(marker, dict) and marker.get("run_id") == run_id and marker.get("entity_id") == entity_id:
-                if marker.get("status") == "FAIL":
-                    errors.append("Harness failed: " + str(marker.get("error", "unspecified failure")))
-                    continue
-                elif marker.get("status") == "PASS" and isinstance(marker.get("checks"), list) and marker["checks"]:
-                    if not re.search(r"\b(?:error|fatal)\b", line.split(MARKER, 1)[0], re.I):
-                        markers.append(marker)
-                        continue
-            errors.append("Invalid or unexpected harness diagnostic: " + line)
-            continue
-        if re.search(r"\b(?:error|fatal)\b", line, re.I):
-            errors.append(line)
-        elif re.search(r"\bwarn(?:ing)?\b", line, re.I):
-            warnings.append(line)
-    return errors, warnings, markers
-
-
-def await_result(logs, config, run_id, output, clock=time.monotonic, sleep=time.sleep,
-                 on_poll=None):
-    started = clock()
-    deadline = started + config["timeout_seconds"]
-    passed_at = None
-    marker = None
-    errors, warnings = [], []
-    with (output / "content.log").open("w", encoding="utf-8") as evidence:
-        while clock() < deadline:
-            if on_poll:
-                on_poll()
-            lines = logs.read()
-            for path, line in lines:
-                evidence.write(f"{path}: {line}\n")
-            evidence.flush()
-            new_errors, new_warnings, markers = evaluate_lines(lines, run_id, config["entity_id"])
-            errors.extend(new_errors)
-            warnings.extend(new_warnings)
-            if markers and passed_at is None:
-                marker = markers[0]
-                passed_at = clock()
-            if errors or warnings:
-                return {"status": "failed", "errors": errors, "warnings": warnings, "marker": marker}
-            if (passed_at is not None and clock() - passed_at >= config["settle_seconds"]
-                    and clock() - started >= config.get("observe_seconds", 0)
-                    and not any(part.strip() for part in logs.pending.values())):
-                return {"status": "passed", "errors": [], "warnings": [], "marker": marker}
-            sleep(0.25)
-    return {"status": "failed", "errors": ["Timed out waiting for a fresh harness PASS and clean log settling period"],
-            "warnings": warnings, "marker": marker, "stream_wait_expired": True}
-
-
-def await_client_load(client, stdout_path, world, pack_ids, config, clock=time.monotonic, sleep=time.sleep,
-                      on_poll=None):
-    """Linux client: script console output never reaches a readable log, so the verdict is
-    that the dedicated world opened with every deployed pack and the player spawned (ADR-0016)."""
-    started = clock()
-    expected = {"world opened": f"Opening level '{world / 'db'}'", "player spawned": "Player Spawned:"}
-    expected.update({f"pack {pack_id} loaded": pack_id for pack_id in pack_ids})
-    seen, offset, loaded_at = set(), 0, None
-    while clock() < started + config["timeout_seconds"] or loaded_at is not None:
-        if on_poll:
-            on_poll()
-        with open(stdout_path, "rb") as stream:
-            stream.seek(offset)
-            data = stream.read()
-        complete = data[:data.rfind(b"\n") + 1]
-        offset += len(complete)
-        for line in complete.decode("utf-8", errors="replace").splitlines():
-            if "Pack Stack" not in line and "Opening level" not in line and "Player Spawned" not in line:
-                continue
-            seen.update(name for name, needle in expected.items() if needle in line)
-        if loaded_at is None and seen == set(expected):
-            loaded_at = clock()
-        if client.poll() is not None:
-            return {"status": "failed", "errors": ["Minecraft exited during the run (code %s)" % client.returncode],
-                    "warnings": [], "marker": None, "load_checks": sorted(seen)}
-        if loaded_at is not None and clock() - started >= config.get("observe_seconds", 0):
-            return {"status": "passed", "errors": [], "warnings": [], "marker": None, "load_checks": sorted(seen)}
-        sleep(0.25)
-    missing = sorted(set(expected) - seen)
-    return {"status": "failed", "errors": ["Timed out before the dedicated world loaded: missing " + ", ".join(missing)],
-            "warnings": [], "marker": None, "load_checks": sorted(seen)}
-
-
-def finalize_game_logs(logs, result, config, run_id, output, require_marker=True):
-    """The Windows client can buffer all content-log output until normal shutdown."""
-    lines = logs.read()
-    for path, data in logs.pending.items():
-        if data.strip():
-            lines.append((str(path), data.decode("utf-8", errors="replace")))
-    logs.pending.clear()
-    with (output / "content.log").open("a", encoding="utf-8") as evidence:
-        for path, line in lines:
-            evidence.write(f"{path}: {line}\n")
-    errors, warnings, markers = evaluate_lines(lines, run_id, config["entity_id"])
-    # Expiry of the streaming wait is provisional: shutdown may flush a real result.
-    if not result.pop("stream_wait_expired", False):
-        errors = result["errors"] + errors
-    warnings = result["warnings"] + warnings
-    marker = result["marker"] or (markers[0] if markers else None)
-    if not marker and require_marker:
-        errors.append("No fresh harness PASS was recorded before the client closed")
-    result.update(status="failed" if errors or warnings else "passed", errors=errors,
-                  warnings=warnings, marker=marker, final_logs_collected=True)
-    return result
-
-
-def find_game_window():
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-    windows = []
-    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-    user32.IsWindowVisible.argtypes = [wintypes.HWND]
-    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-
-    def visit(hwnd, _):
-        title = ctypes.create_unicode_buffer(512)
-        user32.GetWindowTextW(hwnd, title, len(title))
-        if user32.IsWindowVisible(hwnd) and title.value in ("Minecraft", "Minecraft for Windows"):
-            windows.append(hwnd)
-        return True
-
-    user32.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
-    user32.EnumWindows(callback_type(visit), 0)
-    return windows[0] if windows else None
-
-
-def capture_game(output):
-    if not WINDOWS:
-        try:
-            return linux.capture(output)
-        except linux.ClientError as error:
-            raise SetupError(str(error)) from error
-    command = (
-        "import sys; from pathlib import Path; from bedrock_test import _capture_game; "
-        "print(_capture_game(Path(sys.argv[1])))"
-    )
-    try:
-        completed = subprocess.run(
-            [sys.executable, "-c", command, str(Path(output).resolve())],
-            cwd=Path(__file__).resolve().parent, capture_output=True, text=True,
-            timeout=20, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-    except subprocess.TimeoutExpired as error:
-        diagnostic = error.stderr or b""
-        if isinstance(diagnostic, bytes):
-            diagnostic = diagnostic.decode("utf-8", errors="replace")
-        (Path(output) / "capture-trace.log").write_text(diagnostic, encoding="utf-8")
-        raise SetupError(f"Minecraft screenshot capture exceeded 20 seconds; {diagnostic.strip() or 'helper did not start'}") from error
-    (Path(output) / "capture-trace.log").write_text(completed.stderr, encoding="utf-8")
-    if completed.returncode:
-        raise SetupError(completed.stderr.strip().splitlines()[-1] if completed.stderr else "Screenshot helper failed")
-    path = Path(completed.stdout.strip())
-    if not path.is_file() or path.parent.resolve() != Path(output).resolve():
-        raise SetupError("Screenshot helper returned no capture file in the requested directory")
-    return str(path)
-
-
-def _capture_game(output):
-    def stage(name):
-        print(f"capture stage: {name}", file=sys.stderr, flush=True)
-
-    stage("import_imagegrab")
-    from PIL import ImageGrab
-    # Keep Win32 coordinates and captured pixels in the same space on scaled displays.
-    ctypes.WinDLL("user32").SetProcessDPIAware()
-    stage("find_window")
-    hwnd = find_game_window()
-    if not hwnd:
-        raise SetupError("Minecraft window unavailable; screenshot omitted")
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-    user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-    user32.IsIconic.argtypes = [wintypes.HWND]
-    if user32.IsIconic(hwnd):
-        raise SetupError("Minecraft is minimized; restore it before capturing")
-    stage("client_rectangle")
-    rect = wintypes.RECT()
-    if (not user32.GetClientRect(hwnd, ctypes.byref(rect))
-            or rect.right <= rect.left or rect.bottom <= rect.top):
-        raise SetupError("Minecraft window has no capture area")
-    target = output / "minecraft.png"
-    stage("grab_pixels")
-    # HWND capture avoids foreground manipulation and never samples another app.
-    captured = ImageGrab.grab(window=hwnd)
-    stage("validate_pixels")
-    if not any(lo != hi for lo, hi in captured.convert("RGB").getextrema()):
-        # Some hardware-accelerated renderers return a uniform HWND surface.
-        stage("foreground_fallback")
-        user32.GetForegroundWindow.restype = wintypes.HWND
-        user32.ShowWindowAsync.argtypes = [wintypes.HWND, ctypes.c_int]
-        user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-        if user32.GetForegroundWindow() != hwnd:
-            user32.ShowWindowAsync(hwnd, 9)
-            user32.SetForegroundWindow(hwnd)
-            time.sleep(0.2)
-        if user32.GetForegroundWindow() != hwnd:
-            raise SetupError("Empty or uniform window capture; Minecraft is not foreground for fallback")
-        user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
-        origin = wintypes.POINT()
-        if not user32.ClientToScreen(hwnd, ctypes.byref(origin)) or not user32.GetClientRect(hwnd, ctypes.byref(rect)):
-            raise SetupError("Minecraft client rectangle unavailable for fallback")
-        stage("grab_foreground_pixels")
-        captured = ImageGrab.grab(bbox=(origin.x, origin.y, origin.x + rect.right, origin.y + rect.bottom))
-        if user32.GetForegroundWindow() != hwnd:
-            raise SetupError("Minecraft lost foreground during capture; image discarded")
-    if captured.width <= 0 or captured.height <= 0 or not any(lo != hi for lo, hi in captured.convert("RGB").getextrema()):
-        raise SetupError("Minecraft returned an empty or uniform capture")
-    stage("save_png")
-    captured.save(target)
-    stage("saved")
-    return str(target)
-
-
-def close_game():
-    """Request a normal close only for the client launched by this run."""
-    if not minecraft_running():
-        return
-    hwnd = find_game_window()
-    if not hwnd:
-        raise SetupError("Launched Minecraft has no closeable window; close it before the next run")
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-    user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-    if not user32.PostMessageW(hwnd, 0x0010, 0, 0):  # WM_CLOSE, no forced termination
-        raise SetupError("Could not request Minecraft shutdown")
-    deadline = time.monotonic() + 30
-    while minecraft_running():
-        if time.monotonic() >= deadline:
-            raise SetupError("Minecraft did not close within 30 seconds; no process was force-stopped")
-        time.sleep(0.5)
-
-
-def run_game(root, config, run_id, output):
-    local = bootstrap(root, config)
+def run_game(root, config, run_id, output, client=None):
+    """Client Smoke Run: deploy to the Dedicated Test World, then let the platform client (bedrock_client)
+    launch it, deliver its verdict, take screenshots, and close; shape the stages of the report."""
+    client = client_for_platform() if client is None else client
+    local = bootstrap(root, config, client)
     world = Path(local["world"]).absolute()
     logs_path = Path(local["log_directory"])
     if not logs_path.is_dir():
         raise SetupError("Configured content log directory is missing")
     deploy(root, config, world, run_id)
-    logs = FreshLogs(logs_path)
-    client = None
-    if WINDOWS:
-        os.startfile("minecraft://?load=" + quote(world.name, safe=""))
-    else:
-        try:
-            client = linux.launch(world.name, config["linux_client_version"], output / "client-stdout.log")
-        except linux.ClientError as error:
-            raise SetupError(str(error)) from error
+    client.launch(world, config, logs_path, output)
     screenshots = []
     attempts = []
     next_capture = time.monotonic() + 15
@@ -553,7 +89,7 @@ def run_game(root, config, run_id, output):
         started = time.monotonic()
         attempt = {"directory": str(output_directory)}
         try:
-            path = capture_game(output_directory)
+            path = client.capture(output_directory)
             attempt.update(status="passed", path=path)
             return path
         except Exception as error:
@@ -578,13 +114,7 @@ def run_game(root, config, run_id, output):
 
     shutdown = {"status": "not_run"}
     try:
-        if WINDOWS:
-            result = await_result(logs, config, run_id, output, on_poll=capture_progress)
-        else:
-            # The client logs only the behavior pack stack; resource packs are evidenced by screenshots.
-            pack_ids = (dedicated_pack_ids(config)[0], config["harness_uuid"])
-            result = await_client_load(client, output / "client-stdout.log", world, pack_ids, config,
-                                       on_poll=capture_progress)
+        result = client.await_verdict(config, run_id, output, on_poll=capture_progress)
         result["screenshots"] = screenshots
         path = capture(output)
         if path:
@@ -593,37 +123,24 @@ def run_game(root, config, run_id, output):
             result["screenshot_note"] = attempts[-1]["error"]
     finally:
         try:
-            if WINDOWS:
-                close_game()
-            else:
-                linux.close(client, output)
+            client.close(output)
             shutdown["status"] = "passed"
         except Exception as error:
             shutdown.update(status="failed", error=str(error))
         write_json(output / "shutdown.json", shutdown)
-    result = finalize_game_logs(logs, result, config, run_id, output, require_marker=WINDOWS)
+    result = client.finish(result, config, run_id, output)
     required = bool(config.get("showcase"))
     capture_passed = len(screenshots) >= 2 if required else bool(result.get("screenshot"))
-    if WINDOWS:
-        gameplay = {"status": "passed" if result["marker"] else "failed",
-                    "checks": (result["marker"] or {}).get("checks", [])}
-    else:
-        gameplay = {"status": "not_verified", "checks": [],
-                    "note": "The Linux client never surfaces script output; gameplay is asserted by Scenario Runs"}
+    platform_stages = client.stages(result)
     result["stages"] = {
-        "gameplay": gameplay,
+        "gameplay": platform_stages.pop("gameplay"),
         "content_logs": {"status": result["status"], "errors": list(result["errors"]),
                          "warnings": list(result["warnings"])},
         "screenshots": {"status": "passed" if capture_passed else "failed",
                         "required": required, "attempts": attempts},
         "shutdown": shutdown,
+        **platform_stages,
     }
-    if not WINDOWS:
-        load_checks = result.pop("load_checks", [])
-        result["stages"]["world_load"] = {
-            "status": "passed" if "world opened" in load_checks and "player spawned" in load_checks
-            and sum(check.startswith("pack ") for check in load_checks) == 2 else "failed",
-            "checks": load_checks}
     result["coverage"] = {name: "not_verified" for name in
                           ("visual_appearance", "audio_playback", "player_input", "multiplayer", "other_devices")}
     if required and not capture_passed:
@@ -672,7 +189,7 @@ def run_static(root, config, output):
             "commands": results}
 
 
-def main(argv=None, root=ROOT):
+def main(argv=None, root=ROOT, client=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=["doctor", "bootstrap", "configure", "static", "scenarios", "game", "all"])
     parser.add_argument("--world", help="Existing fresh dedicated world directory; configure only")
@@ -687,18 +204,20 @@ def main(argv=None, root=ROOT):
               "status": "blocked", "exit_code": 2}
     try:
         config = load_config(root)
+        if args.mode in ("bootstrap", "configure") and client is None:
+            client = client_for_platform()
         if args.mode == "doctor":
             report["discovery"] = discover()
             report["configured"] = (root / "testing/bedrock.local.json").exists()
             print(json.dumps({"discovery": report["discovery"], "configured": report["configured"]}, indent=2))
             report.update(status="diagnostic", exit_code=0)
         elif args.mode == "bootstrap":
-            report["world_setup"] = bootstrap(root, config)
+            report["world_setup"] = bootstrap(root, config, client)
             report.update(status="configured", exit_code=0)
         elif args.mode == "configure":
             if not args.world or not args.log_directory:
                 raise SetupError("configure requires --world and --log-directory; use doctor to find paths")
-            configure(root, config, args.world, args.log_directory)
+            configure(root, config, args.world, args.log_directory, client)
             report.update(status="configured", exit_code=0)
         else:
             if args.world or args.log_directory:
@@ -717,7 +236,7 @@ def main(argv=None, root=ROOT):
                     report.update(status="failed", exit_code=1)
                     return report["exit_code"]
             if args.mode in ("game", "all"):
-                report["game"] = run_game(root, config, run_id, output)
+                report["game"] = run_game(root, config, run_id, output, client)
                 if report["game"]["status"] != "passed":
                     report.update(status="failed", exit_code=1)
                     return report["exit_code"]

@@ -4,6 +4,7 @@ import subprocess
 
 import pytest
 
+from scripts import bedrock_client as clients
 from scripts import bedrock_linux as linux
 from scripts import bedrock_test as runner
 from scripts import bedrock_world as world_setup
@@ -68,11 +69,16 @@ def test_close_requests_window_close_then_terminates_only_the_launched_session(m
 
 
 def test_running_client_blocks_deployment(monkeypatch):
-    monkeypatch.setattr(runner, "WINDOWS", False)
     monkeypatch.setattr(linux.subprocess, "run", lambda *a, **k:
                         subprocess.CompletedProcess(a, 0, "com.bitwarden.desktop\nio.mrarm.mcpelauncher\n", ""))
     with pytest.raises(runner.SetupError, match="Close Minecraft"):
-        runner.require_closed_client()
+        clients.LauncherClient().assert_closed()
+
+
+def test_unlistable_flatpak_blocks_deployment(monkeypatch):
+    monkeypatch.setattr(linux.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 1, "", "no session bus"))
+    with pytest.raises(runner.SetupError, match="flatpak ps failed: no session bus"):
+        clients.LauncherClient().assert_closed()
 
 
 class FakeClient:
@@ -82,8 +88,30 @@ class FakeClient:
         return None
 
 
+class FakeLauncher:
+    """Stands in for bedrock_linux: no flatpak, KWin or spectacle; launch is supplied per test."""
+    ClientError = linux.ClientError
+
+    def __init__(self, launch=None):
+        self.calls = []
+        self.launch_fn = launch
+
+    def client_running(self):
+        return False
+
+    def launch(self, name, version, log_path):
+        self.calls.append(("launch", name, version, log_path.name))
+        return self.launch_fn(log_path)
+
+    def capture(self, directory):
+        return "fixture.png"
+
+    def close(self, client, output):
+        self.calls.append(("close", type(client).__name__))
+
+
 @pytest.fixture
-def linux_project(launcher, monkeypatch, tmp_path):
+def linux_project(launcher, tmp_path):
     root = tmp_path / "repo"
     config = {
         "name": "Fixture", "entity_id": "fixture:vehicle", "behavior_pack": "bp", "resource_pack": "rp",
@@ -102,10 +130,7 @@ def linux_project(launcher, monkeypatch, tmp_path):
     world.mkdir(parents=True)
     (world / "level.dat").write_bytes(b"fixture world")
     logs = world_setup.enable_logging(root, account)
-    monkeypatch.setattr(runner, "WINDOWS", False)
-    monkeypatch.setattr(runner, "require_closed_client", lambda: None)
-    runner.configure(root, config, world, logs)
-    monkeypatch.setattr(runner, "capture_game", lambda _: "fixture.png")
+    world_setup.configure(root, config, world, logs, clients.LauncherClient(launcher=FakeLauncher()))
     (tmp_path / "out").mkdir()
     return root, config, world
 
@@ -118,34 +143,30 @@ def client_output(world, pack_ids):
     return "\n".join(lines) + "\n"
 
 
-def test_linux_game_run_passes_on_world_load_and_marks_gameplay_unverified(linux_project, monkeypatch, tmp_path):
+def test_linux_game_run_passes_on_world_load_and_marks_gameplay_unverified(linux_project, tmp_path):
     root, config, world = linux_project
-    calls = []
 
-    def launch(name, version, log_path):
-        calls.append(("launch", name, version, log_path.name))
-        log_path.write_text(client_output(world, [runner.dedicated_pack_ids(config)[0], config["harness_uuid"]]))
+    def launch(log_path):
+        log_path.write_text(client_output(world, [world_setup.dedicated_pack_ids(config)[0], config["harness_uuid"]]))
         return FakeClient()
 
-    monkeypatch.setattr(linux, "launch", launch)
-    monkeypatch.setattr(linux, "close", lambda client, _: calls.append(("close", type(client).__name__)))
-    result = runner.run_game(root, config, "fresh", tmp_path / "out")
+    launcher = FakeLauncher(launch)
+    result = runner.run_game(root, config, "fresh", tmp_path / "out", client=clients.LauncherClient(launcher=launcher))
     assert result["status"] == "passed"
     assert result["stages"]["world_load"]["status"] == "passed"
     assert result["stages"]["gameplay"]["status"] == "not_verified"
-    assert calls == [("launch", "dedicated", "1.26.52.3", "client-stdout.log"), ("close", "FakeClient")]
+    assert launcher.calls == [("launch", "dedicated", "1.26.52.3", "client-stdout.log"), ("close", "FakeClient")]
 
 
-def test_linux_game_run_fails_when_a_deployed_pack_is_not_loaded(linux_project, monkeypatch, tmp_path):
+def test_linux_game_run_fails_when_a_deployed_pack_is_not_loaded(linux_project, tmp_path):
     root, config, world = linux_project
 
-    def launch(name, version, log_path):
+    def launch(log_path):
         log_path.write_text(client_output(world, [config["harness_uuid"]]))
         return FakeClient()
 
-    monkeypatch.setattr(linux, "launch", launch)
-    monkeypatch.setattr(linux, "close", lambda client, _: None)
-    result = runner.run_game(root, config, "fresh", tmp_path / "out")
+    result = runner.run_game(root, config, "fresh", tmp_path / "out",
+                             client=clients.LauncherClient(launcher=FakeLauncher(launch)))
     assert result["status"] == "failed"
     assert result["stages"]["world_load"]["status"] == "failed"
-    assert any("missing pack " + runner.dedicated_pack_ids(config)[0] in error for error in result["errors"])
+    assert any("missing pack " + world_setup.dedicated_pack_ids(config)[0] in error for error in result["errors"])

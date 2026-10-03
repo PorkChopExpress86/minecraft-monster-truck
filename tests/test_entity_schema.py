@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from scripts.validate_project import ProjectValidator
-from scripts.bedrock_test import evaluate_lines
+from scripts.bedrock_client import evaluate_lines
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -141,7 +141,7 @@ def test_validator_catches_unsupported_buoyant_properties(tmp_path):
 
 
 def test_in_game_runner_flags_bedrock_schema_errors():
-    """bedrock_test.evaluate_lines must flag Bedrock schema parse errors from content log."""
+    """bedrock_client.evaluate_lines must flag Bedrock schema parse errors from content log."""
     log_lines = [
         ("content.log", "14:13:17[Log][error]-Monster Truck | actor_definitions | blake:monster_truck | -> components -> minecraft:buoyancy: this component was found in the input, but is not present in the Schema"),
         ("content.log", "14:13:17[Actor][error]-Monster Truck | actor_definitions | ERROR: Entity 'blake:monster_truck' failed to load from JSON: parse errors occurred"),

@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -6,14 +7,42 @@ import sys
 
 import pytest
 
+from scripts import bedrock_client as clients
 from scripts import bedrock_test as runner
+from scripts import bedrock_world as worlds
 
 
 @pytest.fixture(autouse=True)
-def windows_client(tmp_path, monkeypatch):
-    """These tests exercise the Windows client path; never reach the real Linux desktop or launcher data."""
+def isolated_home(tmp_path, monkeypatch):
+    """Never reach the real Linux desktop or launcher data; clients are injected as FakeClient."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    monkeypatch.setattr(runner, "WINDOWS", True)
+
+
+class FakeClient(clients.WindowsClient):
+    """Windows verdict rules (a fresh content-log marker) with the desktop replaced by recorded calls."""
+
+    def __init__(self, on_launch=None, verdict=None, capture=None, close=None):
+        super().__init__(running=lambda: False)
+        self.calls = []
+        self.on_launch, self.verdict, self.capture_fn, self.close_fn = on_launch, verdict, capture, close
+
+    def open_uri(self, uri):
+        self.calls.append(uri)
+        if self.on_launch:
+            self.on_launch()
+
+    def await_verdict(self, config, run_id, output, on_poll=None):
+        if self.verdict:
+            return self.verdict(on_poll=on_poll)
+        return super().await_verdict(config, run_id, output, on_poll=on_poll)
+
+    def capture(self, directory):
+        return self.capture_fn(directory) if self.capture_fn else "fixture.png"
+
+    def close(self, output):
+        self.calls.append("closed")
+        if self.close_fn:
+            self.close_fn()
 
 
 @pytest.fixture
@@ -53,13 +82,13 @@ def project(tmp_path, monkeypatch):
 def marker(run_id="fresh", status="PASS", **extra):
     data = {"run_id": run_id, "entity_id": "fixture:vehicle", "status": status,
             "checks": ["spawned fixture:vehicle"], **extra}
-    return "[Scripting][warning]-" + runner.MARKER + json.dumps(data) + "\n"
+    return "[Scripting][warning]-" + clients.MARKER + json.dumps(data) + "\n"
 
 
 def test_log_reader_ignores_history_and_reassembles_partial_lines(tmp_path):
     path = tmp_path / "ContentLog.log"
     path.write_text(marker("old"))
-    logs = runner.FreshLogs(tmp_path)
+    logs = clients.FreshLogs(tmp_path)
     assert logs.read() == []
     fresh = marker()
     with path.open("a") as stream:
@@ -67,7 +96,7 @@ def test_log_reader_ignores_history_and_reassembles_partial_lines(tmp_path):
     assert logs.read() == []
     with path.open("a") as stream:
         stream.write(fresh[20:])
-    errors, warnings, passes = runner.evaluate_lines(logs.read(), "fresh", "fixture:vehicle")
+    errors, warnings, passes = clients.evaluate_lines(logs.read(), "fresh", "fixture:vehicle")
     assert not errors and not warnings
     assert passes[0]["run_id"] == "fresh"
 
@@ -75,7 +104,7 @@ def test_log_reader_ignores_history_and_reassembles_partial_lines(tmp_path):
 def test_log_reader_handles_new_files_and_truncation(tmp_path):
     old = tmp_path / "old.log"
     old.write_text("old history\n" * 100)
-    logs = runner.FreshLogs(tmp_path)
+    logs = clients.FreshLogs(tmp_path)
     old.write_text("[ERROR] truncated\n")
     (tmp_path / "new.log").write_text(marker())
     lines = logs.read()
@@ -84,12 +113,12 @@ def test_log_reader_handles_new_files_and_truncation(tmp_path):
 
 
 @pytest.mark.parametrize("line", [
-    "[ERROR] " + runner.MARKER + "broken JSON",
+    "[ERROR] " + clients.MARKER + "broken JSON",
     marker("another-run"), marker(checks=[]), marker(entity_id="wrong:entity"),
     "[ERROR] " + marker(), marker(status="FAIL", error="cannot spawn"),
 ])
 def test_invalid_or_failed_markers_cannot_pass(line):
-    errors, _, passes = runner.evaluate_lines([("log", line)], "fresh", "fixture:vehicle")
+    errors, _, passes = clients.evaluate_lines([("log", line)], "fresh", "fixture:vehicle")
     assert errors and not passes
 
 
@@ -106,7 +135,7 @@ class FakeClock:
 def test_missing_logs_timeout_instead_of_passing(project, tmp_path):
     _, config, _, logs = project
     clock = FakeClock()
-    result = runner.await_result(runner.FreshLogs(logs), config, "fresh", tmp_path,
+    result = clients.await_result(clients.FreshLogs(logs), config, "fresh", tmp_path,
                                  clock.clock, clock.sleep)
     assert result["status"] == "failed"
     assert "Timed out" in result["errors"][0]
@@ -114,10 +143,10 @@ def test_missing_logs_timeout_instead_of_passing(project, tmp_path):
 
 def test_fresh_pass_requires_clean_settling_period(project, tmp_path):
     _, config, _, logs = project
-    reader = runner.FreshLogs(logs)
+    reader = clients.FreshLogs(logs)
     (logs / "content.log").write_text(marker())
     clock = FakeClock()
-    result = runner.await_result(reader, config, "fresh", tmp_path, clock.clock, clock.sleep)
+    result = clients.await_result(reader, config, "fresh", tmp_path, clock.clock, clock.sleep)
     assert result["status"] == "passed"
     assert clock.now >= config["settle_seconds"]
 
@@ -125,11 +154,11 @@ def test_fresh_pass_requires_clean_settling_period(project, tmp_path):
 def test_showcase_observation_continues_after_early_pass(project, tmp_path):
     _, config, _, logs = project
     config["observe_seconds"] = 1.5
-    reader = runner.FreshLogs(logs)
+    reader = clients.FreshLogs(logs)
     (logs / "content.log").write_text(marker())
     clock = FakeClock()
     observations = []
-    result = runner.await_result(reader, config, "fresh", tmp_path, clock.clock, clock.sleep,
+    result = clients.await_result(reader, config, "fresh", tmp_path, clock.clock, clock.sleep,
                                  on_poll=lambda: observations.append(clock.now))
     assert result["status"] == "passed"
     assert observations[-1] >= 1.5
@@ -137,7 +166,7 @@ def test_showcase_observation_continues_after_early_pass(project, tmp_path):
 
 def test_warning_after_pass_fails(project, tmp_path):
     _, config, _, logs = project
-    reader = runner.FreshLogs(logs)
+    reader = clients.FreshLogs(logs)
     path = logs / "content.log"
     path.write_text(marker())
     clock = FakeClock()
@@ -147,29 +176,29 @@ def test_warning_after_pass_fails(project, tmp_path):
         with path.open("a") as stream:
             stream.write("[Rendering][warning]-Missing texture\n")
 
-    result = runner.await_result(reader, config, "fresh", tmp_path, clock.clock, sleep)
+    result = clients.await_result(reader, config, "fresh", tmp_path, clock.clock, sleep)
     assert result["status"] == "failed"
     assert result["warnings"]
 
 
 def test_unfinished_log_line_after_pass_cannot_be_ignored(project, tmp_path):
     _, config, _, logs = project
-    reader = runner.FreshLogs(logs)
+    reader = clients.FreshLogs(logs)
     (logs / "content.log").write_text(marker() + "[ERROR] partial write")
     clock = FakeClock()
-    result = runner.await_result(reader, config, "fresh", tmp_path, clock.clock, clock.sleep)
+    result = clients.await_result(reader, config, "fresh", tmp_path, clock.clock, clock.sleep)
     assert result["status"] == "failed"
 
 
 @pytest.mark.parametrize("error_line", ["", "[Sound][error]-invalid sound schema\n"])
 def test_shutdown_flush_supplies_real_result_and_retains_errors(project, tmp_path, error_line):
     _, config, _, logs = project
-    reader = runner.FreshLogs(logs)
+    reader = clients.FreshLogs(logs)
     clock = FakeClock()
-    result = runner.await_result(reader, config, "fresh", tmp_path, clock.clock, clock.sleep)
+    result = clients.await_result(reader, config, "fresh", tmp_path, clock.clock, clock.sleep)
     assert result["status"] == "failed"
     (logs / "content.log").write_text(error_line + marker())
-    result = runner.finalize_game_logs(reader, result, config, "fresh", tmp_path)
+    result = clients.finalize_game_logs(reader, result, config, "fresh", tmp_path)
     assert result["status"] == ("failed" if error_line else "passed")
     assert result["marker"]["run_id"] == "fresh"
     assert bool(result["errors"]) == bool(error_line)
@@ -178,21 +207,20 @@ def test_shutdown_flush_supplies_real_result_and_retains_errors(project, tmp_pat
 
 def test_shutdown_without_runtime_result_still_fails(project, tmp_path):
     _, config, _, logs = project
-    reader = runner.FreshLogs(logs)
+    reader = clients.FreshLogs(logs)
     clock = FakeClock()
-    result = runner.await_result(reader, config, "fresh", tmp_path, clock.clock, clock.sleep)
-    assert runner.finalize_game_logs(reader, result, config, "fresh", tmp_path)["status"] == "failed"
+    result = clients.await_result(reader, config, "fresh", tmp_path, clock.clock, clock.sleep)
+    assert clients.finalize_game_logs(reader, result, config, "fresh", tmp_path)["status"] == "failed"
 
 
-def test_configure_and_redeploy_are_confined_to_owned_world(project, monkeypatch):
+def test_configure_and_redeploy_are_confined_to_owned_world(project):
     root, config, world, logs = project
-    monkeypatch.setattr(runner, "require_closed_client", lambda: None)
-    runner.configure(root, config, world, logs)
+    worlds.configure(root, config, world, logs, FakeClient())
     original_level = (world / "level.dat").read_bytes()
     untouched = world / "behavior_packs/unrelated/keep.txt"
     untouched.parent.mkdir(parents=True)
     untouched.write_text("preserve")
-    runner.deploy(root, config, world, "fresh")
+    worlds.deploy(root, config, world, "fresh")
     deployed_bp = world / f"behavior_packs/addon-test-{config['harness_uuid']}"
     deployed_rp = world / f"resource_packs/addon-test-{config['harness_uuid']}"
     source_bp_id = runner.read_json(root / "bp/manifest.json")["header"]["uuid"]
@@ -210,35 +238,39 @@ def test_configure_and_redeploy_are_confined_to_owned_world(project, monkeypatch
     assert not (root / "bp/scripts").exists()
 
 
-def test_refuses_world_with_existing_active_packs(project, monkeypatch):
+def test_refuses_world_with_existing_active_packs(project):
     root, config, world, logs = project
-    monkeypatch.setattr(runner, "require_closed_client", lambda: None)
     runner.write_json(world / "world_behavior_packs.json", [{"pack_id": "unrelated"}])
     with pytest.raises(runner.SetupError, match="fresh dedicated"):
-        runner.configure(root, config, world, logs)
-    assert not (world / runner.OWNER).exists()
+        worlds.configure(root, config, world, logs, FakeClient())
+    assert not (world / worlds.OWNER).exists()
 
 
-def test_refuses_unrelated_packs_added_after_configuration(project, monkeypatch):
+def test_configure_refuses_while_minecraft_runs(project):
     root, config, world, logs = project
-    monkeypatch.setattr(runner, "require_closed_client", lambda: None)
-    runner.configure(root, config, world, logs)
+    with pytest.raises(runner.SetupError, match="Close Minecraft"):
+        worlds.configure(root, config, world, logs, clients.WindowsClient(running=lambda: True))
+    assert not (world / worlds.OWNER).exists()
+
+
+def test_refuses_unrelated_packs_added_after_configuration(project):
+    root, config, world, logs = project
+    worlds.configure(root, config, world, logs, FakeClient())
     runner.write_json(world / "world_behavior_packs.json", [{"pack_id": "unrelated"}])
     with pytest.raises(runner.SetupError, match="unrelated active packs"):
-        runner.deploy(root, config, world, "fresh")
+        worlds.deploy(root, config, world, "fresh")
     assert runner.read_json(world / "world_behavior_packs.json") == [{"pack_id": "unrelated"}]
 
 
 def test_refuses_unowned_world(project):
     root, config, world, _ = project
     with pytest.raises(runner.SetupError, match="ownership"):
-        runner.deploy(root, config, world, "fresh")
+        worlds.deploy(root, config, world, "fresh")
     assert not (world / "behavior_packs").exists()
 
 
 def test_rejects_redirected_metadata_before_writing(project, monkeypatch):
     root, config, world, logs = project
-    monkeypatch.setattr(runner, "require_closed_client", lambda: None)
     metadata = world / "world_behavior_packs.json"
     original = Path.resolve
 
@@ -249,8 +281,8 @@ def test_rejects_redirected_metadata_before_writing(project, monkeypatch):
 
     monkeypatch.setattr(Path, "resolve", redirected)
     with pytest.raises(runner.SetupError, match="redirected"):
-        runner.configure(root, config, world, logs)
-    assert not (world / runner.OWNER).exists()
+        worlds.configure(root, config, world, logs, FakeClient())
+    assert not (world / worlds.OWNER).exists()
 
 
 def test_static_failure_stops_before_game_and_preserves_exit_code(project, monkeypatch):
@@ -266,74 +298,116 @@ def test_static_failure_stops_before_game_and_preserves_exit_code(project, monke
 
 def test_all_reports_blocked_when_automatic_setup_has_no_account(project, monkeypatch):
     root, _, _, _ = project
-    monkeypatch.setattr(runner, "require_closed_client", lambda: None)
-    assert runner.main(["all"], root=root) == 2
+    assert runner.main(["all"], root=root, client=FakeClient()) == 2
     report = runner.read_json(root / "dist/bedrock-tests/latest.json")
     assert report["static"]["status"] == "passed"
     assert report["status"] == "blocked"
     assert "one initialized Minecraft account" in report["error"]
 
 
-def test_legacy_dry_run_is_read_only_discovery():
-    root = Path(__file__).resolve().parents[1]
+def test_legacy_dry_run_is_read_only_discovery(project, tmp_path):
+    # A copy of scripts/ in the fixture repo: the entry point's own ROOT, and every discovered
+    # install path, stay under tmp_path instead of the real repository and the user's game data.
+    root, _, world, _ = project
+    shutil.copytree(Path(__file__).resolve().parents[1] / "scripts", root / "scripts",
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    env = {**os.environ, "HOME": str(tmp_path / "home"), "APPDATA": str(tmp_path), "LOCALAPPDATA": str(tmp_path)}
+    before = sorted(path for path in tmp_path.rglob("*") if "dist" not in path.parts)
     result = subprocess.run([sys.executable, "scripts/test_in_game.py", "--dry-run"], cwd=root,
-                            capture_output=True, text=True)
-    assert result.returncode == 0
+                            capture_output=True, text=True, env=env)
+    assert result.returncode == 0, result.stderr
     assert "DIAGNOSTIC" in result.stdout
     assert "PASSED" not in result.stdout
+    assert sorted(path for path in tmp_path.rglob("*") if "dist" not in path.parts and "__pycache__" not in path.parts) \
+        == [path for path in before if "__pycache__" not in path.parts]
+    assert runner.read_json(root / "dist/bedrock-tests/latest.json")["mode"] == "doctor"
 
 
-def test_game_launches_encoded_world_requires_fresh_marker_and_closes(project, monkeypatch, tmp_path):
+def test_game_launches_encoded_world_requires_fresh_marker_and_closes(project, tmp_path):
     root, config, world, logs = project
-    monkeypatch.setattr(runner, "require_closed_client", lambda: None)
     renamed = world.with_name("test world=+")
     world.rename(renamed)
-    runner.configure(root, config, renamed, logs)
-    calls = []
+    client = FakeClient(on_launch=lambda: (logs / "fresh.log").write_text(marker()))
+    worlds.configure(root, config, renamed, logs, client)
     config["settle_seconds"] = 0
-
-    def launch(uri):
-        calls.append(uri)
-        (logs / "fresh.log").write_text(marker())
-
-    monkeypatch.setattr(runner.os, "startfile", launch, raising=False)
-    monkeypatch.setattr(runner, "close_game", lambda: calls.append("closed"))
-    monkeypatch.setattr(runner, "capture_game", lambda _: "fixture.png")
-    result = runner.run_game(root, config, "fresh", tmp_path)
+    result = runner.run_game(root, config, "fresh", tmp_path, client=client)
     assert result["status"] == "passed"
-    assert calls == ["minecraft://?load=test%20world%3D%2B", "closed"]
+    assert result["stages"]["gameplay"] == {"status": "passed", "checks": ["spawned fixture:vehicle"]}
+    assert "world_load" not in result["stages"]
+    assert client.calls == ["minecraft://?load=test%20world%3D%2B", "closed"]
 
 
-def test_game_closes_launched_client_when_log_read_fails(project, monkeypatch, tmp_path):
+def test_game_closes_launched_client_when_log_read_fails(project, tmp_path):
     root, config, world, logs = project
-    monkeypatch.setattr(runner, "require_closed_client", lambda: None)
-    runner.configure(root, config, world, logs)
-    calls = []
-    monkeypatch.setattr(runner.os, "startfile", lambda _: calls.append("launched"), raising=False)
-    monkeypatch.setattr(runner, "close_game", lambda: calls.append("closed"))
 
-    def fail(*args, **kwargs):
+    def fail(**kwargs):
         raise OSError("log unavailable")
 
-    monkeypatch.setattr(runner, "await_result", fail)
+    client = FakeClient(verdict=fail)
+    worlds.configure(root, config, world, logs, client)
     with pytest.raises(OSError, match="log unavailable"):
-        runner.run_game(root, config, "fresh", tmp_path)
-    assert calls == ["launched", "closed"]
+        runner.run_game(root, config, "fresh", tmp_path, client=client)
+    assert client.calls == ["minecraft://?load=dedicated", "closed"]
+
+
+def test_windows_client_blocks_deployment_while_minecraft_runs():
+    with pytest.raises(runner.SetupError, match="Close Minecraft"):
+        clients.WindowsClient(running=lambda: True).assert_closed()
+
+
+def window_port(windows, **calls):
+    """A user32 port whose EnumWindows visits (hwnd, title, visible) in order."""
+    from types import SimpleNamespace
+    titles = {hwnd: (title, visible) for hwnd, title, visible in windows}
+
+    def enum_windows(visit):
+        for hwnd, _, _ in windows:
+            if not visit(hwnd, 0):
+                break
+
+    def get_window_text(hwnd, buffer, size):
+        buffer.value = titles[hwnd][0][:size - 1]
+        return len(buffer.value)
+
+    return SimpleNamespace(enum_windows=enum_windows, GetWindowTextW=get_window_text,
+                           IsWindowVisible=lambda hwnd: titles[hwnd][1], **calls)
+
+
+@pytest.mark.parametrize("windows,expected", [
+    ([(1, "Minecraft", False), (2, "Minecraft Launcher", True), (3, "Minecraft for Windows", True)], 3),
+    ([(4, "Notes", True), (5, "Minecraft", True)], 5),
+    ([(6, "Minecraft", False), (7, "Minecraft Launcher", True)], None),
+])
+def test_game_window_is_the_visible_minecraft_titled_window(windows, expected):
+    assert clients.find_game_window(window_port(windows)) == expected
+
+
+def test_windows_close_posts_a_normal_close_to_the_game_window(tmp_path):
+    posted = []
+    post = lambda *message: posted.append(message) or True
+    user32 = window_port([(7, "Minecraft Launcher", True), (42, "Minecraft", True)], PostMessageW=post)
+    running = iter([True, False])
+    clients.WindowsClient(user32=user32, running=lambda: next(running)).close(tmp_path)
+    assert posted == [(42, 0x0010, 0, 0)]  # WM_CLOSE, no forced termination
+    user32 = window_port([(42, "Minecraft", False)], PostMessageW=post)
+    with pytest.raises(runner.SetupError, match="no closeable window"):
+        clients.WindowsClient(user32=user32, running=lambda: True).close(tmp_path)
+    assert len(posted) == 1
 
 
 def test_capture_timeout_retains_last_stage(monkeypatch, tmp_path):
     def timeout(*args, **kwargs):
         raise subprocess.TimeoutExpired("capture", 20, stderr=b"capture stage: grab_pixels\n")
-    monkeypatch.setattr(runner.subprocess, "run", timeout)
+    monkeypatch.setattr(clients.subprocess, "run", timeout)
     with pytest.raises(runner.SetupError, match="grab_pixels"):
-        runner.capture_game(tmp_path)
+        clients.WindowsClient().capture(tmp_path)
 
 
 def test_capture_helper_must_produce_a_file(monkeypatch, tmp_path):
-    monkeypatch.setattr(runner.subprocess, "run", lambda *a, **k:
+    monkeypatch.setattr(clients.subprocess, "run", lambda *a, **k:
                         subprocess.CompletedProcess([], 0, str(tmp_path / "missing.png"), ""))
     with pytest.raises(runner.SetupError, match="no capture file"):
-        runner.capture_game(tmp_path)
+        clients.WindowsClient().capture(tmp_path)
 
 
 @pytest.mark.parametrize("mode", ["window", "uniform", "fallback", "lost_focus"])
@@ -345,13 +419,11 @@ def test_capture_targets_window_and_guards_fallback(monkeypatch, tmp_path, mode)
         rect._obj.bottom = 4
         return True
     foreground = iter([42, 42, 0 if mode == "lost_focus" else 42])
-    user32 = SimpleNamespace(SetProcessDPIAware=lambda: True,
-                             IsIconic=lambda hwnd: False, GetClientRect=client_rect,
-                             GetForegroundWindow=lambda: next(foreground) if mode in ("fallback", "lost_focus") else 0,
-                             ClientToScreen=lambda *a: True,
-                             ShowWindowAsync=lambda *a: None, SetForegroundWindow=lambda *a: None)
-    monkeypatch.setattr(runner.ctypes, "WinDLL", lambda *a, **k: user32, raising=False)
-    monkeypatch.setattr(runner, "find_game_window", lambda: 42)
+    user32 = window_port([(42, "Minecraft", True)], SetProcessDPIAware=lambda: True,
+                         IsIconic=lambda hwnd: False, GetClientRect=client_rect,
+                         GetForegroundWindow=lambda: next(foreground) if mode in ("fallback", "lost_focus") else 0,
+                         ClientToScreen=lambda *a: True,
+                         ShowWindowAsync=lambda *a: None, SetForegroundWindow=lambda *a: None)
     image = Image.new("RGB", (4, 4))
     if mode == "window":
         image.putpixel((0, 0), (255, 0, 0))
@@ -365,20 +437,17 @@ def test_capture_targets_window_and_guards_fallback(monkeypatch, tmp_path, mode)
     monkeypatch.setattr(ImageGrab, "grab", grab)
     if mode in ("uniform", "lost_focus"):
         with pytest.raises(runner.SetupError, match="[Ee]mpty or uniform|lost foreground"):
-            runner._capture_game(tmp_path)
+            clients._capture_game(tmp_path, user32=user32)
         assert not (tmp_path / "minecraft.png").exists()
     else:
-        assert Path(runner._capture_game(tmp_path)).is_file()
+        assert Path(clients._capture_game(tmp_path, user32=user32)).is_file()
 
 
 @pytest.mark.parametrize("required,successes", [(False, 0), (True, 0), (True, 1), (True, 2)])
 def test_capture_failure_preserves_gameplay_and_each_attempt(project, monkeypatch, tmp_path, required, successes):
     root, config, world, logs = project
-    monkeypatch.setattr(runner, "require_closed_client", lambda: None)
-    runner.configure(root, config, world, logs)
+    worlds.configure(root, config, world, logs, FakeClient())
     config["showcase"] = required
-    monkeypatch.setattr(runner.os, "startfile", lambda _: None, raising=False)
-    monkeypatch.setattr(runner, "close_game", lambda: None)
     ticks = iter(range(0, 200, 16))
     monkeypatch.setattr(runner.time, "monotonic", lambda: next(ticks))
 
@@ -386,17 +455,16 @@ def test_capture_failure_preserves_gameplay_and_each_attempt(project, monkeypatc
         kwargs["on_poll"]()
         kwargs["on_poll"]()
         return {"status": "passed", "errors": [], "warnings": [],
-                "marker": json.loads(marker().split(runner.MARKER)[1])}
+                "marker": json.loads(marker().split(clients.MARKER)[1])}
 
-    monkeypatch.setattr(runner, "await_result", await_pass)
     captured = []
     def fail_capture(directory):
         if len(captured) < successes:
             captured.append(str(directory / "minecraft.png"))
             return captured[-1]
         raise runner.SetupError("capture stage: grab_pixels timed out")
-    monkeypatch.setattr(runner, "capture_game", fail_capture)
-    result = runner.run_game(root, config, "fresh", tmp_path)
+    client = FakeClient(verdict=await_pass, capture=fail_capture)
+    result = runner.run_game(root, config, "fresh", tmp_path, client=client)
     assert result["status"] == ("failed" if required and successes < 2 else "passed")
     assert result["stages"]["gameplay"]["status"] == "passed"
     assert result["stages"]["content_logs"]["status"] == "passed"
@@ -411,17 +479,14 @@ def test_capture_failure_preserves_gameplay_and_each_attempt(project, monkeypatc
     assert result["coverage"]["player_input"] == "not_verified"
 
 
-def test_shutdown_failure_keeps_gameplay_evidence(project, monkeypatch, tmp_path):
+def test_shutdown_failure_keeps_gameplay_evidence(project, tmp_path):
     root, config, world, logs = project
-    monkeypatch.setattr(runner, "require_closed_client", lambda: None)
-    runner.configure(root, config, world, logs)
     config["settle_seconds"] = 0
-    monkeypatch.setattr(runner.os, "startfile", lambda _: (logs / "fresh.log").write_text(marker()), raising=False)
-    monkeypatch.setattr(runner, "capture_game", lambda _: "fixture.png")
     def fail_close():
         raise runner.SetupError("client did not close")
-    monkeypatch.setattr(runner, "close_game", fail_close)
-    result = runner.run_game(root, config, "fresh", tmp_path)
+    client = FakeClient(on_launch=lambda: (logs / "fresh.log").write_text(marker()), close=fail_close)
+    worlds.configure(root, config, world, logs, client)
+    result = runner.run_game(root, config, "fresh", tmp_path, client=client)
     assert result["status"] == "failed"
     assert result["marker"]["status"] == "PASS"
     assert result["stages"]["shutdown"]["status"] == "failed"
