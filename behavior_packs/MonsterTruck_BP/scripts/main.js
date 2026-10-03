@@ -18,6 +18,7 @@ import {
   shouldShieldRiderFromHeat
 } from "./amphibious.js";
 import { createDrivingState, groundRetention, headingVector, stepDriving } from "./driving.js";
+import { AXLE_OFFSET, CONTACT_PERIMETER, TRUCK_LENGTH, TRUCK_WIDTH } from "./geometry.js";
 import {
   calculateTrampleDamage,
   canApplyTireTrample,
@@ -255,10 +256,10 @@ function onTick() {
       const headX = Math.cos(headRad);
       const headZ = Math.sin(headRad);
 
-      const frontX = loc.x + headX * 1.125;
-      const frontZ = loc.z + headZ * 1.125;
-      const rearX = loc.x - headX * 1.125;
-      const rearZ = loc.z - headZ * 1.125;
+      const frontX = loc.x + headX * AXLE_OFFSET;
+      const frontZ = loc.z + headZ * AXLE_OFFSET;
+      const rearX = loc.x - headX * AXLE_OFFSET;
+      const rearZ = loc.z - headZ * AXLE_OFFSET;
 
       const frontHeight = sampleGroundHeight(dimension, frontX, loc.y, frontZ);
       const rearHeight = sampleGroundHeight(dimension, rearX, loc.y, rearZ);
@@ -449,9 +450,9 @@ function onTick() {
                 target.location,
                 loc,
                 { x: dirX, z: dirZ },
-                2.25,
-                3.6,
-                1.6
+                TRUCK_WIDTH,
+                TRUCK_LENGTH,
+                CONTACT_PERIMETER
               )
             ) {
               const lastHit = entityHitCooldowns.get(target.id) || 0;

@@ -2,7 +2,9 @@
 Set up the add-on for Linux development, debug, install, and fully automate in-game testing of the monster truck.
 ## Now
 ADR-0017 script-driven driving implemented (2026-10-03): W/S throttle/brake/reverse, A/D steer wheels, Space held = Handbrake Drift, Suspension Jump retired, Crush Stomp on >=3-block drops. Run f40f40bfaf024a8b8cdb84a620f94133 15/15 PASS; pytest 141 passed. Installed 1.0.5 to local flatpak client only for user drive test (servers not yet).
+Architecture deepening (2026-10-03, branch deepen-modules, baseline pytest 144 + typecheck clean): candidates 3 → 1 → 2 → 5 → 4 from the architecture review, grilling Q1-Q14 answers pre-approved by user ("I pre approve the grilling recommended answers").
 ## Next
+0. Deepening: (3) geometry.js + single vehicle.config.json; (1) truck_tick.js tickTruck(truck, dimension, state, input, tick) with fake world node tests in tests/js; (2) landing.js/contact.js replace suspension.js/trample.js; fix prevX overwrite, global hit cooldown, Map cleanup (pitch lag NOTED only); (5) scripts/addon_packs.py; (4) scripts/bedrock_client.py WindowsClient/LauncherClient. Gates: pytest + typecheck + full Scenario Run per add-on step; Static + Scenarios --only smoke + Linux Game after tooling. No version rev; no push.
 1. User drives in Playground: confirm A=left (movement x sign, driving.js LEFT_INPUT_SIGN), Space no longer dismounts, mouse only looks, drift feel. Tune DRIVING in driving.js per feedback.
 2. Then install to servers (--servers creative,survival), close #32 (superseded) and #38; trim #27-#30; #39 CI.
 ## Constraints

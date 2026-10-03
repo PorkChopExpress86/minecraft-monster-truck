@@ -1,7 +1,6 @@
 import os
 import sys
 import json
-import yaml
 from pathlib import Path
 
 class ProjectValidator:
@@ -28,23 +27,7 @@ class ProjectValidator:
             return None
 
     def validate_config(self):
-        cfg_yaml = self.repo_root / "vehicle.config.yaml"
-        cfg_json = self.repo_root / "vehicle.config.json"
-        
-        if not cfg_yaml.exists() and not cfg_json.exists():
-            self.log_error("Neither vehicle.config.yaml nor vehicle.config.json exists.")
-            return None
-            
-        config = None
-        if cfg_yaml.exists():
-            try:
-                with open(cfg_yaml, "r", encoding="utf-8") as f:
-                    config = yaml.safe_load(f)
-            except Exception as e:
-                self.log_error(f"Error parsing vehicle.config.yaml: {e}")
-        elif cfg_json.exists():
-            config = self.load_json(cfg_json)
-            
+        config = self.load_json(self.repo_root / "vehicle.config.json")
         if config:
             for req in ["namespace", "entity_id", "display_name", "target", "vehicle"]:
                 if req not in config:

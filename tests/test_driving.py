@@ -19,7 +19,7 @@ def run_node(script):
 PRELUDE = r'''
 import assert from 'node:assert/strict';
 import { DRIVING, createDrivingState, headingVector, stepDriving } from './behavior_packs/MonsterTruck_BP/scripts/driving.js';
-import { MAX_STEER_DEGREES } from './behavior_packs/MonsterTruck_BP/scripts/kinematics.js';
+import { MAX_STEER_DEGREES } from './behavior_packs/MonsterTruck_BP/scripts/geometry.js';
 const LEFT = 1, RIGHT = -1;
 function drive(state, input, ticks, options = {}) {
   let result;
@@ -121,7 +121,8 @@ def test_ground_retention_uses_the_entity_friction_modifier():
     entity = json.loads((REPO_ROOT / "behavior_packs/MonsterTruck_BP/entities/monster_truck.entity.json").read_text())
     modifier = entity["minecraft:entity"]["components"]["minecraft:friction_modifier"]["value"]
     run_node(PRELUDE + f"""
-import {{ FRICTION_MODIFIER, groundRetention }} from './behavior_packs/MonsterTruck_BP/scripts/driving.js';
+import {{ groundRetention }} from './behavior_packs/MonsterTruck_BP/scripts/driving.js';
+import {{ FRICTION_MODIFIER }} from './behavior_packs/MonsterTruck_BP/scripts/geometry.js';
 assert.equal(FRICTION_MODIFIER, {modifier});
 assert.ok(Math.abs(groundRetention("minecraft:grass_block") - 0.91 * 0.6 * {modifier}) < 1e-9);
 assert.ok(groundRetention("minecraft:ice") > groundRetention("minecraft:stone"), "ice is slipperier");

@@ -13,13 +13,12 @@ def test_kinematics_pitch_and_steering_contracts():
 
     script = r'''
 import assert from 'node:assert/strict';
+import { calculateDynamicPitch } from './behavior_packs/MonsterTruck_BP/scripts/kinematics.js';
 import {
-  calculateDynamicPitch,
-  calculateRearSteerAngle,
   MAX_PITCH_DEGREES,
   MAX_STEER_DEGREES,
   REAR_STEER_RATIO
-} from './behavior_packs/MonsterTruck_BP/scripts/kinematics.js';
+} from './behavior_packs/MonsterTruck_BP/scripts/geometry.js';
 
 // 1. Constants check
 assert.equal(MAX_PITCH_DEGREES, 35);
@@ -120,11 +119,9 @@ const airborneDescent = calculateDynamicPitch({
 assert.ok(airborneDescent < 0, "Airborne descent must nose down");
 
 // 5. Coordinated Four-Wheel Steering: A/D set the front angle (driving.js, tests/test_driving.py);
-// the rear wheels counter-steer from it.
-// Rear counter-steering ratio
-assert.equal(calculateRearSteerAngle(26), -18);
-assert.equal(calculateRearSteerAngle(-26), 18);
-assert.equal(calculateRearSteerAngle(0), 0);
+// the RP animation counter-steers the rear wheels by REAR_STEER_RATIO (tests/test_geometry_sync.py).
+assert.equal(Math.round(-26 * REAR_STEER_RATIO), -18);
+assert.equal(Math.round(26 * REAR_STEER_RATIO), 18);
 '''
     res = subprocess.run([node_exe, "--input-type=module", "-e", script],
                          cwd=str(REPO_ROOT), capture_output=True, text=True)

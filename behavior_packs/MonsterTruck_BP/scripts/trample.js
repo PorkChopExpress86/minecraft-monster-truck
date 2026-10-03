@@ -1,5 +1,7 @@
 // Speed-scaled tire trample and knockback calculations
 
+import { CONTACT_PERIMETER, TRUCK_LENGTH, TRUCK_WIDTH } from "./geometry.js";
+
 export function calculateTrampleDamage(speed) {
   // Parked, idling, or crawling (<0.08 blocks/tick) inflicts no damage
   if (!speed || speed <= 0.08) {
@@ -20,9 +22,9 @@ export function isInContactPerimeter(
   targetLoc,
   truckLoc,
   heading = { x: 1, z: 0 },
-  width = 2.25,
-  length = 3.6,
-  perimeter = 1.6
+  width = TRUCK_WIDTH,
+  length = TRUCK_LENGTH,
+  perimeter = CONTACT_PERIMETER
 ) {
   if (!targetLoc || !truckLoc) return false;
 

@@ -4,7 +4,7 @@
 // The engine behavior these numbers rely on (drag before the move, retention values, collisions)
 // is measured in docs/agents/bedrock-physics.md; read it before retuning.
 
-import { MAX_STEER_DEGREES } from "./kinematics.js";
+import { DRIVING_WHEELBASE, FRICTION_MODIFIER, MAX_STEER_DEGREES } from "./geometry.js";
 
 export const DRIVING = {
   topSpeed: 1.1,               // ~22 blocks/s: the overland speed players already liked
@@ -13,7 +13,7 @@ export const DRIVING = {
   coastDeceleration: 0.0275,   // ~2 s to coast to a stop
   brakeDeceleration: 0.08,     // S while rolling forward (or W while reversing)
   handbrakeDeceleration: 0.05, // locked rear wheels: ~1.1 s from top speed
-  wheelbase: 3.0,              // blocks between axles; sets the turning radius
+  wheelbase: DRIVING_WHEELBASE, // blocks between axles; sets the turning radius
   steerRate: 4,                // degrees per tick the front wheels turn toward the A/D target
   highSpeedSteerShare: 0.4,    // share of full lock that still turns the truck at top speed
   handbrakeYawBoost: 2.0,      // the rear steps out: the truck turns twice as fast
@@ -35,8 +35,6 @@ const SLIPPERINESS = {
   "minecraft:blue_ice": 0.989,
   "minecraft:slime": 0.8,
 };
-
-export const FRICTION_MODIFIER = 1.15; // monster_truck.entity.json minecraft:friction_modifier
 
 export function groundRetention(blockTypeId) {
   return Math.min(1, 0.91 * (SLIPPERINESS[blockTypeId] ?? 0.6) * FRICTION_MODIFIER);

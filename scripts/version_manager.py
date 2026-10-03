@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 import re
 import sys
-import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -92,18 +91,6 @@ def set_repo_version(new_version, repo_root=None):
         cfg_json = json.loads(cfg_json_path.read_text(encoding="utf-8"))
         cfg_json["version"] = new_ver
         cfg_json_path.write_text(json.dumps(cfg_json, indent=2) + "\n", encoding="utf-8")
-
-    # 4. vehicle.config.yaml
-    cfg_yaml_path = root / "vehicle.config.yaml"
-    if cfg_yaml_path.is_file():
-        try:
-            with open(cfg_yaml_path, "r", encoding="utf-8") as f:
-                cfg_yaml = yaml.safe_load(f) or {}
-            cfg_yaml["version"] = new_ver
-            with open(cfg_yaml_path, "w", encoding="utf-8") as f:
-                yaml.dump(cfg_yaml, f, sort_keys=False)
-        except Exception:
-            pass
 
     return new_ver
 

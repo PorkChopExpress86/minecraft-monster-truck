@@ -1,6 +1,4 @@
-export const MAX_PITCH_DEGREES = 35;
-export const MAX_STEER_DEGREES = 26;
-export const REAR_STEER_RATIO = 18.0 / 26.0;
+import { MAX_PITCH_DEGREES, PITCH_AXLE_SPAN } from "./geometry.js";
 
 /**
  * Calculates vehicle pitch angle conforming to terrain incline, jump trajectory, or flotation.
@@ -8,7 +6,7 @@ export const REAR_STEER_RATIO = 18.0 / 26.0;
 export function calculateDynamicPitch({
   frontHeight,
   rearHeight,
-  wheelbase = 2.25,
+  wheelbase = PITCH_AXLE_SPAN,
   currentPitch = 0.0,
   isAirborne = false,
   inLiquid = false,
@@ -52,14 +50,6 @@ export function calculateDynamicPitch({
     next += Math.sign(target - next);
   }
   return next || 0;
-}
-
-/**
- * Calculates counter-phase rear wheel steering angle from front steer angle.
- */
-export function calculateRearSteerAngle(frontSteer) {
-  if (Math.abs(frontSteer) < 0.5) return 0;
-  return Math.round(-frontSteer * REAR_STEER_RATIO);
 }
 
 /**
