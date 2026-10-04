@@ -43,7 +43,7 @@ The recipe returns one **Monster Truck Vehicle Item**. Using it deploys a red tr
 
 ## 🏁 Vehicle Stats Card
 
-- **Max Speed**: 0.55 (Heavy-duty cruising on land, water, and lava!)
+- **Top Speed**: about 22 blocks per second (1.1 blocks per tick), the same on land, water, and lava! (Its engine movement attribute is 0.55.)
 - **Auto-Step**: 2 Full Blocks (Controlled Auto-Step drives straight up ledges without jumping!)
 - **Health**: 1,000 HP (Armored monster chassis taking only 25% damage from attacks!)
 - **Fall Damage**: None (100% Pneumatic Shock Absorption on all drops!)
