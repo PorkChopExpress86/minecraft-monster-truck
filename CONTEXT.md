@@ -73,7 +73,7 @@ The vehicle's continuous buoyancy and high-traction liquid propulsion enabling i
 _Avoid_: Boat mode, swimming, hydroplaning
 
 **Shoreline Step-Up**:
-The vehicle's automated liquid-to-land climbing transition that elevates the vehicle up onto shoreline banks from water or lava without halting or requiring manual jumps. Bank height is measured from the liquid surface: a bank whose top is 1 or 2 blocks above the surface is climbed, while a wall 3 or more blocks above the surface stops the truck.
+The vehicle's automated liquid-to-land climbing transition that elevates the vehicle up onto shoreline banks from water or lava without halting or requiring manual jumps. Bank height is measured from the liquid surface: a bank level with the surface or whose top is 1 or 2 blocks above it is climbed, while a wall 3 or more blocks above the surface stops the truck.
 _Avoid_: Hopping, beaching, docking
 
 **Molten Tire Trample**:

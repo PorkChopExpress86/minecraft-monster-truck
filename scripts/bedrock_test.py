@@ -171,14 +171,18 @@ def evidence(root, config):
         return completed.stdout if completed.returncode == 0 else None
 
     revision = git("rev-parse", "HEAD")
-    status = git("status", "--porcelain") if revision is not None else None
+    # --no-renames lists a rename as its deleted and added paths, so every entry is one plain path.
+    status = git("status", "--porcelain", "--no-renames") if revision is not None else None
     changed = sorted(line[3:] for line in status.splitlines()) if status is not None else None
-    version = read_json(root / config["behavior_pack"] / "manifest.json")["header"]["version"]
+    try:
+        version = ".".join(map(str, read_json(root / config["behavior_pack"] / "manifest.json")["header"]["version"]))
+    except (OSError, ValueError, KeyError, TypeError):
+        version = None  # the record says it is unknown; it must not fail the run it describes
     return {
         "revision": revision.strip() if revision is not None else None,
         "working_tree_clean": not changed if changed is not None else None,
         "changed_files": changed,
-        "addon_version": ".".join(map(str, version)),
+        "addon_version": version,
         "game_versions": {"linux_client": config.get("linux_client_version"),
                           "scenario_server": config.get("scenario_server", {}).get("version")},
     }

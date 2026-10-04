@@ -181,6 +181,7 @@ def test_reports_record_the_evidence_an_acceptance_record_needs(tmp_path, monkey
     root = tmp_repo(tmp_path)
     git = lambda *args: subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, text=True)
     (root / ".gitignore").write_text("dist/\n")  # as in this repo: run output never dirties the tree
+    (root / "notes.txt").write_text("fixture\n")
     git("init", "-q")
     git("add", "-A")
     git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "fixture")
@@ -205,6 +206,21 @@ def test_reports_record_the_evidence_an_acceptance_record_needs(tmp_path, monkey
     evidence = json.loads((root / "dist/bedrock-tests/latest.json").read_text())["evidence"]
     assert evidence["working_tree_clean"] is False
     assert evidence["changed_files"] == ["testing/bedrock.json"]
+
+    git("mv", "notes.txt", "renamed.txt")  # a staged rename lists both real paths, not "a -> b"
+    bedrock_test.main(["scenarios"], root=root)
+    evidence = json.loads((root / "dist/bedrock-tests/latest.json").read_text())["evidence"]
+    assert evidence["changed_files"] == ["notes.txt", "renamed.txt", "testing/bedrock.json"]
+
+
+def test_an_unreadable_addon_version_does_not_break_a_run(tmp_path, monkeypatch):
+    from scripts import bedrock_test
+    root = tmp_repo(tmp_path)
+    config = json.loads((root / "testing/bedrock.json").read_text())
+    (root / config["behavior_pack"] / "manifest.json").write_text(json.dumps({"header": {}}))
+    monkeypatch.setattr(bedrock_test, "run_scenario_stage", lambda *a: {"status": "passed", "scenarios": {}, "errors": []})
+    assert bedrock_test.main(["scenarios"], root=root) == 0
+    assert json.loads((root / "dist/bedrock-tests/latest.json").read_text())["evidence"]["addon_version"] is None
 
 
 def test_reports_outside_a_git_checkout_say_the_revision_is_unknown(tmp_path, monkeypatch):
