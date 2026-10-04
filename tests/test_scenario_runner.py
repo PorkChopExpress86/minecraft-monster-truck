@@ -152,9 +152,8 @@ def test_only_narrows_scenarios_in_configured_order_and_rejects_unknown_names():
             scenarios.select_scenarios(config, bad)
 
 
-def test_only_is_rejected_outside_scenarios_mode(tmp_path):
-    from scripts import bedrock_test
-    # A tmp repo with this repo's config and pack manifests, so the run report is never written into the real repo.
+def tmp_repo(tmp_path):
+    """A tmp repo with this repo's config and pack manifests, so run reports are never written into the real repo."""
     root = tmp_path / "repo"
     config = json.loads((REPO_ROOT / "testing/bedrock.json").read_text())
     (root / "testing").mkdir(parents=True)
@@ -162,6 +161,23 @@ def test_only_is_rejected_outside_scenarios_mode(tmp_path):
     for key in ("behavior_pack", "resource_pack"):
         (root / config[key]).mkdir(parents=True)
         (root / config[key] / "manifest.json").write_bytes((REPO_ROOT / config[key] / "manifest.json").read_bytes())
+    return root
+
+
+def test_a_failing_scenario_fails_the_run_with_exit_code_1(tmp_path, monkeypatch):
+    # CI (.github/workflows/scenarios.yml) fails the job on this exit code.
+    from scripts import bedrock_test
+    root = tmp_repo(tmp_path)
+    failed = {"status": "failed", "scenarios": {"trample": {"status": "failed", "checks": []}}, "errors": ["trample"]}
+    monkeypatch.setattr(bedrock_test, "run_scenario_stage", lambda *a: failed)
+    assert bedrock_test.main(["scenarios"], root=root) == 1
+    report = json.loads((root / "dist/bedrock-tests/latest.json").read_text())
+    assert report["status"] == "failed" and report["scenarios"] == failed
+
+
+def test_only_is_rejected_outside_scenarios_mode(tmp_path):
+    from scripts import bedrock_test
+    root = tmp_repo(tmp_path)
     assert bedrock_test.main(["static", "--only", "smoke"], root=root) == 2
     report = json.loads((root / "dist/bedrock-tests/latest.json").read_text())
     assert report["error"] == "--only is only accepted by scenarios"
