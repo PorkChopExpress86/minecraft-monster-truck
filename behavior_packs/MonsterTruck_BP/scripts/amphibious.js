@@ -41,35 +41,18 @@ export function classifyShorelineColumn(solidColumn = []) {
   };
 }
 
-export function calculateShorelineStepImpulse(heading = { x: 1, z: 0 }, stepHeight = 1) {
-  const hDist = Math.hypot(heading.x, heading.z) || 1;
-  const dirX = heading.x / hDist;
-  const dirZ = heading.z / hDist;
+// Shoreline Step-Up lift, held while the truck is against a qualifying bank and below its top.
+// The engine moves the truck by the velocity set the tick before and only then applies drag, so
+// a lift set every tick rises the same in water and lava; a single impulse does not, because
+// lava's drag after the first move cuts it to 4-30% (docs/agents/bedrock-physics.md).
+// rate: blocks/tick of climb; clearance: how far above the bank top the bottom is held until the
+// truck is over the bank; maxTicks: when an unfinished lift gives up.
+export const SHORELINE_LIFT = { rate: 0.5, clearance: 0.2, maxTicks: 20 };
 
-  if (stepHeight >= 3) {
-    return {
-      x: dirX * 0.45,
-      // A bank 2 above the surface. shoreline_step2 measured (water/lava peaks): 0.75 -> +2.27 in
-      // water on the first lift; in lava most lifts top out near +0.5-0.8 whatever the value
-      // (0.75-1.05), so lava climbs only on a later lift. 0.78 -> +2.45 in water, near a launch.
-      y: 0.75,
-      z: dirZ * 0.45,
-    };
-  }
-
-  if (stepHeight >= 2) {
-    return {
-      x: dirX * 0.40,
-      y: 0.62, // Elevates cleanly over 2-block shoreline rise
-      z: dirZ * 0.40,
-    };
-  }
-
-  return {
-    x: dirX * 0.35,
-    y: 0.42, // Elevates cleanly over 1-block shoreline rise
-    z: dirZ * 0.35,
-  };
+// Vertical velocity for this tick of the lift: climb at the lift rate, easing in so the truck's
+// bottom settles at the bank top plus clearance instead of overshooting.
+export function shorelineLiftVelocity(truckY, bankTopY, config = SHORELINE_LIFT) {
+  return Math.max(0, Math.min(config.rate, bankTopY + config.clearance - truckY));
 }
 
 // Thermal shielding: riders seated in the truck take no heat damage while it crosses lava

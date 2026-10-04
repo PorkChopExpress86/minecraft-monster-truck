@@ -18,7 +18,7 @@
       "smoke", "seats", "auto_step", "steering", "handbrake", "crush_stomp", "shock_absorption",
       "flotation_water", "flotation_lava", "trample", "demolition", "foliage_shearing",
       "dye_repaint", "retrieval", "incline_pitch", "spawn_sources",
-      "two_seat_drop", "liquid_start_water", "liquid_start_lava", "shoreline_wall", "shoreline_step2"
+      "two_seat_drop", "liquid_start_water", "liquid_start_lava", "shoreline_wall", "shoreline_step"
     ],
     "timeout_seconds": 600
   },

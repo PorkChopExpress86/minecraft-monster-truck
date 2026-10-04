@@ -270,34 +270,80 @@ test("liquid propulsion follows the driver's W input and crosses at overland spe
   }
 });
 
-test("driving forward against a 1-block bank from the water steps ashore", () => {
+// Shoreline Step-Up against a bank whose top is `aboveSurface` blocks above the liquid surface
+// (bank height counts above the surface: 0 is flush, 1 and 2 are climbed, 3 is a wall). A small
+// engine stands in for Bedrock: it moves the truck by the velocity set last tick, then applies
+// drag (the order measured in docs/agents/bedrock-physics.md). The bank face (z = 2) stops the
+// truck's 2.25-wide collision box until its bottom clears the top. The truck floats in from
+// z = -20 so it meets the bank at speed. verticalRetention 0.1 models lava cutting a lift.
+function shorelineClimb(aboveSurface, { verticalRetention = 0.8, ticks = 60 } = {}) {
   const driver = createFakePlayer({ id: "driver" });
-  const world = scene({ riders: [driver], isOnGround: false, driverInput: fixedInput({ forward: 1 }) });
-  world.dimension.setBlock(0, GROUND_Y, 0, "minecraft:water");
-  world.dimension.setBlock(0, GROUND_Y, 2, "minecraft:dirt"); // 1.5 blocks ahead (+Z)
-  world.step();
-  const lift = world.truck.impulses.find((i) => i.y > 0);
-  assert.ok(lift && lift.z > 0, "Shoreline Step-Up lifts the truck forward onto the bank");
+  const floatY = GROUND_Y + 0.6; // inside the surface water block at GROUND_Y
+  const world = scene({ riders: [driver], truckAt: { x: 0.5, y: floatY, z: -19.5 }, isOnGround: false,
+    driverInput: fixedInput({ forward: 1 }) });
+  const stopZ = 2 - 1.125;
+  for (let x = -3; x <= 3; x++) {
+    for (let z = -22; z <= 1; z++) world.dimension.setBlock(x, GROUND_Y, z, "minecraft:water");
+    for (let z = 2; z <= 12; z++) {
+      for (let h = 0; h <= aboveSurface; h++) world.dimension.setBlock(x, GROUND_Y + h, z, "minecraft:dirt");
+    }
+  }
+  const top = GROUND_Y + 1 + aboveSurface;
+  const truck = world.truck;
+  let seen = 0;
+  let velocity = { x: 0, y: 0, z: 0 };
+  let peak = truck.location.y;
+  let climbedAt;
+  let contactAt;
+  for (let t = 0; t < ticks; t++) {
+    world.step(() => {
+      for (const impulse of truck.impulses.slice(seen)) {
+        velocity = { x: velocity.x + impulse.x, y: velocity.y + impulse.y, z: velocity.z + impulse.z };
+      }
+      seen = truck.impulses.length;
+      let { y, z } = truck.location;
+      y += velocity.y;
+      if (y >= top - 1e-9 || z > stopZ + 1e-9 || z + velocity.z < stopZ) {
+        z += velocity.z;
+      } else {
+        z = stopZ; // the face holds it below the top
+        velocity.z = 0;
+        contactAt ??= t;
+      }
+      const onBank = z > stopZ + 0.05 && y <= top;
+      if (onBank) {
+        y = top;
+        velocity.y = 0;
+      }
+      velocity.y = velocity.y * verticalRetention - 0.08;
+      if (!onBank && y <= floatY) {
+        y = floatY; // buoyancy holds it at the surface
+        velocity.y = 0;
+      }
+      peak = Math.max(peak, y);
+      if (climbedAt === undefined && onBank) climbedAt = t;
+      truck.moveTo({ y, z }, { velocity, isOnGround: onBank });
+    });
+  }
+  return { climbedAt, contactAt, peak: peak - top, truck, top };
+}
+
+test("Shoreline Step-Up climbs flush, 1- and 2-above banks within a second in water and lava", () => {
+  for (const [medium, verticalRetention] of [["water", 0.8], ["lava-like clipping", 0.1]]) {
+    for (const aboveSurface of [0, 1, 2]) {
+      const { climbedAt, contactAt, peak } = shorelineClimb(aboveSurface, { verticalRetention });
+      const label = `${medium}, bank ${aboveSurface} above the surface`;
+      const took = climbedAt - (contactAt ?? climbedAt);
+      assert.ok(climbedAt !== undefined && took <= 20, `${label}: up on the bank within 20 ticks of contact (contact ${contactAt}, up ${climbedAt})`);
+      assert.ok(peak <= 0.5, `${label}: not launched (peak +${peak.toFixed(2)} over the top)`);
+    }
+  }
 });
 
-// Bank height counts above the liquid surface (the top of the water block the truck floats in):
-// 1 or 2 blocks above is a shoreline, 3 or more is a wall.
-test("Shoreline Step-Up climbs banks 1 and 2 blocks above the surface and refuses 3", () => {
-  const liftFor = (aboveSurface) => {
-    const driver = createFakePlayer({ id: "driver" });
-    const world = scene({ riders: [driver], isOnGround: false, driverInput: fixedInput({ forward: 1 }) });
-    world.dimension.setBlock(0, GROUND_Y, 0, "minecraft:water");
-    // The bank face below the surface, then aboveSurface blocks above it, 1.5 blocks ahead (+Z).
-    for (let h = 0; h <= aboveSurface; h++) world.dimension.setBlock(0, GROUND_Y + h, 2, "minecraft:dirt");
-    world.step();
-    return world.truck.impulses.find((i) => i.y > 0);
-  };
-  const one = liftFor(1);
-  const two = liftFor(2);
-  assert.ok(one && one.z > 0, "a bank 1 block above the surface is climbed");
-  assert.ok(two && two.z > 0, "a bank 2 blocks above the surface is climbed");
-  assert.ok(two.y > one.y, "the higher bank gets the higher lift");
-  assert.equal(liftFor(3), undefined, "a wall 3 blocks above the surface is not a shoreline");
+test("a wall 3 blocks above the liquid surface is not a shoreline", () => {
+  const { climbedAt, truck } = shorelineClimb(3, { ticks: 50 });
+  assert.equal(climbedAt, undefined);
+  assert.ok(truck.impulses.every((i) => i.y <= 0), "no Shoreline Step-Up lift");
 });
 
 test("holding Jump is the handbrake and never launches the truck", () => {

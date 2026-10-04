@@ -10,9 +10,10 @@ import {
 } from "./kinematics.js";
 import {
   classifyShorelineColumn,
-  calculateShorelineStepImpulse,
   isLiquidBlock,
-  LIQUID_DRAG_RETENTION
+  LIQUID_DRAG_RETENTION,
+  SHORELINE_LIFT,
+  shorelineLiftVelocity
 } from "./amphibious.js";
 import { createDrivingState, groundRetention, headingVector, stepDriving } from "./driving.js";
 import { AXLE_OFFSET } from "./geometry.js";
@@ -217,8 +218,9 @@ export function tickTruck(truck, dimension, state, input, tick) {
   }
   const inLiquid = inWater || inLava;
   // A Shoreline Step-Up lifts the truck clear of the liquid; keep driving it forward over
-  // the bank's edge while it rises.
-  const steppingAshore = state.lastShorelineStep !== undefined && tickNumber - state.lastShorelineStep < 8;
+  // the bank's edge while it rises and for 8 ticks after.
+  const steppingAshore = state.shoreLift !== undefined ||
+    (state.lastShorelineStep !== undefined && tickNumber - state.lastShorelineStep < 8);
   const onGround = Boolean(truck.isOnGround);
   const wheelsDown = inLiquid || onGround || steppingAshore;
   const lastMotion = headingVector(state.driving.yaw + state.driving.slip);
@@ -287,10 +289,11 @@ export function tickTruck(truck, dimension, state, input, tick) {
     truck.setProperty("blake:pitch_angle", state.pitchAngle);
   } catch {}
 
-  // Shoreline Step-Up: driving forward against a 1-2 block bank lifts the truck out.
-  // Propulsion on liquids is the driving above.
-  if (inLiquid && driver && (driverControls.forward ?? 0) > 0.05) {
-    const isNonAirNonLiquid = (b) => b && !b.isAir && b.typeId !== "minecraft:air" && !isLiquidBlock(b.typeId);
+  // Shoreline Step-Up: driving forward against a bank flush with the liquid surface or up to
+  // 2 blocks above it lifts the truck out. Propulsion on liquids is the driving above.
+  const isNonAirNonLiquid = (b) => b && !b.isAir && b.typeId !== "minecraft:air" && !isLiquidBlock(b.typeId);
+  const forwardHeld = (driverControls.forward ?? 0) > 0.05;
+  if (!state.shoreLift && inLiquid && driver && forwardHeld) {
     const baseY = Math.floor(loc.y);
     const intentDir = headingVector(drive.state.yaw);
     const intentPerp = { x: -intentDir.z, z: intentDir.x };
@@ -308,11 +311,32 @@ export function tickTruck(truck, dimension, state, input, tick) {
         }
       }
 
-      if (bankFound && (!state.lastShorelineStep || tickNumber - state.lastShorelineStep > 12)) {
-        state.lastShorelineStep = tickNumber;
-        truck.applyImpulse(calculateShorelineStepImpulse(intentDir, bankFound.stepHeight));
-      }
+      if (bankFound) state.shoreLift = { topY: baseY + bankFound.stepHeight, startTick: tickNumber };
     } catch {}
+  }
+  // The lift sets the vertical velocity every tick until the truck is over the bank (SHORELINE_LIFT).
+  if (state.shoreLift) {
+    const lift = state.shoreLift;
+    let overBank = false;
+    if (loc.y >= lift.topY) {
+      try {
+        overBank = Boolean(isNonAirNonLiquid(dimension.getBlock({ x: loc.x, y: lift.topY - 0.5, z: loc.z })));
+      } catch {}
+    }
+    if (overBank || !driver || !forwardHeld || tickNumber - lift.startTick >= SHORELINE_LIFT.maxTicks) {
+      delete state.shoreLift;
+      // Over the bank: drop the lift's remaining climb so the truck settles instead of hopping.
+      if (overBank && vel && vel.y > 0) {
+        try {
+          truck.applyImpulse({ x: 0, y: -vel.y, z: 0 });
+        } catch {}
+      }
+    } else {
+      state.lastShorelineStep = tickNumber;
+      try {
+        truck.applyImpulse({ x: 0, y: shorelineLiftVelocity(loc.y, lift.topY) - (vel ? vel.y : 0), z: 0 });
+      } catch {}
+    }
   }
 
   // Dual rooster-tail liquid wake particles and churning audio while moving across water or lava

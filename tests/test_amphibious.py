@@ -58,7 +58,8 @@ import assert from 'node:assert/strict';
 import {
   LIQUID_DRAG_RETENTION,
   classifyShorelineColumn,
-  calculateShorelineStepImpulse
+  SHORELINE_LIFT,
+  shorelineLiftVelocity
 } from './behavior_packs/MonsterTruck_BP/scripts/amphibious.js';
 
 // Liquid drag retention measured by Scenario Runs; driving divides its velocity by it so
@@ -73,18 +74,13 @@ assert.deepEqual(classifyShorelineColumn([true, true, false, false]), { isShorel
 assert.deepEqual(classifyShorelineColumn([true, true, true, false]), { isShoreline: true, stepHeight: 3 });
 assert.deepEqual(classifyShorelineColumn([true, true, true, true]), { isShoreline: false, stepHeight: 4 });
 
-// Shoreline step impulse calculation
-const step1 = calculateShorelineStepImpulse({ x: 1, z: 0 }, 1);
-assert.ok(step1.y >= 0.35, "1-block step requires vertical lift");
-assert.ok(step1.x >= 0.25, "1-block step requires forward push");
-
-const step2 = calculateShorelineStepImpulse({ x: 0, z: 1 }, 2);
-assert.ok(step2.y > step1.y, "2-block step requires higher vertical lift than 1-block");
-assert.ok(step2.z >= 0.3, "2-block step requires forward push");
-
-const step3 = calculateShorelineStepImpulse({ x: 0, z: 1 }, 3);
-assert.ok(step3.y > step2.y, "a bank 2 blocks above the surface requires more lift");
-assert.ok(step3.z >= 0.3, "a bank 2 blocks above the surface requires forward push");
+// Shoreline Step-Up lift (held over several ticks through tickTruck: tests/js/truck_tick.test.mjs):
+// it climbs at the lift rate, eases in, and never pushes down.
+const top = 64;
+assert.equal(shorelineLiftVelocity(top - 2.4, top), SHORELINE_LIFT.rate, "far below the top: climb at the lift rate");
+assert.ok(shorelineLiftVelocity(top + SHORELINE_LIFT.clearance - 0.1, top) < SHORELINE_LIFT.rate, "eases in near the top");
+assert.equal(shorelineLiftVelocity(top + SHORELINE_LIFT.clearance, top), 0, "holds at the top plus clearance");
+assert.equal(shorelineLiftVelocity(top + 1, top), 0, "never pushes the truck down");
 '''
     res = subprocess.run([node_exe, "--input-type=module", "-e", script],
                          cwd=str(REPO_ROOT), capture_output=True, text=True)
