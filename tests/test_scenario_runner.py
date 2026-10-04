@@ -175,6 +175,48 @@ def test_a_failing_scenario_fails_the_run_with_exit_code_1(tmp_path, monkeypatch
     assert report["status"] == "failed" and report["scenarios"] == failed
 
 
+def test_reports_record_the_evidence_an_acceptance_record_needs(tmp_path, monkeypatch):
+    # ADR-0018 / docs/ACCEPTANCE_COVERAGE.md "Evidence record": revision, working-tree state, versions.
+    from scripts import bedrock_test
+    root = tmp_repo(tmp_path)
+    git = lambda *args: subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, text=True)
+    (root / ".gitignore").write_text("dist/\n")  # as in this repo: run output never dirties the tree
+    git("init", "-q")
+    git("add", "-A")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "fixture")
+    passed = {"status": "passed", "scenarios": {}, "errors": []}
+    monkeypatch.setattr(bedrock_test, "run_scenario_stage", lambda *a: passed)
+    config = json.loads((root / "testing/bedrock.json").read_text())
+    manifest = json.loads((root / config["behavior_pack"] / "manifest.json").read_text())
+
+    assert bedrock_test.main(["scenarios"], root=root) == 0
+    evidence = json.loads((root / "dist/bedrock-tests/latest.json").read_text())["evidence"]
+    assert evidence == {
+        "revision": git("rev-parse", "HEAD").stdout.strip(),
+        "working_tree_clean": True,
+        "changed_files": [],
+        "addon_version": ".".join(map(str, manifest["header"]["version"])),
+        "game_versions": {"linux_client": config["linux_client_version"],
+                          "scenario_server": config["scenario_server"]["version"]},
+    }
+
+    (root / "testing/bedrock.json").write_text(json.dumps(config, indent=1))
+    bedrock_test.main(["scenarios"], root=root)
+    evidence = json.loads((root / "dist/bedrock-tests/latest.json").read_text())["evidence"]
+    assert evidence["working_tree_clean"] is False
+    assert evidence["changed_files"] == ["testing/bedrock.json"]
+
+
+def test_reports_outside_a_git_checkout_say_the_revision_is_unknown(tmp_path, monkeypatch):
+    from scripts import bedrock_test
+    root = tmp_repo(tmp_path)
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+    monkeypatch.setattr(bedrock_test, "run_scenario_stage", lambda *a: {"status": "passed", "scenarios": {}, "errors": []})
+    assert bedrock_test.main(["scenarios"], root=root) == 0
+    evidence = json.loads((root / "dist/bedrock-tests/latest.json").read_text())["evidence"]
+    assert evidence["revision"] is None and evidence["working_tree_clean"] is None
+
+
 def test_only_is_rejected_outside_scenarios_mode(tmp_path):
     from scripts import bedrock_test
     root = tmp_repo(tmp_path)

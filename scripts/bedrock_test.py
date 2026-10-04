@@ -161,6 +161,29 @@ def run_scenario_stage(root, config, run_id, output, only=None):
         raise SetupError(str(error)) from error
 
 
+def evidence(root, config):
+    """What an acceptance record needs to identify the build a run tested (docs/ACCEPTANCE_COVERAGE.md)."""
+    def git(*args):
+        try:
+            completed = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return completed.stdout if completed.returncode == 0 else None
+
+    revision = git("rev-parse", "HEAD")
+    status = git("status", "--porcelain") if revision is not None else None
+    changed = sorted(line[3:] for line in status.splitlines()) if status is not None else None
+    version = read_json(root / config["behavior_pack"] / "manifest.json")["header"]["version"]
+    return {
+        "revision": revision.strip() if revision is not None else None,
+        "working_tree_clean": not changed if changed is not None else None,
+        "changed_files": changed,
+        "addon_version": ".".join(map(str, version)),
+        "game_versions": {"linux_client": config.get("linux_client_version"),
+                          "scenario_server": config.get("scenario_server", {}).get("version")},
+    }
+
+
 def run_static(root, config, output):
     results = []
     for index, command in enumerate(config["static_commands"], 1):
@@ -198,6 +221,7 @@ def main(argv=None, root=ROOT, client=None):
               "status": "blocked", "exit_code": 2}
     try:
         config = load_config(root)
+        report["evidence"] = evidence(root, config)
         if args.mode in ("bootstrap", "configure") and client is None:
             client = client_for_platform()
         if args.mode == "doctor":
