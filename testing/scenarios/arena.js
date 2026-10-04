@@ -40,10 +40,11 @@ export function riders(truck) {
   return truck.getComponent("minecraft:rideable").getRiders();
 }
 
-// Seat a simulated player through real interaction and verify the seat it took.
-export async function board(player, truck, seat) {
+// Seat a simulated player through real interaction and verify the seat it took. from is where
+// the player stands to interact (default: 2 blocks beside the truck, e.g. a pier over liquid).
+export async function board(player, truck, seat, from) {
   const at = truck.location;
-  player.teleport({ x: at.x - 2, y: at.y, z: at.z });
+  player.teleport(from ?? { x: at.x - 2, y: at.y, z: at.z });
   await wait(4);
   player.interactWithEntity(truck);
   await wait(6);

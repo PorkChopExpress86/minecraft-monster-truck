@@ -21,11 +21,19 @@ Every tick an entity touches a block face, the velocity component into that face
 
 ## Damage immunity window
 
-A mob hit again within its immunity window (about 10 ticks) takes, and reports in `entityHurt`, only the excess over the earlier hit. A scenario that checks a damage amount must make that hit the first one, as `crush_stomp` does by spawning the mob just before touchdown. Distinguish hit sources by `damageSource.cause` (Crush Stomp `contact`, Tire Trample `entityAttack`), not by amount; armor changes the amount as well.
+A mob hit again within its immunity window (about 10 ticks) takes, and reports in `entityHurt`, only the excess over the earlier hit. A scenario that checks a damage amount must make that hit the first one, as `crush_stomp` does by spawning the mob just before touchdown. Distinguish hit sources by `damageSource.cause` (Crush Stomp `contact`, Tire Trample `entityAttack`), not by amount; armor changes the amount as well. Only the first hit is comparable: `trample` uses a fresh pig per speed and compares those first hits only.
+
+## Knockback shows on the next move
+
+An impulse applied to a mob (Tire Trample knockback) is not visible in `getVelocity()` from the same tick's `entityHurt` after-event, which reads zero. Measure knockback as the mob's displacement over the following ticks, as `trample` does.
+
+## Liquid motion per tick is noisy
+
+A driven truck's distance per tick in a liquid wobbles even while its commanded speed falls every tick. While coasting in lava, one tick covered 0.14 blocks more than the one before (0.418 then 0.555), with the truck inside the lava block on every tick. Judge acceleration or decay in a liquid on multi-tick means (`liquid_start_*` use 5-tick means).
 
 ## Script runtimes
 
-A GameTest simulated player exists as a player object only in the script runtime that spawned it; other packs see `undefined` (ADR-0016). It never reports `inputInfo` movement or button state.
+A GameTest simulated player exists as a player object only in the script runtime that spawned it; other packs see `undefined` (ADR-0016). It never reports `inputInfo` movement or button state. Setting `isSneaking` on a seated simulated player does not dismount it; `two_seat_drop` ejects the sneaking rider with `ejectRider`, so the add-on still sees a Sneak exit. Its item uses (`useItemOnBlock`) are rate-limited: a use right after a registered one returns false for up to 8 ticks, so `spawn_sources` retries every tick.
 
 ## Measuring
 
