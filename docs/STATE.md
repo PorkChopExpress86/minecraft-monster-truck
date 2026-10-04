@@ -83,6 +83,7 @@ Open-tickets pass (2026-10-03): user approved 'Merge and push (Recommended)' (me
 - NOTED (not done): main.js:166 `currentRiders.map((r) => r.id)` throws if getRiders() ever yields undefined (only seen with cross-runtime simulated players).
 - DONE (fix E) Pitch rounding in kinematics.js (Math.round after 0.2 smoothing) stalls up to ~2 deg short of target — check against the +-5 deg pitch tolerance in #38.
 ## Failed attempts
+- Lava 2-block bank ATTEMPT 1-4 [L1]: single Step-Up impulse tuned 0.85/0.78/0.765/0.75 -> lava clips most lifts to +0.5-0.8 (occasional +3.26 launch); 0.765 never climbed in 160 ticks, 0.75 passed by 0.06. ATTEMPT 5 [L3, measured]: velocity moves before drag; lava retention after the move 0.04-0.32 (water ~0.81) -> held per-tick lift (amphibious.js SHORELINE_LIFT, 6c61353): flush/1/2-above banks in 2/9/14 ticks, peak <=+0.14, 3x identical, full run bf5e9fd8 21/21.
 - Client startup ATTEMPT 3 [L2]: MTU black hole hypothesis -> DF pings 1472 ok, POSTs to 8 KB ok; refuted. IPv6 timeout hypothesis -> no global v6 route, fails in 3 ms; refuted. Wayland occlusion hypothesis -> activating window did not unblock (Recv-Q 164 -> 1736); refuted.
 - Client startup ATTEMPT 4 [L3]: sudo eu-stack instrumentation -> main thread in libfmod/SDL3/libpulse; confirmed by SDL_AUDIO_DRIVER=dummy launch (1 s).
 - Game env ATTEMPT 1 [L1]: KILL hung client, rerun Game on 405c901 -> client on title panorama, ?load= never logged 'Opening level' (cd7a66a2). Same on main 9a84d93 (e3087164).
