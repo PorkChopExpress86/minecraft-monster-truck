@@ -44,7 +44,8 @@ export function classifyShorelineColumn(solidColumn = []) {
 // Shoreline Step-Up lift, held while the truck is against a qualifying bank and below its top.
 // The engine moves the truck by the velocity set the tick before and only then applies drag, so
 // a lift set every tick rises the same in water and lava; a single impulse does not, because
-// lava's drag after the first move cuts it to 4-30% (docs/agents/bedrock-physics.md).
+// after the first move lava kept only 0.04-0.32 of the lift on 4 of 5 lifts and 0.79 on the
+// other (water: 0.71) (docs/agents/bedrock-physics.md).
 // rate: blocks/tick of climb; clearance: how far above the bank top the bottom is held until the
 // truck is over the bank; maxTicks: when an unfinished lift gives up.
 export const SHORELINE_LIFT = { rate: 0.5, clearance: 0.2, maxTicks: 20 };

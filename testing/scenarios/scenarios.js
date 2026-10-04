@@ -1,4 +1,4 @@
-import { Direction, GameMode, ItemStack, world, EntityDamageCause } from "@minecraft/server";
+import { Direction, GameMode, ItemStack, system, world, EntityDamageCause } from "@minecraft/server";
 import { driverInput } from "../main.js";
 import { DRIVING, headingVector } from "../driving.js";
 import {
@@ -336,7 +336,8 @@ async function shock_absorption({ dimension, origin, driver, run }) {
 }
 
 // Pneumatic Shock Absorption with both seats taken, then a deliberate Sneak exit inside the
-// landing's protection window: an unrelated on-foot fall afterwards must hurt (no leak).
+// landing's protection window: fall damage to the rider who left must land at once, while the
+// rider still seated is protected at the same tick; later on-foot falls hurt both (no leak).
 async function two_seat_drop({ dimension, origin, driver, run, spawnPlayer }) {
   const checks = [];
   const height = 8;
@@ -347,10 +348,16 @@ async function two_seat_drop({ dimension, origin, driver, run, spawnPlayer }) {
   const passenger = spawnPlayer("SimulatedPassenger");
   await wait(10);
   await board(passenger, truck, 1);
-  let landed = false;
-  await drive(driver, 60, { forward: 0.3, onTick: () => (landed = truck.isOnGround && truck.location.y < GROUND_Y + 0.05) });
-  if (!landed) throw new Error(`Truck never landed after the ${height}-block drop: y=${(truck.location.y - GROUND_Y).toFixed(2)}`);
-  await wait(2);
+  let landedAt;
+  await drive(driver, 60, {
+    forward: 0.3,
+    onTick: () => {
+      if (truck.isOnGround && truck.location.y < GROUND_Y + 0.05) landedAt = system.currentTick;
+      return landedAt !== undefined;
+    },
+  });
+  if (landedAt === undefined) throw new Error(`Truck never landed after the ${height}-block drop: y=${(truck.location.y - GROUND_Y).toFixed(2)}`);
+  await wait(1);
   const seated = riders(truck).map(rider => rider?.id);
   if (seated[0] !== driver.id || seated[1] !== passenger.id) throw new Error("Riders were not kept seated through the drop");
   const healths = { truck: health(truck), driver: health(driver), passenger: health(passenger) };
@@ -360,35 +367,50 @@ async function two_seat_drop({ dimension, origin, driver, run, spawnPlayer }) {
   checks.push(`${height}-block drop with both seats taken: truck ${healths.truck}/${TRUCK_MAX_HEALTH}, ` +
     `driver and passenger ${PLAYER_MAX_HEALTH}/${PLAYER_MAX_HEALTH}, both still seated`);
 
-  // Deliberate exit: Sneak. A Simulated Driver sends no key presses; the server dismounts a
-  // sneaking player itself, and the add-on reads isSneaking to tell a deliberate exit apart.
+  // Deliberate exit: Sneak. A Simulated Driver sends no key presses, and setting isSneaking does
+  // not dismount it, so the sneaking rider is ejected; the add-on reads isSneaking to tell a
+  // deliberate exit from an engine detachment.
   const rideable = truck.getComponent("minecraft:rideable");
-  const exits = [];
-  for (const player of [driver, passenger]) {
+  const sneakOut = async player => {
     player.isSneaking = true;
-    let ticks = 0;
-    while (riders(truck).some(rider => rider?.id === player.id) && ticks < 5) {
-      await wait(1);
-      ticks++;
-    }
+    await wait(1);
     const engineDismount = !riders(truck).some(rider => rider?.id === player.id);
     if (!engineDismount) rideable.ejectRider(player);
-    exits.push(`${player.name} ${engineDismount ? `dismounted by sneaking in ${ticks} ticks` : "ejected while sneaking (sneak alone did not dismount)"}`);
+    await wait(1);
+    if (riders(truck).some(rider => rider?.id === player.id)) throw new Error(`${player.name} did not leave the truck`);
+    return `${player.name} ${engineDismount ? "dismounted by sneaking" : "ejected while sneaking (sneak alone did not dismount)"}`;
+  };
+  const passengerExit = await sneakOut(passenger);
+  // Inside the landing window: fall damage to the passenger who left must land; to the driver
+  // still seated it must be cancelled (the control showing the window is still open).
+  const before = { driver: health(driver), passenger: health(passenger) };
+  const fall = { cause: EntityDamageCause.fall };
+  passenger.applyDamage(4, fall);
+  driver.applyDamage(4, fall);
+  const probeTick = system.currentTick - landedAt;
+  await wait(1);
+  const hurt = { driver: health(driver), passenger: health(passenger) };
+  if (!(hurt.driver === before.driver)) throw new Error(`Seated driver not protected ${probeTick} ticks after landing: ${JSON.stringify(hurt)}`);
+  if (!(hurt.passenger < before.passenger)) {
+    throw new Error(`Fall protection leaked after the Sneak exit: passenger took no fall damage ${probeTick} ticks after landing ${JSON.stringify(hurt)}`);
   }
-  await wait(3);
+  checks.push(`${passengerExit}; ${probeTick} ticks after landing, 4 fall damage hurt the passenger who left ` +
+    `(${before.passenger} -> ${hurt.passenger}) and was cancelled for the driver still seated (${hurt.driver})`);
+
+  const driverExit = await sneakOut(driver);
   for (const player of [driver, passenger]) player.isSneaking = false;
-  if (riders(truck).length) throw new Error("Sneak exit did not leave the truck: riders=" + riders(truck).map(r => r?.name).join(","));
-  checks.push("Sneak exit: " + exits.join("; "));
+  checks.push("Sneak exit: " + driverExit);
 
   // Unrelated falls, clear of the truck and the mesa: 6 blocks onto open ground.
+  const standing = { driver: health(driver), passenger: health(passenger) };
   driver.teleport(at(origin, -8, 2, GROUND_Y + 6));
   passenger.teleport(at(origin, -8, 6, GROUND_Y + 6));
   await wait(40);
   const after = { driver: health(driver), passenger: health(passenger) };
-  if (!(after.driver < PLAYER_MAX_HEALTH) || !(after.passenger < PLAYER_MAX_HEALTH)) {
-    throw new Error(`Fall protection leaked after the Sneak exit: ${JSON.stringify(after)}`);
+  if (!(after.driver < standing.driver) || !(after.passenger < standing.passenger)) {
+    throw new Error(`Fall protection leaked after the Sneak exit: ${JSON.stringify({ standing, after })}`);
   }
-  checks.push(`after exiting, a 6-block on-foot fall hurts: driver ${after.driver}, passenger ${after.passenger}`);
+  checks.push(`after exiting, a 6-block on-foot fall hurts: driver ${standing.driver} -> ${after.driver}, passenger ${standing.passenger} -> ${after.passenger}`);
   return checks;
 }
 

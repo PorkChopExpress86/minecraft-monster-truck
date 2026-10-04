@@ -31,10 +31,12 @@ An impulse applied to a mob (Tire Trample knockback) is not visible in `getVeloc
 
 Unlike horizontal motion, a vertical velocity set by an impulse is moved in full on the next tick. In water an impulse of 0.4 raised the truck 0.419; in lava a 0.75 lift against a bank raised it 0.80. Drag then acts on what is left for the following tick:
 
+Share kept is the next tick's vertical velocity over this tick's, gravity included.
+
 | Medium at the start of the lift | Vertical velocity kept after the first move | Evidence |
 |---|---|---|
-| Water | about 0.81 ((0.544 + 0.08) / 0.769) | Free lift of 0.75 from the surface |
-| Lava | 0.04 to 0.32 on 4 of 5 lifts (0.76 -> 0.027 starting 0.96 deep, 0.80 -> 0.255 starting 0.41 deep); once air-like (0.70 -> 0.556) | Driven truck against a bank 2 above the surface, one lift every 13 ticks |
+| Water | 0.71 (0.769 -> 0.544) | Free lift of 0.75 from the surface |
+| Lava | 0.04 to 0.32 on 4 of 5 lifts (0.76 -> 0.027 starting 0.96 deep, 0.80 -> 0.255 starting 0.41 deep); 0.79 on the other (0.70 -> 0.556) | Driven truck against a bank 2 above the surface, one lift every 13 ticks |
 
 So a single lift out of lava either stalls (peaks +0.66 to +0.78) or launches (+3.26 from a 0.9 lift). Shoreline Step-Up instead sets the vertical velocity every tick until the truck is over the bank (`SHORELINE_LIFT` in `amphibious.js`). Because each tick's move uses the velocity just set, the climb is the same in both liquids: `shoreline_step` measured a bank 2 above the surface climbed 14 ticks after reaching it, peaking +0.08 over the top, in water and in lava.
 

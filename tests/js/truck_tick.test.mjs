@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 
 import { createTruckState, tickTruck } from "../../behavior_packs/MonsterTruck_BP/scripts/truck_tick.js";
 import { DRIVING } from "../../behavior_packs/MonsterTruck_BP/scripts/driving.js";
-import { LIQUID_DRAG_RETENTION } from "../../behavior_packs/MonsterTruck_BP/scripts/amphibious.js";
+import { LIQUID_DRAG_RETENTION, SHORELINE_LIFT } from "../../behavior_packs/MonsterTruck_BP/scripts/amphibious.js";
 import {
   createFakeDimension,
   createFakeEntity,
@@ -276,20 +276,33 @@ test("liquid propulsion follows the driver's W input and crosses at overland spe
 // drag (the order measured in docs/agents/bedrock-physics.md). The bank face (z = 2) stops the
 // truck's 2.25-wide collision box until its bottom clears the top. The truck floats in from
 // z = -20 so it meets the bank at speed. verticalRetention 0.1 models lava cutting a lift.
-function shorelineClimb(aboveSurface, { verticalRetention = 0.8, ticks = 60 } = {}) {
+// Options: forward(truck) gives W each tick; deep floats the truck in a second liquid block
+// under the surface one; floatY overrides where buoyancy holds it; stuck stops any rise (a
+// ceiling), so a lift can never finish.
+function shorelineClimb(aboveSurface, {
+  verticalRetention = 0.8, ticks = 60, forward = () => 1, deep = false, floatY: floatAt, stuck = false,
+} = {}) {
   const driver = createFakePlayer({ id: "driver" });
-  const floatY = GROUND_Y + 0.6; // inside the surface water block at GROUND_Y
-  const world = scene({ riders: [driver], truckAt: { x: 0.5, y: floatY, z: -19.5 }, isOnGround: false,
-    driverInput: fixedInput({ forward: 1 }) });
+  const floatY = floatAt ?? (deep ? GROUND_Y - 0.4 : GROUND_Y + 0.6); // inside a water block
+  let truck;
+  const driverInput = {
+    movement: () => ({ x: 0, y: forward(truck) }),
+    handbrake: () => false,
+  };
+  const world = scene({ riders: [driver], truckAt: { x: 0.5, y: floatY, z: -19.5 }, isOnGround: false, driverInput });
+  truck = world.truck;
   const stopZ = 2 - 1.125;
+  const bottom = deep ? GROUND_Y - 1 : GROUND_Y;
   for (let x = -3; x <= 3; x++) {
-    for (let z = -22; z <= 1; z++) world.dimension.setBlock(x, GROUND_Y, z, "minecraft:water");
+    for (let z = -22; z <= 1; z++) {
+      for (let y = bottom; y <= GROUND_Y; y++) world.dimension.setBlock(x, y, z, "minecraft:water");
+    }
     for (let z = 2; z <= 12; z++) {
-      for (let h = 0; h <= aboveSurface; h++) world.dimension.setBlock(x, GROUND_Y + h, z, "minecraft:dirt");
+      for (let y = bottom; y <= GROUND_Y + aboveSurface; y++) world.dimension.setBlock(x, y, z, "minecraft:dirt");
     }
   }
   const top = GROUND_Y + 1 + aboveSurface;
-  const truck = world.truck;
+  const lifts = []; // [tick, y] for every purely vertical impulse (the lift; driving has y 0)
   let seen = 0;
   let velocity = { x: 0, y: 0, z: 0 };
   let peak = truck.location.y;
@@ -299,9 +312,11 @@ function shorelineClimb(aboveSurface, { verticalRetention = 0.8, ticks = 60 } = 
     world.step(() => {
       for (const impulse of truck.impulses.slice(seen)) {
         velocity = { x: velocity.x + impulse.x, y: velocity.y + impulse.y, z: velocity.z + impulse.z };
+        if (impulse.x === 0 && impulse.z === 0 && impulse.y !== 0) lifts.push([t - 1, impulse.y]);
       }
       seen = truck.impulses.length;
       let { y, z } = truck.location;
+      if (stuck) velocity.y = Math.min(velocity.y, 0);
       y += velocity.y;
       if (y >= top - 1e-9 || z > stopZ + 1e-9 || z + velocity.z < stopZ) {
         z += velocity.z;
@@ -325,7 +340,7 @@ function shorelineClimb(aboveSurface, { verticalRetention = 0.8, ticks = 60 } = 
       truck.moveTo({ y, z }, { velocity, isOnGround: onBank });
     });
   }
-  return { climbedAt, contactAt, peak: peak - top, truck, top };
+  return { climbedAt, contactAt, peak: peak - top, truck, top, lifts, floatY };
 }
 
 test("Shoreline Step-Up climbs flush, 1- and 2-above banks within a second in water and lava", () => {
@@ -344,6 +359,51 @@ test("a wall 3 blocks above the liquid surface is not a shoreline", () => {
   const { climbedAt, truck } = shorelineClimb(3, { ticks: 50 });
   assert.equal(climbedAt, undefined);
   assert.ok(truck.impulses.every((i) => i.y <= 0), "no Shoreline Step-Up lift");
+});
+
+test("a truck floating deeper than the surface block counts the bank from the surface", () => {
+  // Floating in the lower of two water blocks: a bank 2 above the surface is still climbed and
+  // a wall 3 above it is still refused.
+  const two = shorelineClimb(2, { deep: true });
+  assert.ok(two.climbedAt !== undefined, "bank 2 above the surface climbed from deeper water");
+  const three = shorelineClimb(3, { deep: true, ticks: 50 });
+  assert.equal(three.climbedAt, undefined, "wall 3 above the surface refused from deeper water");
+  assert.equal(three.lifts.length, 0, "no lift against the wall");
+  // Floating right at the surface (the truck's block is air above the water): no lift either.
+  const atSurface = shorelineClimb(3, { floatY: GROUND_Y + 1, ticks: 50 });
+  assert.equal(atSurface.climbedAt, undefined);
+  assert.equal(atSurface.lifts.length, 0, "no lift against the wall from the surface");
+});
+
+test("releasing W mid-lift cancels the remaining climb", () => {
+  let released = false;
+  const result = shorelineClimb(2, {
+    forward: (truck) => {
+      if (truck.location.y >= GROUND_Y + 1.5) released = true;
+      return released ? 0 : 1;
+    },
+  });
+  const releaseLift = result.lifts.findIndex(([, y]) => y < 0);
+  assert.ok(released && releaseLift >= 0, "a downward impulse cancels the lift on release");
+  assert.ok(result.lifts.slice(releaseLift + 1).every(([, y]) => y <= 0), "no lift after release");
+  assert.ok(result.peak < -0.4, `the truck does not keep climbing onto the bank (peak ${result.peak.toFixed(2)} vs top)`);
+});
+
+test("a lift that cannot finish gives up until W is pressed again", () => {
+  const { maxTicks } = SHORELINE_LIFT;
+  let tick = 0;
+  // Hold W into a bank the truck cannot rise beside, release for one tick, then press again.
+  const result = shorelineClimb(2, {
+    stuck: true,
+    ticks: 90,
+    forward: () => (tick++ === 75 ? 0 : 1),
+  });
+  const ups = result.lifts.filter(([, y]) => y > 0).map(([t]) => t);
+  const first = ups[0];
+  assert.ok(first !== undefined, "the lift starts at the bank");
+  const beforeRelease = ups.filter((t) => t < 75);
+  assert.ok(beforeRelease.every((t) => t < first + maxTicks), `gave up after ${maxTicks} ticks: lifts at ${beforeRelease}`);
+  assert.ok(ups.some((t) => t > 75), "pressing W again restarts the lift");
 });
 
 test("holding Jump is the handbrake and never launches the truck", () => {

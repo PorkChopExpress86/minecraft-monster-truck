@@ -293,8 +293,15 @@ export function tickTruck(truck, dimension, state, input, tick) {
   // 2 blocks above it lifts the truck out. Propulsion on liquids is the driving above.
   const isNonAirNonLiquid = (b) => b && !b.isAir && b.typeId !== "minecraft:air" && !isLiquidBlock(b.typeId);
   const forwardHeld = (driverControls.forward ?? 0) > 0.05;
+  // A lift that gave up stays off until W is pressed again or the truck leaves that bank.
+  if (!forwardHeld) delete state.shoreLiftGaveUp;
   if (!state.shoreLift && inLiquid && driver && forwardHeld) {
-    const baseY = Math.floor(loc.y);
+    // Count the bank from the liquid surface: the top liquid block in the truck's column, which
+    // is above the truck's own block when it floats deeper.
+    let baseY = Math.floor(loc.y);
+    try {
+      for (let i = 0; i < 3 && isLiquidBlock(dimension.getBlock({ x: loc.x, y: baseY + 1, z: loc.z })?.typeId); i++) baseY++;
+    } catch {}
     const intentDir = headingVector(drive.state.yaw);
     const intentPerp = { x: -intentDir.z, z: intentDir.x };
     let bankFound = null;
@@ -311,7 +318,11 @@ export function tickTruck(truck, dimension, state, input, tick) {
         }
       }
 
-      if (bankFound) state.shoreLift = { topY: baseY + bankFound.stepHeight, startTick: tickNumber };
+      if (!bankFound) {
+        delete state.shoreLiftGaveUp;
+      } else if (!state.shoreLiftGaveUp) {
+        state.shoreLift = { topY: baseY + bankFound.stepHeight, startTick: tickNumber };
+      }
     } catch {}
   }
   // The lift sets the vertical velocity every tick until the truck is over the bank (SHORELINE_LIFT).
@@ -323,10 +334,12 @@ export function tickTruck(truck, dimension, state, input, tick) {
         overBank = Boolean(isNonAirNonLiquid(dimension.getBlock({ x: loc.x, y: lift.topY - 0.5, z: loc.z })));
       } catch {}
     }
-    if (overBank || !driver || !forwardHeld || tickNumber - lift.startTick >= SHORELINE_LIFT.maxTicks) {
+    const gaveUp = tickNumber - lift.startTick >= SHORELINE_LIFT.maxTicks;
+    if (overBank || !driver || !forwardHeld || gaveUp) {
       delete state.shoreLift;
-      // Over the bank: drop the lift's remaining climb so the truck settles instead of hopping.
-      if (overBank && vel && vel.y > 0) {
+      if (gaveUp && !overBank) state.shoreLiftGaveUp = true;
+      // However the lift ends, drop its remaining climb so the truck settles instead of hopping.
+      if (vel && vel.y > 0) {
         try {
           truck.applyImpulse({ x: 0, y: -vel.y, z: 0 });
         } catch {}
