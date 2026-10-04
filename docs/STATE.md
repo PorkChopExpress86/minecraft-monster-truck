@@ -16,6 +16,7 @@ Open-tickets pass (2026-10-03): user approved 'Merge and push (Recommended)' (me
 - "if there is something strange then prompt me for input" (re: test thresholds/outcomes)
 - "do not look into the separt containers" (re: NetherNet errors on minecraft-creative/minecraft-survival)
 ## Decisions
+- DECISION (user, 2026-10-03): lava 2-block-bank stall (82 ticks, 0.06 margin, 6a06a68) -> design a proper fix from measured lava vertical retention (multi-tick lift), acceptance: climb within 20 ticks of contact in water and lava, peak <= bank top +0.5, 3x --only passes with margin.
 - DECISION (user, 2026-10-03): Shoreline Step-Up bank height is measured above the liquid surface; 1-2 blocks above are climbed, 3+ refused (CONTEXT.md). Production code counted from the truck's submerged block (2-above bank refused) -> fix test-first.
 - NOTE: liquid_start release check judges decay on 5-tick average speed; lava shows one reproducible per-tick rise (+0.137 b/tick) after release while the add-on's target speed falls — engine liquid motion noise, recorded in bedrock-physics.md.
 - DECISION: ADR-0017 script-driven driving: input_ground_controlled removed; driving.js owns yaw/velocity; impulses divided by retention (ground 0.91*slipperiness*friction_modifier 1.15, water 0.86, lava 0.72, air 0.91 during Shoreline Step-Up window) — user approved Q1-Q6 2026-10-03.
