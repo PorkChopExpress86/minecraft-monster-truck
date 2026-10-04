@@ -25,6 +25,9 @@ export function getSafeDismountLocation(truckLoc, heading = { x: 1, z: 0 }) {
   };
 }
 
+// solidColumn[0] is the bank block level with the liquid block the truck floats in (below the
+// surface), then the blocks above it. A bank is a shoreline when its top is at most 2 blocks above
+// the liquid surface (stepHeight 1-3: flush, 1 above, 2 above); 3 or more above is a wall.
 export function classifyShorelineColumn(solidColumn = []) {
   let stepHeight = 0;
   for (const solid of solidColumn) {
@@ -33,7 +36,7 @@ export function classifyShorelineColumn(solidColumn = []) {
   }
 
   return {
-    isShoreline: stepHeight === 1 || stepHeight === 2,
+    isShoreline: stepHeight >= 1 && stepHeight <= 3,
     stepHeight
   };
 }
@@ -42,6 +45,17 @@ export function calculateShorelineStepImpulse(heading = { x: 1, z: 0 }, stepHeig
   const hDist = Math.hypot(heading.x, heading.z) || 1;
   const dirX = heading.x / hDist;
   const dirZ = heading.z / hDist;
+
+  if (stepHeight >= 3) {
+    return {
+      x: dirX * 0.45,
+      // A bank 2 above the surface. shoreline_step2 measured (water/lava peaks): 0.75 -> +2.27 in
+      // water on the first lift; in lava most lifts top out near +0.5-0.8 whatever the value
+      // (0.75-1.05), so lava climbs only on a later lift. 0.78 -> +2.45 in water, near a launch.
+      y: 0.75,
+      z: dirZ * 0.45,
+    };
+  }
 
   if (stepHeight >= 2) {
     return {

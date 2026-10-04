@@ -27,6 +27,10 @@ A mob hit again within its immunity window (about 10 ticks) takes, and reports i
 
 An impulse applied to a mob (Tire Trample knockback) is not visible in `getVelocity()` from the same tick's `entityHurt` after-event, which reads zero. Measure knockback as the mob's displacement over the following ticks, as `trample` does.
 
+## Lifting out of lava is clipped
+
+A Shoreline Step-Up lift applied while the truck floats in lava usually tops out near +0.5 to +0.8 above the surface, whatever its size: lifts of 0.75, 0.9 and 1.05 all gave such peaks, while an occasional one at the same value overshot (+3.26 at 0.9). The same 0.75 lift out of water reached +2.27 on the first try. `shoreline_step2` reports the ticks spent against the bank (water 3, lava 82).
+
 ## Liquid motion per tick is noisy
 
 A driven truck's distance per tick in a liquid wobbles even while its commanded speed falls every tick. While coasting in lava, one tick covered 0.14 blocks more than the one before (0.418 then 0.555), with the truck inside the lava block on every tick. Judge acceleration or decay in a liquid on multi-tick means (`liquid_start_*` use 5-tick means).

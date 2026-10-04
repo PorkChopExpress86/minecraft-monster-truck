@@ -65,10 +65,12 @@ import {
 // liquids are crossed at overland speed (flotation scenarios assert the outcome).
 assert.deepEqual(LIQUID_DRAG_RETENTION, { water: 0.86, lava: 0.72 });
 
-// Shoreline detection (Shoreline Step-Up through tickTruck: tests/js/truck_tick.test.mjs)
+// Shoreline detection (Shoreline Step-Up through tickTruck: tests/js/truck_tick.test.mjs).
+// The column starts at the submerged bank face, so stepHeight - 1 is the height above the
+// surface: flush, 1 and 2 above are shorelines; 3 above is a wall.
 assert.deepEqual(classifyShorelineColumn([true, false, false, false]), { isShoreline: true, stepHeight: 1 });
 assert.deepEqual(classifyShorelineColumn([true, true, false, false]), { isShoreline: true, stepHeight: 2 });
-assert.deepEqual(classifyShorelineColumn([true, true, true, false]), { isShoreline: false, stepHeight: 3 });
+assert.deepEqual(classifyShorelineColumn([true, true, true, false]), { isShoreline: true, stepHeight: 3 });
 assert.deepEqual(classifyShorelineColumn([true, true, true, true]), { isShoreline: false, stepHeight: 4 });
 
 // Shoreline step impulse calculation
@@ -79,6 +81,10 @@ assert.ok(step1.x >= 0.25, "1-block step requires forward push");
 const step2 = calculateShorelineStepImpulse({ x: 0, z: 1 }, 2);
 assert.ok(step2.y > step1.y, "2-block step requires higher vertical lift than 1-block");
 assert.ok(step2.z >= 0.3, "2-block step requires forward push");
+
+const step3 = calculateShorelineStepImpulse({ x: 0, z: 1 }, 3);
+assert.ok(step3.y > step2.y, "a bank 2 blocks above the surface requires more lift");
+assert.ok(step3.z >= 0.3, "a bank 2 blocks above the surface requires forward push");
 '''
     res = subprocess.run([node_exe, "--input-type=module", "-e", script],
                          cwd=str(REPO_ROOT), capture_output=True, text=True)

@@ -538,6 +538,52 @@ async function liquid_start_lava(context) {
   return checks;
 }
 
+// Shoreline Step-Up out of water and lava onto a bank whose top is 2 blocks above the surface
+// (bank height counts above the liquid surface), without a jump.
+async function shoreline_step2({ dimension, origin, driver, run }) {
+  const checks = [];
+  const height = 2;
+  for (const liquid of ["water", "lava"]) {
+    park(driver, origin);
+    resetArena(dimension, origin);
+    await wait(5);
+    fill(dimension, at(origin, -5, 6, GROUND_Y - 3), at(origin, 5, 40, GROUND_Y - 1), liquid);
+    fill(dimension, at(origin, -5, 41, GROUND_Y), at(origin, 5, 79, GROUND_Y + height - 1), "stone");
+    const truck = spawnTruck(dimension, run, at(origin, 0, 2));
+    await wait(10);
+    await board(driver, truck, 0);
+    let topY = -Infinity;
+    let lastZ = -Infinity;
+    let stalled = 0;
+    const trace = [];
+    await drive(driver, 160, {
+      onTick: tick => {
+        const z = truck.location.z - origin.z;
+        if (z > 35) trace.push([tick, +z.toFixed(2), +(truck.location.y - GROUND_Y).toFixed(2)]);
+        // Ticks held against the bank face, not yet up on it.
+        if (z > 38 && z - lastZ < 0.05 && truck.location.y < GROUND_Y + height - 0.1) stalled++;
+        lastZ = z;
+        topY = Math.max(topY, truck.location.y);
+        return z > 55;
+      },
+    });
+    const z = truck.location.z - origin.z;
+    const y = truck.location.y - GROUND_Y;
+    const label = `${liquid}, bank ${height} above the surface`;
+    if (z < 55 || y < height - 0.1) {
+      throw new Error(`${label}: Shoreline Step-Up failed at z=${z.toFixed(1)} y=+${y.toFixed(2)} ` +
+        `[tick, z, y] ${JSON.stringify(trace.slice(0, 40))}`);
+    }
+    // Climbed, not launched: Controlled Auto-Step on land allows no more than +0.5 over the ledge.
+    if (topY - GROUND_Y > height + 0.5) throw new Error(`${label}: launched to +${(topY - GROUND_Y).toFixed(2)}`);
+    if (riders(truck)[0]?.id !== driver.id) throw new Error(`${label}: driver lost the seat`);
+    if (health(driver) !== PLAYER_MAX_HEALTH) throw new Error(`${label}: rider hurt, health ${health(driver)}`);
+    checks.push(`${label}: stepped up to +${y.toFixed(2)} (peak +${(topY - GROUND_Y).toFixed(2)}) after ${stalled} ticks against the bank, drove on to z=${z.toFixed(1)}; rider unhurt`);
+    truck.remove();
+  }
+  return checks;
+}
+
 // A continuous wall 3 blocks above the liquid surface is not a shoreline: driving into it from
 // water or lava never lifts the truck, which stays afloat against it.
 async function shoreline_wall({ dimension, origin, driver, run }) {
@@ -880,5 +926,5 @@ export const SCENARIOS = {
   smoke, seats, auto_step, steering, handbrake, crush_stomp, shock_absorption,
   flotation_water, flotation_lava, trample, demolition, foliage_shearing,
   dye_repaint, retrieval, incline_pitch, spawn_sources, two_seat_drop,
-  liquid_start_water, liquid_start_lava, shoreline_wall,
+  liquid_start_water, liquid_start_lava, shoreline_wall, shoreline_step2,
 };

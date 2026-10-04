@@ -280,6 +280,26 @@ test("driving forward against a 1-block bank from the water steps ashore", () =>
   assert.ok(lift && lift.z > 0, "Shoreline Step-Up lifts the truck forward onto the bank");
 });
 
+// Bank height counts above the liquid surface (the top of the water block the truck floats in):
+// 1 or 2 blocks above is a shoreline, 3 or more is a wall.
+test("Shoreline Step-Up climbs banks 1 and 2 blocks above the surface and refuses 3", () => {
+  const liftFor = (aboveSurface) => {
+    const driver = createFakePlayer({ id: "driver" });
+    const world = scene({ riders: [driver], isOnGround: false, driverInput: fixedInput({ forward: 1 }) });
+    world.dimension.setBlock(0, GROUND_Y, 0, "minecraft:water");
+    // The bank face below the surface, then aboveSurface blocks above it, 1.5 blocks ahead (+Z).
+    for (let h = 0; h <= aboveSurface; h++) world.dimension.setBlock(0, GROUND_Y + h, 2, "minecraft:dirt");
+    world.step();
+    return world.truck.impulses.find((i) => i.y > 0);
+  };
+  const one = liftFor(1);
+  const two = liftFor(2);
+  assert.ok(one && one.z > 0, "a bank 1 block above the surface is climbed");
+  assert.ok(two && two.z > 0, "a bank 2 blocks above the surface is climbed");
+  assert.ok(two.y > one.y, "the higher bank gets the higher lift");
+  assert.equal(liftFor(3), undefined, "a wall 3 blocks above the surface is not a shoreline");
+});
+
 test("holding Jump is the handbrake and never launches the truck", () => {
   const driver = createFakePlayer({ id: "driver" });
   const world = scene({ riders: [driver], driverInput: fixedInput({ handbrake: true }) });
