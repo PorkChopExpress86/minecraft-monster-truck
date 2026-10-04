@@ -1,0 +1,33 @@
+name: Scenario Runs
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  scenarios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-testing.txt
+      # The pinned Bedrock Dedicated Server zip (sha256 in testing/bedrock.json) is checked after every restore.
+      - uses: actions/cache@v4
+        with:
+          path: dist/bedrock-tests/cache
+          key: bedrock-server-${{ hashFiles('testing/bedrock.json') }}
+      - name: Scenario Run (headless BDS, Simulated Driver)
+        run: python scripts/bedrock_test.py scenarios
+      - name: Upload Scenario Run report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scenario-run
+          path: |
+            dist/bedrock-tests/*/report.json
+            dist/bedrock-tests/*/scenario-server.log
+            !dist/bedrock-tests/cache
+          if-no-files-found: warn
