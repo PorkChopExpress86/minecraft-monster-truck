@@ -16,6 +16,8 @@ Open-tickets pass (2026-10-03): user approved 'Merge and push (Recommended)' (me
 - "if there is something strange then prompt me for input" (re: test thresholds/outcomes)
 - "do not look into the separt containers" (re: NetherNet errors on minecraft-creative/minecraft-survival)
 ## Decisions
+- DECISION (user, 2026-10-03): Shoreline Step-Up bank height is measured above the liquid surface; 1-2 blocks above are climbed, 3+ refused (CONTEXT.md). Production code counted from the truck's submerged block (2-above bank refused) -> fix test-first.
+- NOTE: liquid_start release check judges decay on 5-tick average speed; lava shows one reproducible per-tick rise (+0.137 b/tick) after release while the add-on's target speed falls — engine liquid motion noise, recorded in bedrock-physics.md.
 - DECISION: ADR-0017 script-driven driving: input_ground_controlled removed; driving.js owns yaw/velocity; impulses divided by retention (ground 0.91*slipperiness*friction_modifier 1.15, water 0.86, lava 0.72, air 0.91 during Shoreline Step-Up window) — user approved Q1-Q6 2026-10-03.
 - DECISION: Driving tuning lives in driving.js DRIVING (Bedrock scripts cannot read vehicle.config.json at runtime).
 - DECISION: Scenario driver runs inside a Scenario-World-only copy of the add-on BP (entry imports main.js + scenario_driver) on @minecraft/server 2.11.0-beta — simulated players only materialize in the spawning runtime (user approved).
@@ -75,7 +77,7 @@ Open-tickets pass (2026-10-03): user approved 'Merge and push (Recommended)' (me
 - (F) FIXED (1:1 now passes; 1:3 downhill open) — 1:1 ramp pitch only +13.0/-6.5 (expected 35): sampleGroundHeight scans startY+2..-3 and falls back to truck height on miss; 2-block auto-step lurches put rear terrain >3 below. Proposed: widen scan and keep previous pitch on a miss. Also 1:3 downhill -23.7 vs -18.4 (5.3 over tolerance).
 - (A) FIXED (uncommitted) — was: DEFECT candidate: main.js:362-366 native-jump detection (vel.y > 0.42 = NATIVE_JUMP_ASCENT_THRESHOLD) fires on engine step-ups -> unrequested Suspension Jump. Evidence: run 57eee60ad40b486e8163082ad48492cf '[DIAG] SUSPENSION JUMP t=189 requested=false ascending=true' on the first 1-block stair; 2-block ledge launches to +6.92. Breaks incline_pitch (uphill samples are airborne trajectory) and auto_step.
 - (B) FIXED via seam (uncommitted) — was: flotation_water/lava fail at Shoreline Step-Up: aquatic propulsion + step-up gated on driver.inputInfo.getMovementVector(), always (0,0) for SimulatedPlayer (main.js:249-281).
-- (open) trample speed-scaling evidence weak: moveRelative speed 0.3 still ~1 b/tick (122 vs 130 dmg).
+- FIXED (3124b22) trample speed-scaling evidence: trample scenario hits fresh pigs at measured 0.35/0.70/1.16 b/tick -> 42/84/139 damage, parked truck 0 damage, outward+up knockback.
 - DONE Speed: user said land speed good, water slow; water/lava now match overland (see Done). PROVING_GROUND item 7 still says '0.55 cruising speed' (movement attribute wording) — left as-is.
 - NOTED (not done): main.js:166 `currentRiders.map((r) => r.id)` throws if getRiders() ever yields undefined (only seen with cross-runtime simulated players).
 - DONE (fix E) Pitch rounding in kinematics.js (Math.round after 0.2 smoothing) stalls up to ~2 deg short of target — check against the +-5 deg pitch tolerance in #38.
