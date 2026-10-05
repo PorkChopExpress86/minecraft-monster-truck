@@ -3,9 +3,8 @@ Set up the add-on for Linux development, debug, install, and fully automate in-g
 ## Now
 v1.0.9 (Sneak-exit fix + #40 Jump lock 027a0e6) installed to the local flatpak client and to both servers (minecraft-creative, minecraft-survival; 2026-10-04, install_addon.py --servers creative,survival --yes, both restarted). #27/#29/#30/#32 trimmed to human-only residue. Retro items 1-6 (2026-10-04): conftest GIT_* isolation, TEMP-DIAGNOSTIC pre-commit guard, Client --trace, real-client facts in docs/agents/bedrock-physics.md, CODING_STANDARDS engine-state rule, AGENTS.md testing pointer.
 ## Next
-1. User verifies 1.0.8 in game: real Left Shift exits, any Space flash (#32), Shift during a drop.
-2. #40 research (engine Space dismount); #27/#29/#30 manual Proving Ground checks; #31 evidence; #24 parent.
-3. Push main only when the user asks.
+1. User verifies 1.0.9 in game (#32): real Left Shift exits, nothing flashes on Space, Shift during a drop, two players.
+2. Manual Proving Ground checks #27/#28/#29/#30; then #31 acceptance evidence; then close parent #24.
 ## Constraints
 - "Keep the version and install with #38" (no rev/install until #38 lands)
 - "if there is something strange then prompt me for input" (re: test thresholds/outcomes)
