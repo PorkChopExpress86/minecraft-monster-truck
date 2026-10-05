@@ -1,7 +1,7 @@
 ## Goal
 Set up the add-on for Linux development, debug, install, and fully automate in-game testing of the monster truck.
 ## Now
-v1.0.8 (Sneak-exit fix, Client Input Run bb96bde) installed to the local flatpak client and to both servers (minecraft-creative, minecraft-survival; 2026-10-04, install_addon.py --no-rev --servers creative,survival --yes, both restarted). #27/#29/#30/#32 trimmed to human-only residue. Retro items 1-6 (2026-10-04): conftest GIT_* isolation, TEMP-DIAGNOSTIC pre-commit guard, Client --trace, real-client facts in docs/agents/bedrock-physics.md, CODING_STANDARDS engine-state rule, AGENTS.md testing pointer.
+v1.0.9 (Sneak-exit fix + #40 Jump lock 027a0e6) installed to the local flatpak client and to both servers (minecraft-creative, minecraft-survival; 2026-10-04, install_addon.py --servers creative,survival --yes, both restarted). #27/#29/#30/#32 trimmed to human-only residue. Retro items 1-6 (2026-10-04): conftest GIT_* isolation, TEMP-DIAGNOSTIC pre-commit guard, Client --trace, real-client facts in docs/agents/bedrock-physics.md, CODING_STANDARDS engine-state rule, AGENTS.md testing pointer.
 ## Next
 1. User verifies 1.0.8 in game: real Left Shift exits, any Space flash (#32), Shift during a drop.
 2. #40 research (engine Space dismount); #27/#29/#30 manual Proving Ground checks; #31 evidence; #24 parent.
