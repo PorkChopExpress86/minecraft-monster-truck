@@ -391,6 +391,7 @@ export function tickTruck(truck, dimension, state, input, tick) {
     riderIds: state.riders,
     prevRiderIds: prevRiders,
     inLiquid: inLava || inWater,
+    inLava,
     tick: tickNumber,
     getEntity,
     protectedRiders,

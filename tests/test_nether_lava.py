@@ -45,7 +45,7 @@ def test_safe_dismount_and_liquid_helpers():
 import assert from 'node:assert/strict';
 import {
   isLiquidBlock,
-  getSafeDismountLocation
+  findDryLanding
 } from './behavior_packs/MonsterTruck_BP/scripts/amphibious.js';
 
 // Liquid checks
@@ -56,10 +56,16 @@ assert.ok(isLiquidBlock("minecraft:flowing_lava"));
 assert.ok(!isLiquidBlock("minecraft:air"));
 assert.ok(!isLiquidBlock("minecraft:stone"));
 
-// Safe dismount location
-const truckLoc = { x: 100, y: 64, z: 100 };
-const dismountPos = getSafeDismountLocation(truckLoc);
-assert.ok(dismountPos.y > truckLoc.y + 1.5, "Safe dismount must place rider on roof/bed height");
+// Sneak exit over liquid: the nearest dry footing (solid below, air at feet and head), or none.
+const lavaLake = (y) => (y <= 64 ? "minecraft:lava" : "minecraft:air");
+const shore = { getBlock: ({ x, y }) => {
+  const typeId = x >= 102 ? (y <= 64 ? "minecraft:netherrack" : "minecraft:air") : lavaLake(y);
+  return { typeId, isAir: typeId === "minecraft:air" };
+} };
+const truckLoc = { x: 100.5, y: 64.6, z: 100.5 };
+assert.deepEqual(findDryLanding(shore, truckLoc), { x: 102.5, y: 65, z: 100.5 }, "netherrack bank beside the lava");
+assert.equal(findDryLanding({ getBlock: ({ y }) => ({ typeId: lavaLake(y), isAir: y > 64 }) }, truckLoc), undefined,
+             "no dry land in reach");
 '''
     res = subprocess.run([node_exe, "--input-type=module", "-e", script],
                          cwd=str(REPO_ROOT), capture_output=True, text=True)

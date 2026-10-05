@@ -12,17 +12,46 @@ export function isLiquidBlock(typeId) {
   return id === "water" || id === "flowing_water" || id === "lava" || id === "flowing_lava";
 }
 
-// Where a rider who sneaks out over liquid is set down: on the cab roof / rear flatbed.
-export function getSafeDismountLocation(truckLoc, heading = { x: 1, z: 0 }) {
-  const hDist = Math.hypot(heading.x, heading.z) || 1;
-  const dirX = heading.x / hDist;
-  const dirZ = heading.z / hDist;
+// A rider who sneaks out over liquid is set down on the nearest dry footing within this many blocks of the
+// truck. The truck's roof does not hold a player: one set down there falls through into the liquid
+// (Client Input Run, docs/agents/bedrock-physics.md).
+export const DRY_LAND_REACH = 4;
 
-  return {
-    x: truckLoc.x - dirX * 0.8,
-    y: truckLoc.y + 2.3,
-    z: truckLoc.z - dirZ * 0.8,
-  };
+// Dry footing: a block that is neither air nor liquid, with air at the feet and head above it.
+function isDryFooting(dimension, x, y, z) {
+  try {
+    const below = dimension.getBlock({ x, y: y - 1, z });
+    const feet = dimension.getBlock({ x, y, z });
+    const head = dimension.getBlock({ x, y: y + 1, z });
+    return Boolean(below && !below.isAir && !isLiquidBlock(below.typeId) && feet?.isAir && head?.isAir);
+  } catch {
+    return false;
+  }
+}
+
+// The nearest dry footing to a floating truck, as a standing location, or undefined when none is in reach.
+// Feet levels from the liquid block the truck floats in up to a bank 2 above the surface, as Shoreline
+// Step-Up climbs.
+export function findDryLanding(dimension, truckLoc, reach = DRY_LAND_REACH) {
+  const cx = Math.floor(truckLoc.x);
+  const cz = Math.floor(truckLoc.z);
+  const cy = Math.floor(truckLoc.y);
+  let best;
+  let bestDistance = Infinity;
+  for (let x = cx - reach; x <= cx + reach; x++) {
+    for (let z = cz - reach; z <= cz + reach; z++) {
+      const distance = Math.hypot(x + 0.5 - truckLoc.x, z + 0.5 - truckLoc.z);
+      if (distance > reach + 0.5 || distance >= bestDistance) continue;
+      for (const y of [cy, cy + 1, cy + 2, cy + 3]) {
+        if (isDryFooting(dimension, x, y, z)) {
+          best = { x: x + 0.5, y, z: z + 0.5 };
+          bestDistance = distance;
+          break;
+        }
+      }
+    }
+  }
+  return best;
 }
 
 // solidColumn[0] is the bank block level with the liquid block the truck floats in (below the

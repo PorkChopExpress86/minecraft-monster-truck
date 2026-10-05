@@ -3,7 +3,7 @@
 // Stomp (ADR-0017). truck_tick.js calls stepLanding once per tick with this module's slice of
 // truck state; main.js's entityHurt handler asks absorbsFallDamage. Must not import
 // @minecraft/server, so node can load it.
-import { getSafeDismountLocation } from "./amphibious.js";
+import { findDryLanding } from "./amphibious.js";
 import { damageEntity, isProtectedTarget } from "./contact.js";
 
 export const PNEUMATIC_VENT_SOUND = "random.fizz";
@@ -145,6 +145,7 @@ function restoreProtectedRiders(getEntity, landing, rideable) {
  *   riderIds: string[],
  *   prevRiderIds: string[],
  *   inLiquid: boolean,
+ *   inLava?: boolean,
  *   tick: number,
  *   getEntity(id: string): import("./truck_tick.js").WorldEntity | undefined,
  *   protectedRiders: Map<string, string>,
@@ -164,6 +165,7 @@ export function stepLanding(truck, dimension, landing, frame) {
     riderIds,
     prevRiderIds,
     inLiquid,
+    inLava,
     tick: tickNumber,
     getEntity,
     protectedRiders,
@@ -183,7 +185,6 @@ export function stepLanding(truck, dimension, landing, frame) {
   if (prevRiderIds.length > riderIds.length) {
     const currentRiderIds = new Set(riderIds);
     const dismountedIds = prevRiderIds.filter((id) => !currentRiderIds.has(id));
-    const safePos = getSafeDismountLocation(loc, { x: dirX, z: dirZ });
     for (const playerId of dismountedIds) {
       try {
         const player = getEntity(playerId);
@@ -204,8 +205,15 @@ export function stepLanding(truck, dimension, landing, frame) {
             }
             rideable.addRider(player);
           } else if (inLiquid) {
-            // Deliberate sneak dismount over liquid: teleport to safe shoreline
-            player.teleport(safePos, { dimension });
+            // Sneak over liquid: set down on the nearest dry land. With none in reach, lava keeps the rider
+            // seated and water lets them swim.
+            const dryLand = findDryLanding(dimension, loc);
+            if (dryLand) {
+              player.teleport(dryLand, { dimension });
+            } else if (inLava && rideable && rideable.addRider) {
+              rideable.addRider(player);
+              continue;
+            }
             protectedRiders.delete(playerId);
             landing.protectedRiderIds?.delete(playerId);
           } else {

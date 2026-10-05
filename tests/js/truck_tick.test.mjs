@@ -209,7 +209,7 @@ test("a rider detached early in a long drop stays protected for the whole fall, 
   assert.equal(world.input.protectedRiders.has("driver"), false, "protection ends with the landing window");
 });
 
-test("on steady ground a rider who leaves is let go; over liquid the rider is set down on the roof", () => {
+test("on steady ground a rider who leaves is let go; over liquid the rider is set down on dry land", () => {
   // In the real client a Sneak exit never reads as sneaking (Client Input Run), so on steady ground,
   // outside any drop or landing window, every exit counts as deliberate (user decision 2026-10-05).
   {
@@ -233,7 +233,7 @@ test("on steady ground a rider who leaves is let go; over liquid the rider is se
     assert.equal(rider.teleports.length, 0);
     assert.equal(world.input.protectedRiders.has("rider"), false);
   }
-  // Sneaking over water: teleported clear of the liquid.
+  // Sneaking over water: set down on the nearest dry footing (the roof does not hold a player).
   {
     const rider = createFakePlayer({ id: "rider" });
     const world = scene({ riders: [rider], isOnGround: false });
@@ -246,10 +246,37 @@ test("on steady ground a rider who leaves is let go; over liquid the rider is se
     assert.equal(world.input.protectedRiders.has("rider"), false, "a deliberate exit over liquid ends protection");
     assert.equal(rider.teleports.length, 1);
     const { location, options } = rider.teleports[0];
-    assert.ok(location.y > GROUND_Y + 2, "set down on the roof, above the liquid");
-    assert.ok(Math.abs(location.x - 0.5) < 1e-9 && Math.abs(location.z - (0.5 - 0.8)) < 1e-9, "behind the cab");
+    assert.equal(location.y, GROUND_Y, "feet on the stone beside the water");
+    assert.equal(world.dimension.typeAt(Math.floor(location.x), GROUND_Y - 1, Math.floor(location.z)), "minecraft:stone");
+    assert.equal(world.dimension.typeAt(Math.floor(location.x), GROUND_Y, Math.floor(location.z)), "minecraft:air");
+    assert.ok(Math.hypot(location.x - 0.5, location.z - 0.5) <= 1.5, "the nearest dry block");
     assert.equal(options.dimension, world.dimension);
   }
+});
+
+// Liquid in every column within reach of the truck: no dry footing to set a rider down on.
+function liquidAllAround(liquid) {
+  const rider = createFakePlayer({ id: "rider" });
+  const world = scene({ riders: [rider], isOnGround: false });
+  world.dimension.fillLayer(GROUND_Y, liquid, 0, 0, 8);
+  world.step();
+  world.input.protectedRiders.set("rider", world.truck.id);
+  rider.isSneaking = true;
+  world.step(() => world.truck.detach(rider));
+  return { rider, world };
+}
+
+test("Sneak over lava with no dry land in reach keeps the rider seated", () => {
+  const { rider, world } = liquidAllAround("minecraft:lava");
+  assert.ok(world.truck.seated.includes(rider), "not dropped into the lava");
+  assert.equal(rider.teleports.length, 0);
+});
+
+test("Sneak over water with no dry land in reach lets the rider swim", () => {
+  const { rider, world } = liquidAllAround("minecraft:water");
+  assert.ok(!world.truck.seated.includes(rider));
+  assert.equal(rider.teleports.length, 0);
+  assert.equal(world.input.protectedRiders.has("rider"), false, "a deliberate exit ends protection");
 });
 
 // Minecraft itself dismounts a rider who presses Space (Jump), which the add-on uses as the handbrake.

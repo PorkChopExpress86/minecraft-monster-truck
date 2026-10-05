@@ -161,16 +161,17 @@ class Context:
             raise ClientInputError(f"The harness probe published no {name!r} score; is the probe pack loaded?")
         return value
 
-    def fresh_truck(self):
-        """A new truck at the arena start, facing +Z, with the player seated in the Driver Seat."""
+    def fresh_truck(self, at=(0.5, 3.5)):
+        """A new truck at arena offset `at` (x, z; default the start), facing +Z, with the player in the Driver Seat."""
         bx, by, bz = self.base
+        tx, tz = bx + at[0], bz + at[1]
         self.run("ride @s stop_riding", must_succeed=False)
         self.run(f"kill @e[type={self.entity}]", must_succeed=False)
         self.run("kill @e[type=item]", must_succeed=False)
         self.run(f"tp @s {bx + 0.5} {by} {bz + 0.5} 0 0")
         # The client's summon takes no rotation (that overload needs an experiment), so tp sets the facing.
-        self.run(f"summon {self.entity} {bx + 0.5} {by} {bz + 3.5}")
-        self.run(f"tp @e[type={self.entity}] {bx + 0.5} {by} {bz + 3.5} 0 0")
+        self.run(f"summon {self.entity} {tx} {by} {tz}")
+        self.run(f"tp @e[type={self.entity}] {tx} {by} {tz} 0 0")
         self.sleep(0.5)
         self.run(f"ride @s start_riding @e[type={self.entity},c=1] teleport_rider")
         for _ in range(30):
@@ -268,8 +269,50 @@ def space_sneak_exits(ctx):
     return "With the handbrake held, Sneak got the player out of the truck, and they stayed out"
 
 
+def s_brakes_and_reverses(ctx):
+    ctx.fresh_truck()
+    ctx.hold(["w"], 1.0)
+    start, before = ctx.truck()
+    # From about 0.7 blocks/tick, S brakes to a stop in about half a second, then reverses: about 6 blocks
+    # behind where S was pressed after 2.5 s (DRIVING in driving.js).
+    ctx.hold(["s"], 2.5)
+    end, after = ctx.truck()
+    back, aside = end["z"] - start["z"], end["x"] - start["x"]
+    if back > -2:
+        raise CheckFailed(f"S moved the truck {back:+.2f} blocks along its heading in 2.5 s (braking then "
+                          "reversing ends at least 2 blocks behind)")
+    turned = yaw_delta(before, after)
+    if abs(turned) > 10 or abs(aside) > 1:
+        raise CheckFailed(f"S turned the truck {turned:+.1f} degrees and moved it {aside:+.2f} blocks aside")
+    return f"S braked, then reversed the truck {-back:.1f} blocks straight back in 2.5 s"
+
+
+def sneak_exits_afloat(ctx):
+    # A pool behind the start, clear of the other checks' paths: stone floor, 4 blocks of water up to the grass.
+    bx, by, bz = ctx.base
+    ctx.run(f"fill {bx - 3} {by - 5} {bz - 9} {bx + 3} {by - 5} {bz - 4} stone", must_succeed=False)
+    ctx.run(f"fill {bx - 3} {by - 4} {bz - 9} {bx + 3} {by - 1} {bz - 4} water", must_succeed=False)
+    ctx.fresh_truck(at=(0.5, -6.5))
+    ctx.sleep(2.0)  # the truck settles afloat
+    truck, _ = ctx.truck()
+    ctx.hold([SNEAK_KEY], 0.6)
+    riding = ctx.probe("riding")
+    if riding != 0:
+        raise CheckFailed(f"Sneak afloat left the player still in seat {riding}")
+    ctx.sleep(0.5)
+    player = query_targets(ctx.run("querytarget @s"))[0]["position"]
+    # Over liquid the add-on sets a Sneak exit down on the nearest dry land (amphibious.js findDryLanding):
+    # here the grass around the pool, whose top is at the base height.
+    if player["y"] < by - 0.1:
+        raise CheckFailed(f"Sneak afloat dropped into the water: the player is {player['y'] - by:+.2f} blocks from "
+                          "the pool's grass edge")
+    off = math.hypot(player["x"] - truck["x"], player["z"] - truck["z"])
+    return f"Sneak afloat set the player down on the pool's edge, {off:.1f} blocks from the truck"
+
+
 CHECKS = {check.__name__: check for check in
-          (w_drives, a_turns_left, d_turns_right, space_keeps_rider, sneak_dismounts, space_sneak_exits)}
+          (w_drives, a_turns_left, d_turns_right, s_brakes_and_reverses, space_keeps_rider, sneak_dismounts,
+           space_sneak_exits, sneak_exits_afloat)}
 
 
 def select_checks(only):

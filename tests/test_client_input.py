@@ -376,7 +376,8 @@ def test_connect_types_nothing_when_the_chat_never_opens():
 class World:
     """A fake real-client world behind the channel: the truck turns with the held keys."""
 
-    def __init__(self, turn_per_key=None, lost=0, riding_after_sneak=0, mouse_turns_truck=0.0, jump_back_on=True):
+    def __init__(self, turn_per_key=None, lost=0, riding_after_sneak=0, mouse_turns_truck=0.0, jump_back_on=True,
+                 s_speed=-7.4, player_y_after_sneak=-60.0):
         self.truck = {"x": 0.5, "z": 3.5, "yaw": 0.0}
         self.player_yaw = 0.0
         self.riding = 1
@@ -385,6 +386,9 @@ class World:
         self.riding_after_sneak = riding_after_sneak
         self.mouse_turns_truck = mouse_turns_truck
         self.jump_back_on = jump_back_on
+        self.s_speed = s_speed  # blocks/s the truck moves along +Z while S is held (negative: reversing)
+        self.player_y = -60.0
+        self.player_y_after_sneak = player_y_after_sneak
         self.commands = []
 
     def command(self, line, timeout=5.0):
@@ -393,7 +397,7 @@ class World:
             t = self.truck
             return {"statusCode": 0, "details": json.dumps([{"position": {"x": t["x"], "y": -60, "z": t["z"]}, "yRot": t["yaw"]}])}
         if line.startswith("querytarget @s"):
-            return {"statusCode": 0, "details": json.dumps([{"position": {"x": 0, "y": -60, "z": 0}, "yRot": self.player_yaw}])}
+            return {"statusCode": 0, "details": json.dumps([{"position": {"x": 0, "y": self.player_y, "z": 0}, "yRot": self.player_yaw}])}
         if line == "scoreboard players list riding":
             return {"statusCode": 0, "statusMessage": f"- mt_probe: {self.riding} (mt_probe)"}
         if line == "inputpermission query @s jump enabled":
@@ -416,10 +420,14 @@ class WorldInput(FakeInput):
         super().hold(keys, seconds, on_tick)
         if "w" in keys and "space" not in keys:
             self.world.truck["z"] += 1.1 * 20 * seconds
+        if "s" in keys:
+            self.world.truck["z"] += self.world.s_speed * seconds
         for key in keys:
             self.world.truck["yaw"] += self.world.turn.get(key, 0.0) * seconds
         if client_checks.SNEAK_KEY in keys:
             self.world.riding = self.world.riding_after_sneak
+            if self.world.riding == 0:
+                self.world.player_y = self.world.player_y_after_sneak
 
     def move_mouse(self, dx, dy, steps=10, interval=0.02):
         super().move_mouse(dx, dy, steps, interval)
@@ -476,6 +484,24 @@ def test_sneak_with_space_held_must_dismount():
     assert run_check("space_sneak_exits", World(riding_after_sneak=0))
     with pytest.raises(client_checks.CheckFailed, match="still in seat 1"):
         run_check("space_sneak_exits", World(riding_after_sneak=1))
+
+
+def test_s_must_brake_then_reverse_in_a_straight_line():
+    assert run_check("s_brakes_and_reverses", World())
+    with pytest.raises(client_checks.CheckFailed, match="S moved the truck"):
+        run_check("s_brakes_and_reverses", World(s_speed=0.0))
+    with pytest.raises(client_checks.CheckFailed, match="turned"):
+        run_check("s_brakes_and_reverses", World(turn_per_key={"s": 20.0}))
+
+
+def test_sneak_afloat_must_set_the_player_down_out_of_the_liquid():
+    world = World()
+    assert run_check("sneak_exits_afloat", world)
+    assert any(line.startswith("fill") and line.endswith("water") for line in world.commands), "a pool is built"
+    with pytest.raises(client_checks.CheckFailed, match="still in seat 1"):
+        run_check("sneak_exits_afloat", World(riding_after_sneak=1))
+    with pytest.raises(client_checks.CheckFailed, match="dropped into the water"):
+        run_check("sneak_exits_afloat", World(player_y_after_sneak=-61.0))
 
 
 def test_focus_is_taken_before_the_first_key_with_a_few_activation_attempts():
