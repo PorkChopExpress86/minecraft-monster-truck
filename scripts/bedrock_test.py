@@ -161,12 +161,12 @@ def run_scenario_stage(root, config, run_id, output, only=None):
         raise SetupError(str(error)) from error
 
 
-def run_client_stage(root, config, run_id, output, only=None, trace=False):
+def run_client_stage(root, config, run_id, output, only=None, trace=False, diag=None):
     if __package__:
         from .client_checks import run_client_input
     else:
         from client_checks import run_client_input
-    return run_client_input(root, config, run_id, output, only, trace)
+    return run_client_input(root, config, run_id, output, only, trace, diag)
 
 
 def evidence(root, config):
@@ -226,6 +226,7 @@ def main(argv=None, root=ROOT, client=None):
     parser.add_argument("--only", help="Comma-separated scenario names (scenarios mode) or client check names (client mode)")
     parser.add_argument("--trace", action="store_true",
                         help="Client mode: record the harness probe's scores during every key hold in report.json")
+    parser.add_argument("--diag", help="Client mode: run the CHECKS of this diagnostic file instead of the built-in checks")
     args = parser.parse_args(argv)
     root = Path(root).resolve()
     run_id = uuid.uuid4().hex
@@ -258,6 +259,8 @@ def main(argv=None, root=ROOT, client=None):
                 raise SetupError("--only is only accepted by scenarios and client")
             if args.trace and args.mode != "client":
                 raise SetupError("--trace is only accepted by client")
+            if args.diag is not None and args.mode != "client":
+                raise SetupError("--diag is only accepted by client")
             report["only"] = args.only
             if args.mode in ("static", "all"):
                 report["static"] = run_static(root, config, output)
@@ -273,7 +276,7 @@ def main(argv=None, root=ROOT, client=None):
                 # Client Input Run (ADR-0019): local only, and never part of All, since it takes over the desktop.
                 if WINDOWS:
                     raise SetupError("The Client Input Run drives the Linux client only")
-                report["client_input"] = run_client_stage(root, config, run_id, output, args.only, args.trace)
+                report["client_input"] = run_client_stage(root, config, run_id, output, args.only, args.trace, args.diag)
                 if report["client_input"]["status"] != "passed":
                     report.update(status="failed", exit_code=1)
                     return report["exit_code"]

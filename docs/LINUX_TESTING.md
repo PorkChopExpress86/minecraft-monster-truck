@@ -23,6 +23,7 @@ Linux runs use the flatpak [Minecraft Bedrock Launcher](https://mcpelauncher.rea
 ./test-addon.sh Client     # Client Input Run: real key presses in the real client (local only, not in All)
 ./test-addon.sh Client --only sneak_dismounts  # Just these input checks
 ./test-addon.sh Client --trace --only sneak_dismounts  # Also record the probe during every key hold
+./test-addon.sh Client --diag probe.py  # Run probe.py's CHECKS instead (one-off measurements)
 ./test-addon.sh Doctor     # Read-only discovery of worlds and log directories
 ```
 

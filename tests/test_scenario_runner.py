@@ -259,3 +259,11 @@ def test_trace_is_rejected_outside_client_mode(tmp_path):
     assert bedrock_test.main(["scenarios", "--trace"], root=root) == 2
     report = json.loads((root / "dist/bedrock-tests/latest.json").read_text())
     assert report["error"] == "--trace is only accepted by client"
+
+
+def test_diag_is_rejected_outside_client_mode(tmp_path):
+    from scripts import bedrock_test
+    root = tmp_repo(tmp_path)
+    assert bedrock_test.main(["scenarios", "--diag", "x.py"], root=root) == 2
+    report = json.loads((root / "dist/bedrock-tests/latest.json").read_text())
+    assert report["error"] == "--diag is only accepted by client"

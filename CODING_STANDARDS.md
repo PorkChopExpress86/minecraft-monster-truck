@@ -14,9 +14,9 @@ Tests hard-code spec-defining outcomes: what `CONTEXT.md` terms and the ADRs pro
 
 Production scripts wrap Script API calls in `try`/`catch` so one bad entity cannot stop the tick loop. Keep each `try` around one engine call or one tightly related group, so a failure drops only that work: the handbrake read has its own `try`, separate from the movement read. Flag a `try` that spans independent pieces of work.
 
-## Scenarios don't fake engine-owned player state
+## Tests don't fake what the engine decides
 
-A scenario that writes state the engine sets from player input (`isSneaking`, rider lists, button state) to stand in for that input proves only the add-on's reaction to it. Its row in `docs/ACCEPTANCE_COVERAGE.md` names the Client Input Run check that proves the input itself, or says it has none. `two_seat_drop` set `isSneaking` on a seated rider; the real client never reports it, and the add-on blocked every Sneak exit until a Client Input Run showed it.
+A test proves only what its world models. A scenario that writes state the engine sets from player input (`isSneaking`, rider lists, button state), or a node test whose fake world allows what the engine may not (a player standing on an entity, a key that dismounts), proves only the add-on's reaction. Its row in `docs/ACCEPTANCE_COVERAGE.md` names the Client Input Run check that proves the engine side, or says it has none. Both slipped through before: `two_seat_drop` set `isSneaking`, which the real client never reports on a rider, and a node test asserted a rider set down on the truck's roof, which does not hold a player in the client.
 
 ## Driver input enters through `driverInput`
 

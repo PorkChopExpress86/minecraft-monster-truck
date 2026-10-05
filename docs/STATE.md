@@ -1,7 +1,8 @@
 ## Goal
 Set up the add-on for Linux development, debug, install, and fully automate in-game testing of the monster truck.
 ## Now
-v1.0.13 (Sneak-exit fix, #40 Jump lock, pitch-lag fix, empty rider slot fix, Space+Shift exit, dry-land exit over liquid c995a7a) installed to the local flatpak client and to both servers (minecraft-creative, minecraft-survival; 2026-10-04, install_addon.py --servers creative,survival --yes, both restarted). #27/#29/#30/#32 trimmed to human-only residue. Retro items 1-6 (2026-10-04): conftest GIT_* isolation, TEMP-DIAGNOSTIC pre-commit guard, Client --trace, real-client facts in docs/agents/bedrock-physics.md, CODING_STANDARDS engine-state rule, AGENTS.md testing pointer.
+Installed: v1.0.13 (c995a7a) on the local client and servers creative, survival, 2026-10-05.
+Retro 2 (2026-10-05): .claude/skills/open-items (re-checks STATE notes before reporting), scripts/release.py (rev, install, Installed: line, commit, --push), ./test-addon.sh Client --diag <file>, CODING_STANDARDS 'Tests don't fake what the engine decides', doc test that LINUX_TESTING names every client check.
 ## Next
 1. User verifies 1.0.13 in game (#32): real Left Shift exits, nothing flashes on Space, Shift during a drop, two players.
 2. Manual Proving Ground checks #27/#28/#29/#30; then #31 acceptance evidence; then close parent #24.

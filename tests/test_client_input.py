@@ -522,3 +522,24 @@ def test_a_desktop_that_never_gives_minecraft_focus_blocks_the_run():
 
     with pytest.raises(client_checks.ClientInputError, match="leave the desktop idle"):
         client_checks.take_focus(lambda: None, guard, attempts=2, sleep=lambda s: None)
+
+
+def test_a_diag_file_supplies_its_own_checks(tmp_path):
+    diag = tmp_path / "probe_this.py"
+    diag.write_text("from scripts import client_checks as cc\n"
+                    "def measure(ctx):\n    return 'measured ' + cc.SNEAK_KEY\n"
+                    "def other(ctx):\n    return 'other'\n"
+                    "CHECKS = {'measure': measure, 'other': other}\n")
+    checks = client_checks.load_diag(diag)
+    assert list(checks) == ["measure", "other"]
+    assert checks["measure"](None) == "measured k"
+    assert client_checks.select_checks("other", checks) == ["other"]
+    with pytest.raises(client_checks.SetupError, match="Unknown client check"):
+        client_checks.select_checks("w_drives", checks)
+
+
+def test_a_diag_file_without_checks_is_refused(tmp_path):
+    diag = tmp_path / "empty.py"
+    diag.write_text("x = 1\n")
+    with pytest.raises(client_checks.SetupError, match="CHECKS"):
+        client_checks.load_diag(diag)

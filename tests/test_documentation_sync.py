@@ -62,3 +62,10 @@ def test_proving_ground_checklist_covers_kinematics_and_sixteen_colors():
     assert "24. Foliage Shearing" in pg
     assert "Dynamic Incline Pitch" in pg
     assert "Coordinated 4WS" in pg
+
+
+def test_linux_testing_names_every_client_input_check():
+    from scripts import client_checks
+    doc = (ROOT / "docs/LINUX_TESTING.md").read_text(encoding="utf-8")
+    missing = [name for name in client_checks.CHECKS if f"`{name}`" not in doc]
+    assert not missing, f"docs/LINUX_TESTING.md does not name these Client Input Run checks: {missing}"

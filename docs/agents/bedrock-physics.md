@@ -64,6 +64,7 @@ Measured in the Linux client 1.26.52.3 (flatpak mcpelauncher) through `./test-ad
 
 - Rerun one scenario: `./test-addon.sh Scenarios --only <name>`.
 - Real-client input: `./test-addon.sh Client --trace --only <check>` records the harness probe's scores (`riding`, `lost`, `sneaking`, `sneak_button`, `jump`) about 1.5 times a second during every key hold (each sample is one WebSocket query per score; `lost` counts every tick in between), under each check's `trace` in `report.json`. To measure something new, publish it as a score in `testing/harness/client_probe.js` and add it to `TRACE_SCORES` in `scripts/client_checks.py`.
+- One-off real-client measurements: write a file whose `CHECKS` dict maps names to `check(ctx)` functions (`ctx` is `scripts/client_checks.py`'s `Context`) and run `./test-addon.sh Client --diag <file>`; each check's returned detail, such as a JSON dump, lands in `report.json`.
 - Tag temporary instrumentation in code with `TEMP-DIAGNOSTIC`; the pre-commit hook refuses any staged file that contains it.
 - Put a per-tick trace in the failure message rather than logging it: any non-marker WARN/ERROR line fails a run. `liquid_crossing` in `testing/scenarios/scenarios.js` records `[tick, z, y, vy]` past z=35.
 - Retention = distance moved in a tick ÷ the horizontal velocity set just before it. A driven truck that crawls far below its target speed suggests a missing retention factor, because the "blocked by a wall" speed reset fires every tick.

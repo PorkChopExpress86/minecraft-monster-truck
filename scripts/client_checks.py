@@ -7,10 +7,12 @@ that channel: querytarget for positions and facing, the harness probe's scoreboa
 Every key and mouse event passes the focus guard first (bedrock_linux.focus_guard).
 """
 import contextlib
+import importlib.util
 import math
 from pathlib import Path
 import re
 import shutil
+import sys
 import time
 
 try:
@@ -315,19 +317,40 @@ CHECKS = {check.__name__: check for check in
            space_sneak_exits, sneak_exits_afloat)}
 
 
-def select_checks(only):
+def select_checks(only, checks=None):
+    checks = CHECKS if checks is None else checks
     if only is None:
-        return list(CHECKS)
+        return list(checks)
     names = [name.strip() for name in only.split(",") if name.strip()]
-    unknown = [name for name in names if name not in CHECKS]
+    unknown = [name for name in names if name not in checks]
     if not names or unknown:
-        raise SetupError("Unknown client check; choose from: " + ", ".join(CHECKS))
-    return [name for name in CHECKS if name in names]
+        raise SetupError("Unknown client check; choose from: " + ", ".join(checks))
+    return [name for name in checks if name in names]
 
 
-def run_client_input(root, config, run_id, output, only=None, trace=False):
-    """Deploy, launch, connect, run the checks, close; returns the report stage."""
-    names = select_checks(only)
+def load_diag(path):
+    """A diagnostic file's CHECKS ({name: check(ctx) -> detail}), run in place of the built-in checks
+    (--diag). It may import `scripts.client_checks` for Context helpers; a check's returned detail, such as
+    a JSON dump of what it measured, lands in report.json."""
+    root = str(Path(__file__).resolve().parents[1])
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    spec = importlib.util.spec_from_file_location(f"client_diag_{Path(path).stem}", path)
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except (OSError, SyntaxError) as error:
+        raise SetupError(f"Could not load the diagnostic file {path}: {error}") from error
+    checks = getattr(module, "CHECKS", None)
+    if not isinstance(checks, dict) or not checks:
+        raise SetupError(f"{path} defines no CHECKS dict of name -> check(ctx)")
+    return checks
+
+
+def run_client_input(root, config, run_id, output, only=None, trace=False, diag=None):
+    """Deploy, launch, connect, run the checks (or a --diag file's), close; returns the report stage."""
+    checks = load_diag(diag) if diag else CHECKS
+    names = select_checks(only, checks)
     client_dir = output / "client-input"
     client_dir.mkdir(parents=True, exist_ok=True)
     launcher_client = linux_client()
@@ -363,7 +386,7 @@ def run_client_input(root, config, run_id, output, only=None, trace=False):
                 entry = {"name": name}
                 ctx.samples, ctx.started = [], started
                 try:
-                    entry.update(status="passed", detail=CHECKS[name](ctx))
+                    entry.update(status="passed", detail=checks[name](ctx))
                 except CheckFailed as error:
                     entry.update(status="failed", error=str(error))
                 entry["seconds"] = round(time.monotonic() - started, 1)
