@@ -583,6 +583,27 @@ test("wood demolition needs momentum over 0.25 blocks/tick; foliage shears at an
   assert.equal(empty.typeAt(1, GROUND_Y + 1, 1), "minecraft:oak_leaves", "no shearing without a driver");
 });
 
+// getRiders() can hold an empty slot for a rider this script runtime cannot see (a simulated player
+// spawned by another pack). The slot is still a seat: the rider after it is not promoted to driver.
+test("an empty rider slot neither stops the tick nor promotes the passenger to driver", () => {
+  const passenger = createFakePlayer({ id: "passenger" });
+  const world = scene({ riders: [passenger], driverInput: fixedInput({ forward: 1 }) });
+  world.truck.seated.unshift(undefined);
+  for (let i = 0; i < 5; i++) world.step();
+  assert.deepEqual(world.state.riders, ["passenger"], "only riders the runtime can see are tracked");
+  assert.equal(world.truck.location.z, 0.5, "nobody this runtime can read is driving");
+});
+
+test("a drop with an empty rider slot runs its landing lifecycle", () => {
+  const rider = createFakePlayer({ id: "rider" });
+  const world = scene({ riders: [rider] });
+  world.truck.seated.unshift(undefined);
+  dropFrom(world, GROUND_Y + 4);
+  world.step();
+  assert.ok(world.truck.seated.includes(rider), "the seen rider is still seated after landing");
+  assert.equal(world.input.protectedRiders.has("rider"), true, "and protected through the landing window");
+});
+
 test("pitch follows a drop from the tick the drop is first seen", () => {
   const world = scene();
   world.step(() => world.truck.moveTo({ y: GROUND_Y + 10 }, { velocity: { y: 0 }, isOnGround: false }));

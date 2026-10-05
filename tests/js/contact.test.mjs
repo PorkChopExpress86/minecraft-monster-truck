@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { stepContact } from "../../behavior_packs/MonsterTruck_BP/scripts/contact.js";
+import { isProtectedTarget, stepContact } from "../../behavior_packs/MonsterTruck_BP/scripts/contact.js";
 import { createFakeDimension, createFakeEntity, createFakeTruck } from "./fake_world.mjs";
 
 const AT = { x: 0.5, y: 61, z: 0.5 };
@@ -92,4 +92,12 @@ test("an entity that throws when read does not spare the entities after it", () 
   dimension.entities.push(truck, broken, target);
   stepContact(truck, dimension, { location: AT, heading: { x: 0, z: 1 }, speed: 0.5, hitCooldowns: new Map(), tick: 1000 });
   assert.equal(target.damage.length, 1, "the next entity is still trampled");
+});
+
+// getRiders() can hold an empty slot for a rider this script runtime cannot see (a simulated player
+// spawned by another pack); the riders after it are still riders.
+test("a rider seated behind an empty rider slot is still the truck's own rider", () => {
+  const rider = createFakeEntity({ typeId: "minecraft:zombie" });
+  const truck = createFakeTruck({ location: AT, riders: [undefined, rider] });
+  assert.equal(isProtectedTarget(rider, truck), true);
 });

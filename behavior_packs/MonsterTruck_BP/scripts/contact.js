@@ -220,7 +220,7 @@ export function isProtectedTarget(target, truck) {
     try {
       const rideable = truck.getComponent("minecraft:rideable");
       const riders = rideable && rideable.getRiders ? rideable.getRiders() : [];
-      if (riders.some((r) => r.id === target.id)) {
+      if (riders.some((r) => r?.id === target.id)) {
         return true;
       }
     } catch {}

@@ -118,7 +118,7 @@ export function releaseLanding(landing, truckId, protectedRiders) {
 
 function restoreProtectedRiders(getEntity, landing, rideable) {
   if (!rideable?.addRider || !landing.protectedRiderIds?.size) return;
-  const seated = new Set((rideable.getRiders?.() || []).map((rider) => rider.id));
+  const seated = new Set((rideable.getRiders?.() || []).map((rider) => rider?.id));
   for (const riderId of landing.protectedRiderIds) {
     if (seated.has(riderId)) continue;
     try {

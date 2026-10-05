@@ -178,9 +178,11 @@ export function tickTruck(truck, dimension, state, input, tick) {
 
   // Rider monitoring, thermal shielding, and safe dismount
   const rideable = truck.getComponent ? truck.getComponent("minecraft:rideable") : undefined;
+  // A seat can hold a rider this script runtime cannot see (undefined): it stays a seat, so the rider
+  // after it is not promoted to driver, but only seen riders are tracked.
   const currentRiders = rideable && rideable.getRiders ? rideable.getRiders() : [];
   const prevRiders = state.riders || [];
-  state.riders = currentRiders.map((r) => r.id);
+  state.riders = currentRiders.filter((r) => r != null).map((r) => r.id);
   // Jump is read for every rider through the driver-input seam's handbrake (the Jump button).
   for (const rider of currentRiders) {
     try {
