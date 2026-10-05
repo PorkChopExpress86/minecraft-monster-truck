@@ -1,4 +1,5 @@
 """Linux client control for the Bedrock smoke runner: flatpak mcpelauncher on KDE Wayland."""
+import json
 import os
 from pathlib import Path
 import re
@@ -6,6 +7,12 @@ import signal
 import subprocess
 import time
 from urllib.parse import quote
+import uuid
+
+try:
+    from .linux_input import FocusLost
+except ImportError:
+    from linux_input import FocusLost
 
 
 APP_ID = "io.mrarm.mcpelauncher"
@@ -18,6 +25,10 @@ ACTIVATE_JS = """for (const w of workspace.windowList()) {
 CLOSE_JS = """for (const w of workspace.windowList()) {
   if (w.caption === "Minecraft" && w.normalWindow) { w.closeWindow(); }
 }
+"""
+# KWin scripts cannot return values; this one prints the active window, tagged with a nonce, to the journal.
+FOCUS_JS = """const w = workspace.activeWindow;
+print("%s " + JSON.stringify(w ? {caption: w.caption, pid: w.pid} : null));
 """
 
 
@@ -120,6 +131,42 @@ def _wait_for_group_exit(process, timeout):
 def activate_window(work_dir):
     run_kwin_script(work_dir, "activate-minecraft.js", ACTIVATE_JS)
     time.sleep(0.3)
+
+
+def active_window(work_dir, timeout=3.0):
+    """The active window's caption and pid, as KWin reports them, or None when no window is active."""
+    nonce = "mt-focus-" + uuid.uuid4().hex[:12]
+    run_kwin_script(work_dir, "focus-probe.js", FOCUS_JS % nonce)
+    deadline = time.monotonic() + timeout
+    while True:
+        found = subprocess.run(["journalctl", "--user", "--since", "-60s", "-o", "cat", "--grep", nonce],
+                               capture_output=True, text=True, timeout=10)
+        for line in found.stdout.splitlines():
+            if line.startswith(nonce + " "):
+                return json.loads(line[len(nonce) + 1:])
+        if time.monotonic() >= deadline:
+            raise ClientError("KWin's active-window report never reached the journal")
+        time.sleep(0.05)
+
+
+def focus_guard(work_dir, process):
+    """A guard for linux_input: input may go only to the Minecraft window of the launched sandbox."""
+    def guard():
+        window = active_window(work_dir)
+        game_pids = {pid for pid, _ in process_group(process.pid)}
+        if not window or window.get("caption") != "Minecraft" or window.get("pid") not in game_pids:
+            raise FocusLost(f"active window is {window}, not the launched Minecraft; input stopped")
+    return guard
+
+
+def chat_open(screenshot):
+    """True when a capture shows the Chat and Commands screen: a flat grey title bar under the launcher menu."""
+    from PIL import Image, ImageStat
+
+    with Image.open(screenshot) as image:
+        width = image.width
+        r, g, b = ImageStat.Stat(image.convert("RGB").crop((int(width * 0.2), 32, int(width * 0.8), 52))).mean
+    return min(r, g, b) > 150 and max(r, g, b) - min(r, g, b) < 10
 
 
 def run_kwin_script(work_dir, name, source):

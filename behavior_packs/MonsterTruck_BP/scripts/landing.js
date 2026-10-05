@@ -148,8 +148,10 @@ function restoreProtectedRiders(getEntity, landing, rideable) {
  *   tick: number,
  *   getEntity(id: string): import("./truck_tick.js").WorldEntity | undefined,
  *   protectedRiders: Map<string, string>,
+ *   jumpedRecently?(player: import("./truck_tick.js").WorldEntity): boolean,
  * }} frame dy: height change since last tick; heading: unit direction of travel;
- *   riderIds / prevRiderIds: seated rider ids this tick and last tick.
+ *   riderIds / prevRiderIds: seated rider ids this tick and last tick;
+ *   jumpedRecently: the player holds Jump (Space) or did within the last few ticks.
  */
 export function stepLanding(truck, dimension, landing, frame) {
   const {
@@ -163,7 +165,8 @@ export function stepLanding(truck, dimension, landing, frame) {
     inLiquid,
     tick: tickNumber,
     getEntity,
-    protectedRiders
+    protectedRiders,
+    jumpedRecently
   } = frame;
   const dirX = heading.x;
   const dirZ = heading.z;
@@ -171,7 +174,11 @@ export function stepLanding(truck, dimension, landing, frame) {
   const perpZ = dirX;
   const falling = isFalling(dy, verticalVelocity);
 
-  // Rider dismount management: Sneak (Shift) is the only deliberate exit
+  // Rider dismount management. Minecraft dismounts a rider who presses Space, the add-on's handbrake, and
+  // detaches riders around drops (#32): both are undone unless the rider is sneaking. Any other exit on
+  // steady ground is Sneak: in the real client a Sneak exit never reads as sneaking on the riding player.
+  const inDropWindow = falling || landing.isFalling ||
+    Boolean(landing.riderRetentionUntil && tickNumber <= landing.riderRetentionUntil);
   if (prevRiderIds.length > riderIds.length) {
     const currentRiderIds = new Set(riderIds);
     const dismountedIds = prevRiderIds.filter((id) => !currentRiderIds.has(id));
@@ -180,9 +187,12 @@ export function stepLanding(truck, dimension, landing, frame) {
       try {
         const player = getEntity(playerId);
         if (player && player.isValid && player.typeId === "minecraft:player") {
-          if (!player.isSneaking && rideable && rideable.addRider) {
-            // Sneak is the only deliberate exit. Keep any other engine
-            // detachment tied to a bounded vehicle lifecycle.
+          const spaceExit = Boolean(jumpedRecently?.(player));
+          if (spaceExit && !inDropWindow && !player.isSneaking && rideable && rideable.addRider) {
+            // The handbrake's Space dismount: reseat without opening a drop window, so Sneak works right after.
+            rideable.addRider(player);
+          } else if (inDropWindow && !player.isSneaking && rideable && rideable.addRider) {
+            // An engine detachment around a drop: reseat, tied to a bounded vehicle lifecycle.
             if (!landing.protectedRiderIds?.size) {
               protectRidersForLifecycle(protectedRiders, landing, truck.id, prevRiderIds);
             }

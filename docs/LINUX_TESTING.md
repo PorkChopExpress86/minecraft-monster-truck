@@ -20,6 +20,8 @@ Linux runs use the flatpak [Minecraft Bedrock Launcher](https://mcpelauncher.rea
 ./test-addon.sh Scenarios  # Headless Scenario Runs only (Docker)
 ./test-addon.sh Scenarios --only flotation_water,handbrake  # Just these scenarios, in configured order
 ./test-addon.sh Game       # Client Smoke Run only
+./test-addon.sh Client     # Client Input Run: real key presses in the real client (local only, not in All)
+./test-addon.sh Client --only sneak_dismounts  # Just these input checks
 ./test-addon.sh Doctor     # Read-only discovery of worlds and log directories
 ```
 
@@ -53,11 +55,22 @@ Scenario Runs assert gameplay headlessly (ADR-0016). Settings live under `scenar
 
 Add scenarios in `testing/scenarios/scenarios.js` and list them in `scenario_server.scenarios`. While iterating on one failure, rerun only it with `--only`; run the full list before committing. Engine behavior that scenario checks depend on (drag, collisions, the damage immunity window) is in `docs/agents/bedrock-physics.md`. The user's long-lived server containers are never used.
 
+## Client Input Run
+
+A Client Input Run presses real keys in the real client and asserts the outcome in the client's own world (ADR-0019). It is local only: it takes the keyboard, so it is not part of All and never runs in CI. Step away from the desktop while it runs.
+
+1. The runner deploys the add-on plus the harness in probe mode. The harness publishes, every tick, the player's seat (`riding`), ticks spent out of a seat (`lost`), and the Sneak, Jump and look state on the `mt_probe` scoreboard instead of running the showcase.
+2. For the run only, `options.txt` gets `websockets_enabled:1`, `websocket_encryption:0`, and Sneak bound to K (a virtual Shift never reaches this launcher as Sneak; a real Shift does). Only those keys are restored afterwards; the game's other changes are kept.
+3. The client loads the Dedicated Test World. A user-level uinput virtual keyboard (`scripts/linux_input.py`, no root: `/dev/uinput` has a uaccess ACL for the seat user) types `/connect 127.0.0.1:<port>` into chat, and `scripts/client_ws.py` answers as the WebSocket server.
+4. Each check summons a fresh truck, seats the player in the Driver Seat, holds keys, and reads positions (`querytarget`) and the probe scoreboard: `w_drives`, `a_turns_left`, `d_turns_right`, `space_keeps_rider` (the player is in the seat on every tick the probe sees while Space is held), and `sneak_dismounts` (Sneak leaves the truck and the player stays out). Each check saves a screenshot under `client-input/`.
+
+Before every key press a focus guard (a KWin script reporting the active window through the user journal) checks that the launched Minecraft window has focus. Any other window ends the run with every key released. Mouse look is not checked: virtual pointer motion reaches the game only while the pointer is over the window, and the `steering` scenario already proves that look does not steer.
+
 ## Scenario Run blind spots
 
 A green Scenario Run proves server-side state. A player-reported bug in any area below needs the real client to confirm the fix; treat the scenario as necessary, not sufficient.
 
-- **Key mapping and engine input handling.** The Simulated Driver sends no key presses: its movement and held Jump button reach the add-on only through the `driverInput` seam in `main.js`. Which key gives which movement-vector sign (`LEFT_INPUT_SIGN` in `driving.js`), and how entity components make the client treat a key (with `minecraft:input_ground_controlled`, Space dismounted the rider on the client, #32), never show up server-side.
+- **Key mapping and engine input handling.** The Simulated Driver sends no key presses: its movement and held Jump button reach the add-on only through the `driverInput` seam in `main.js`. Which key gives which movement-vector sign (`LEFT_INPUT_SIGN` in `driving.js`), and how the engine treats a key, never show up server-side. Run a Client Input Run for these. It found that Minecraft dismounts a rider who presses Space, and that a riding player never reads as sneaking: setting `isSneaking` on a Simulated Driver does not reproduce a real Sneak exit.
 - **Client rendering.** Rider position, seat flicker, animations, and the camera. During #32 the server kept the driver seated and linked on every tick while the player saw them leave the truck.
 - **Feel.** Acceleration, drift, and turning radius are asserted as numbers; whether they feel right is the player's call.
 

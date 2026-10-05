@@ -161,6 +161,14 @@ def run_scenario_stage(root, config, run_id, output, only=None):
         raise SetupError(str(error)) from error
 
 
+def run_client_stage(root, config, run_id, output, only=None):
+    if __package__:
+        from .client_checks import run_client_input
+    else:
+        from client_checks import run_client_input
+    return run_client_input(root, config, run_id, output, only)
+
+
 def evidence(root, config):
     """What an acceptance record needs to identify the build a run tested (docs/ACCEPTANCE_COVERAGE.md)."""
     def git(*args):
@@ -212,10 +220,10 @@ def run_static(root, config, output):
 
 def main(argv=None, root=ROOT, client=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=["doctor", "bootstrap", "configure", "static", "scenarios", "game", "all"])
+    parser.add_argument("mode", choices=["doctor", "bootstrap", "configure", "static", "scenarios", "game", "client", "all"])
     parser.add_argument("--world", help="Existing fresh dedicated world directory; configure only")
     parser.add_argument("--log-directory", help="Content log directory; configure only")
-    parser.add_argument("--only", help="Comma-separated scenario names; scenarios mode only")
+    parser.add_argument("--only", help="Comma-separated scenario names (scenarios mode) or client check names (client mode)")
     args = parser.parse_args(argv)
     root = Path(root).resolve()
     run_id = uuid.uuid4().hex
@@ -244,8 +252,8 @@ def main(argv=None, root=ROOT, client=None):
         else:
             if args.world or args.log_directory:
                 raise SetupError("World/log overrides are only accepted by configure")
-            if args.only is not None and args.mode != "scenarios":
-                raise SetupError("--only is only accepted by scenarios")
+            if args.only is not None and args.mode not in ("scenarios", "client"):
+                raise SetupError("--only is only accepted by scenarios and client")
             report["only"] = args.only
             if args.mode in ("static", "all"):
                 report["static"] = run_static(root, config, output)
@@ -255,6 +263,14 @@ def main(argv=None, root=ROOT, client=None):
             if args.mode == "scenarios" or (args.mode == "all" and "scenario_server" in config and not WINDOWS):
                 report["scenarios"] = run_scenario_stage(root, config, run_id, output, args.only)
                 if report["scenarios"]["status"] != "passed":
+                    report.update(status="failed", exit_code=1)
+                    return report["exit_code"]
+            if args.mode == "client":
+                # Client Input Run (ADR-0019): local only, and never part of All, since it takes over the desktop.
+                if WINDOWS:
+                    raise SetupError("The Client Input Run drives the Linux client only")
+                report["client_input"] = run_client_stage(root, config, run_id, output, args.only)
+                if report["client_input"]["status"] != "passed":
                     report.update(status="failed", exit_code=1)
                     return report["exit_code"]
             if args.mode in ("game", "all"):

@@ -78,11 +78,18 @@ import { createLandingState, releaseLanding, stepLanding } from "./landing.js";
  * }} TickInput
  * landing: landing.js's slice (the drop lifecycle).
  * hitCooldowns: entity id -> tick this truck last trampled it (contact.js).
+ * jumpHeldAt: rider id -> last tick that rider held Jump (Space) while seated.
  * @typedef {Record<string, any> & {
  *   landing: import("./landing.js").LandingState,
  *   hitCooldowns: Map<string, number>,
+ *   jumpHeldAt: Map<string, number>,
  * }} TruckState
  */
+
+// Minecraft dismounts a rider who presses Space (Jump, the add-on's handbrake). An exit within this many
+// ticks of the rider holding Jump is that dismount, not a Sneak exit (landing.js). Measured in the real
+// client: Jump reads pressed the tick before such an exit and for 4+ ticks after it (Client Input Run).
+const SPACE_EXIT_GRACE_TICKS = 3;
 
 // Horizontal velocity the engine keeps per tick while airborne; measured in
 // docs/agents/bedrock-physics.md (Air row) — read it before retuning.
@@ -90,7 +97,7 @@ const AIR_DRAG_RETENTION = 0.91;
 
 /** @returns {TruckState} */
 export function createTruckState() {
-  return { landing: createLandingState(), hitCooldowns: new Map() };
+  return { landing: createLandingState(), hitCooldowns: new Map(), jumpHeldAt: new Map() };
 }
 
 /**
@@ -174,6 +181,21 @@ export function tickTruck(truck, dimension, state, input, tick) {
   const currentRiders = rideable && rideable.getRiders ? rideable.getRiders() : [];
   const prevRiders = state.riders || [];
   state.riders = currentRiders.map((r) => r.id);
+  // Jump is read for every rider through the driver-input seam's handbrake (the Jump button).
+  for (const rider of currentRiders) {
+    try {
+      if (driverInput.handbrake(rider)) state.jumpHeldAt.set(rider.id, tickNumber);
+    } catch {}
+  }
+  for (const [riderId, heldAt] of state.jumpHeldAt) {
+    if (tickNumber - heldAt > SPACE_EXIT_GRACE_TICKS) state.jumpHeldAt.delete(riderId);
+  }
+  const jumpedRecently = (player) => {
+    try {
+      if (driverInput.handbrake(player)) return true;
+    } catch {}
+    return state.jumpHeldAt.has(player.id);
+  };
 
   // Check if truck is in lava or water
   let inLava = false;
@@ -389,7 +411,8 @@ export function tickTruck(truck, dimension, state, input, tick) {
     inLiquid: inLava || inWater,
     tick: tickNumber,
     getEntity,
-    protectedRiders
+    protectedRiders,
+    jumpedRecently
   });
 
   // Tire Trample, Molten Tire Trample, and heavy collisions with what the truck touches.

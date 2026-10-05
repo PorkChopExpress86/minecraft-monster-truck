@@ -245,9 +245,9 @@ def test_reports_outside_a_git_checkout_say_the_revision_is_unknown(tmp_path, mo
     assert evidence["revision"] is None and evidence["working_tree_clean"] is None
 
 
-def test_only_is_rejected_outside_scenarios_mode(tmp_path):
+def test_only_is_rejected_outside_scenarios_and_client_modes(tmp_path):
     from scripts import bedrock_test
     root = tmp_repo(tmp_path)
     assert bedrock_test.main(["static", "--only", "smoke"], root=root) == 2
     report = json.loads((root / "dist/bedrock-tests/latest.json").read_text())
-    assert report["error"] == "--only is only accepted by scenarios"
+    assert report["error"] == "--only is only accepted by scenarios and client"

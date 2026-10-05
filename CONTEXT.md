@@ -52,6 +52,10 @@ _Avoid_: Personal world, production world
 A verification run in the real Minecraft client that opens the Dedicated Test World, confirms the add-on loads and spawns without content errors, and captures screenshots for human visual review.
 _Avoid_: Game test, live test, playtest
 
+**Client Input Run**:
+A local verification run in the real Minecraft client in which a virtual keyboard presses the driving keys, behind a focus guard, and the client's own world reports the outcome over a WebSocket.
+_Avoid_: Keyboard test, macro run, bot run
+
 **Scenario Run**:
 A headless verification run on a dedicated server in which a Simulated Driver operates the Monster Truck through scripted terrain challenges and the observable outcomes of each mechanic are asserted.
 _Avoid_: Integration test, physics test, game run

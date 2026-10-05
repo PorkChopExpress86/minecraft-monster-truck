@@ -238,6 +238,15 @@ def test_configure_and_redeploy_are_confined_to_owned_world(project):
     assert not (root / "bp/scripts").exists()
 
 
+def test_client_probe_deploy_tells_the_harness_to_probe_instead_of_showcase(project):
+    root, config, world, logs = project
+    worlds.configure(root, config, world, logs, FakeClient())
+    generated = world / f"behavior_packs/addon-harness-{config['harness_uuid']}/scripts/run_config.js"
+    assert '"client_probe"' not in generated.read_text()
+    worlds.deploy(root, config, world, "probe-run", client_probe=True)
+    assert '"client_probe": true' in generated.read_text()
+
+
 def test_refuses_world_with_existing_active_packs(project):
     root, config, world, logs = project
     runner.write_json(world / "world_behavior_packs.json", [{"pack_id": "unrelated"}])

@@ -209,14 +209,17 @@ test("a rider detached early in a long drop stays protected for the whole fall, 
   assert.equal(world.input.protectedRiders.has("driver"), false, "protection ends with the landing window");
 });
 
-test("Sneak is the only deliberate exit; over liquid the rider is set down on the roof", () => {
-  // Not sneaking: any detachment is undone.
+test("on steady ground a rider who leaves is let go; over liquid the rider is set down on the roof", () => {
+  // In the real client a Sneak exit never reads as sneaking (Client Input Run), so on steady ground,
+  // outside any drop or landing window, every exit counts as deliberate (user decision 2026-10-05).
   {
     const rider = createFakePlayer({ id: "rider" });
     const world = scene({ riders: [rider] });
     world.step();
+    world.input.protectedRiders.set("rider", world.truck.id);
     world.step(() => world.truck.detach(rider));
-    assert.ok(world.truck.seated.includes(rider), "engine detachment reseats the rider");
+    assert.ok(!world.truck.seated.includes(rider), "not pulled back into the seat");
+    assert.equal(world.input.protectedRiders.has("rider"), false, "and no longer protected");
   }
   // Sneaking on land: the rider leaves and loses protection.
   {
@@ -247,6 +250,62 @@ test("Sneak is the only deliberate exit; over liquid the rider is set down on th
     assert.ok(Math.abs(location.x - 0.5) < 1e-9 && Math.abs(location.z - (0.5 - 0.8)) < 1e-9, "behind the cab");
     assert.equal(options.dimension, world.dimension);
   }
+});
+
+// Minecraft itself dismounts a rider who presses Space (Jump), which the add-on uses as the handbrake.
+// Unlike Sneak, the Jump button stays readable: pressed the tick before the exit and for several ticks
+// after (Client Input Run, docs/STATE.md). Such an exit is undone, on steady ground too.
+function jumpInput(jumping) {
+  return { movement: () => ({ x: 0, y: 0 }), handbrake: (player) => jumping.has(player.id) };
+}
+
+test("a rider the engine dismounts while Space is held is put back, driver or passenger", () => {
+  for (const seat of [0, 1]) {
+    const riders = [createFakePlayer({ id: "driver" }), createFakePlayer({ id: "passenger" })];
+    const jumping = new Set();
+    const world = scene({ riders, driverInput: jumpInput(jumping) });
+    world.step();
+    const rider = riders[seat];
+    jumping.add(rider.id);
+    world.step(() => world.truck.detach(rider));
+    assert.ok(world.truck.seated.includes(rider), `seat ${seat}: Space is the handbrake, not an exit`);
+  }
+});
+
+test("a Space tap released just before the dismount is seen still counts as Space", () => {
+  const rider = createFakePlayer({ id: "rider" });
+  const jumping = new Set(["rider"]);
+  const world = scene({ riders: [rider], driverInput: jumpInput(jumping) });
+  world.step(); // Jump pressed while seated
+  jumping.delete("rider");
+  world.step(() => world.truck.detach(rider));
+  assert.ok(world.truck.seated.includes(rider), "Jump pressed on the tick before the exit");
+});
+
+test("an exit without Space on steady ground is still let go, even after an old Space press", () => {
+  const rider = createFakePlayer({ id: "rider" });
+  const jumping = new Set(["rider"]);
+  const world = scene({ riders: [rider], driverInput: jumpInput(jumping) });
+  world.step();
+  jumping.delete("rider");
+  for (let i = 0; i < 10; i++) world.step();
+  world.step(() => world.truck.detach(rider));
+  assert.ok(!world.truck.seated.includes(rider), "a Space press long before is not this exit's cause");
+});
+
+test("a Sneak exit soon after a Space re-seat is let go: Space opens no drop window", () => {
+  const rider = createFakePlayer({ id: "rider" });
+  const jumping = new Set(["rider"]);
+  const world = scene({ riders: [rider], driverInput: jumpInput(jumping) });
+  world.step();
+  world.step(() => world.truck.detach(rider));
+  assert.ok(world.truck.seated.includes(rider), "the Space dismount is undone");
+  jumping.delete("rider");
+  for (let i = 0; i < 4; i++) world.step();
+  world.step(() => world.truck.detach(rider));
+  assert.ok(!world.truck.seated.includes(rider), "released the handbrake, then left by Sneak 5 ticks later");
+  for (let i = 0; i < 4; i++) world.step();
+  assert.ok(!world.truck.seated.includes(rider), "and stays out");
 });
 
 test("liquid propulsion follows the driver's W input and crosses at overland speed", () => {

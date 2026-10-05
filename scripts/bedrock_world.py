@@ -187,7 +187,8 @@ def dedicated_pack_ids(config):
     return str(uuid.uuid5(namespace, "behavior-pack")), str(uuid.uuid5(namespace, "resource-pack"))
 
 
-def deploy(root, config, world, run_id):
+def deploy(root, config, world, run_id, client_probe=False):
+    """client_probe: the harness publishes riding state for a Client Input Run (ADR-0019) instead of its showcase."""
     validate_world(world)
     owner = checked_destination(world, OWNER)
     if not owner.exists() or read_json(owner) != owner_data(root, config):
@@ -233,6 +234,8 @@ def deploy(root, config, world, run_id):
            "showcase": config.get("showcase", False)}
     if "expected_seat_count" in config:
         run["expected_seat_count"] = config["expected_seat_count"]
+    if client_probe:
+        run["client_probe"] = True
     packs.stage_test_pack(world, destinations[0], destinations[1], run, harness / "scripts/run_config.js",
                           pack_ids=(test_bp_id, test_rp_id),
                           extra_behavior_packs=[{"pack_id": config["harness_uuid"], "version": [1, 0, 0]}])
