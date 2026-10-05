@@ -8,6 +8,7 @@ import { system, world } from "@minecraft/server";
 //   sneaking - 1 while the game reports the player sneaking (the Sneak key reached it)
 //   look     - the player's yaw in whole degrees, as scripts see it
 //   sneak_button - 1 while inputInfo reports the Sneak button pressed
+//   jump     - 1 while inputInfo reports the Jump button pressed (Space, the handbrake)
 export const OBJECTIVE = "mt_probe";
 
 export function startClientProbe(run) {
@@ -37,5 +38,12 @@ export function startClientProbe(run) {
       sneakButton = -1;
     }
     objective.setScore("sneak_button", sneakButton);
+    let jump = 0;
+    try {
+      jump = player.inputInfo.getButtonState("Jump") === "Pressed" ? 1 : 0;
+    } catch {
+      jump = -1;
+    }
+    objective.setScore("jump", jump);
   }, 1);
 }

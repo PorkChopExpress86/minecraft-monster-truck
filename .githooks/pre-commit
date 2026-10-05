@@ -4,6 +4,12 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
+# Temporary instrumentation is tagged TEMP-DIAGNOSTIC (docs/agents/bedrock-physics.md "Measuring"); none may be committed.
+if git grep --cached -nI 'TEMP-DIAGNOSTIC' -- . ':!docs' ':!.githooks'; then
+  echo "pre-commit: remove the TEMP-DIAGNOSTIC instrumentation above before committing" >&2
+  exit 1
+fi
+
 git ls-files -z 'behavior_packs/*.js' 'testing/scenarios/*.js' | xargs -0 -n1 node --check
 node_modules/.bin/tsc -p jsconfig.json
 REQUIRE_NODE=1 .venv-testing/bin/python -m pytest -q

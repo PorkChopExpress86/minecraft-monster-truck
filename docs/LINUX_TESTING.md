@@ -22,6 +22,7 @@ Linux runs use the flatpak [Minecraft Bedrock Launcher](https://mcpelauncher.rea
 ./test-addon.sh Game       # Client Smoke Run only
 ./test-addon.sh Client     # Client Input Run: real key presses in the real client (local only, not in All)
 ./test-addon.sh Client --only sneak_dismounts  # Just these input checks
+./test-addon.sh Client --trace --only sneak_dismounts  # Also record the probe during every key hold
 ./test-addon.sh Doctor     # Read-only discovery of worlds and log directories
 ```
 
@@ -65,6 +66,8 @@ A Client Input Run presses real keys in the real client and asserts the outcome 
 4. Each check summons a fresh truck, seats the player in the Driver Seat, holds keys, and reads positions (`querytarget`) and the probe scoreboard: `w_drives`, `a_turns_left`, `d_turns_right`, `space_keeps_rider` (the player is in the seat on every tick the probe sees while Space is held), and `sneak_dismounts` (Sneak leaves the truck and the player stays out). Each check saves a screenshot under `client-input/`.
 
 Before every key press a focus guard (a KWin script reporting the active window through the user journal) checks that the launched Minecraft window has focus. Any other window ends the run with every key released. Mouse look is not checked: virtual pointer motion reaches the game only while the pointer is over the window, and the `steering` scenario already proves that look does not steer.
+
+What the real client does differently from the dedicated server (riding and Sneak, Space dismounts, virtual keys, chat, client-side commands) is in `docs/agents/bedrock-physics.md`, "The real client". To diagnose a failed check, rerun it with `--trace`.
 
 ## Scenario Run blind spots
 

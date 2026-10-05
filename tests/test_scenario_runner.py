@@ -1,7 +1,6 @@
 """Headless Scenario Run orchestration (ADR-0016), with Docker replaced by a fake."""
 import io
 import json
-import os
 from pathlib import Path
 import re
 import struct
@@ -188,17 +187,9 @@ def test_a_failing_scenario_fails_the_run_with_exit_code_1(tmp_path, monkeypatch
     assert report["status"] == "failed" and report["scenarios"] == failed
 
 
-def isolate_git(monkeypatch):
-    """Drop the GIT_* variables a git hook exports (GIT_INDEX_FILE under `commit -a`): inherited, they point the
-    fixture repo's git commands at the outer repository's index."""
-    for name in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(name)
-
-
 def test_reports_record_the_evidence_an_acceptance_record_needs(tmp_path, monkeypatch):
     # ADR-0018 / docs/ACCEPTANCE_COVERAGE.md "Evidence record": revision, working-tree state, versions.
     from scripts import bedrock_test
-    isolate_git(monkeypatch)
     root = tmp_repo(tmp_path)
     git = lambda *args: subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, text=True)
     (root / ".gitignore").write_text("dist/\n")  # as in this repo: run output never dirties the tree
@@ -247,7 +238,6 @@ def test_an_unreadable_addon_version_does_not_break_a_run(tmp_path, monkeypatch)
 def test_reports_outside_a_git_checkout_say_the_revision_is_unknown(tmp_path, monkeypatch):
     from scripts import bedrock_test
     root = tmp_repo(tmp_path)
-    isolate_git(monkeypatch)
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     monkeypatch.setattr(bedrock_test, "run_scenario_stage", lambda *a: {"status": "passed", "scenarios": {}, "errors": []})
     assert bedrock_test.main(["scenarios"], root=root) == 0
@@ -261,3 +251,11 @@ def test_only_is_rejected_outside_scenarios_and_client_modes(tmp_path):
     assert bedrock_test.main(["static", "--only", "smoke"], root=root) == 2
     report = json.loads((root / "dist/bedrock-tests/latest.json").read_text())
     assert report["error"] == "--only is only accepted by scenarios and client"
+
+
+def test_trace_is_rejected_outside_client_mode(tmp_path):
+    from scripts import bedrock_test
+    root = tmp_repo(tmp_path)
+    assert bedrock_test.main(["scenarios", "--trace"], root=root) == 2
+    report = json.loads((root / "dist/bedrock-tests/latest.json").read_text())
+    assert report["error"] == "--trace is only accepted by client"

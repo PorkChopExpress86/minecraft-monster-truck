@@ -30,6 +30,8 @@ PROBE = "mt_probe"  # testing/harness/client_probe.js
 # A virtual Shift never reaches the launcher as Sneak (real Shift does), so for the run Sneak is rebound to K,
 # a key nothing else uses; the check then exercises the Sneak action itself (ADR-0019).
 SNEAK_KEY, SNEAK_KEY_CODE = "k", "75"
+# Probe scores a traced run (--trace) samples while keys are held, for diagnosing a failed check.
+TRACE_SCORES = ("riding", "lost", "sneaking", "sneak_button", "jump")
 RUN_OPTIONS = {"websockets_enabled": "1", "websocket_encryption": "0",
                "keyboard_type_0_key.sneak": SNEAK_KEY_CODE, "keyboard_type_1_key.sneak": SNEAK_KEY_CODE}
 
@@ -116,12 +118,27 @@ def take_focus(activate, guard, attempts=5, sleep=time.sleep):
 
 
 class Context:
-    def __init__(self, ws, keys, base, entity="blake:monster_truck", sleep=time.sleep):
+    def __init__(self, ws, keys, base, entity="blake:monster_truck", sleep=time.sleep, trace=False,
+                 clock=time.monotonic):
         self.ws = ws
         self.keys = keys
         self.base = base
         self.entity = entity
         self.sleep = sleep
+        self.trace = trace
+        self.clock = clock
+        self.samples = []
+        self.started = clock()
+
+    def hold(self, keys, seconds):
+        """Hold keys; when tracing, sample every probe score at each focus check of the hold
+        (about 1.5 a second: each sample is one WebSocket query per score)."""
+        self.keys.hold(keys, seconds, on_tick=(lambda: self._sample(keys)) if self.trace else None)
+
+    def _sample(self, keys):
+        self.samples.append({"t": round(self.clock() - self.started, 2), "keys": list(keys),
+                             **{name: self.probe(name) for name in TRACE_SCORES}})
+        return False
 
     def run(self, line, must_succeed=True):
         body = self.ws.command(line)
@@ -169,7 +186,7 @@ class Context:
 def w_drives(ctx):
     ctx.fresh_truck()
     start, _ = ctx.truck()
-    ctx.keys.hold(["w"], 1.5)
+    ctx.hold(["w"], 1.5)
     end, _ = ctx.truck()
     ahead, aside = end["z"] - start["z"], end["x"] - start["x"]
     if ahead < 3 or abs(aside) > 1:
@@ -179,9 +196,9 @@ def w_drives(ctx):
 
 def _turn(ctx, key):
     ctx.fresh_truck()
-    ctx.keys.hold(["w"], 0.8)
+    ctx.hold(["w"], 0.8)
     _, before = ctx.truck()
-    ctx.keys.hold(["w", key], 1.2)
+    ctx.hold(["w", key], 1.2)
     _, after = ctx.truck()
     return yaw_delta(before, after)
 
@@ -202,16 +219,16 @@ def d_turns_right(ctx):
 
 def space_keeps_rider(ctx):
     ctx.fresh_truck()
-    ctx.keys.hold(["w"], 1.0)
-    ctx.keys.hold(["w", "space"], 2.0)  # handbrake from speed
+    ctx.hold(["w"], 1.0)
+    ctx.hold(["w", "space"], 2.0)  # handbrake from speed
     stopped, _ = ctx.truck()
-    ctx.keys.hold(["w", "space"], 1.0)  # held handbrake against W
+    ctx.hold(["w", "space"], 1.0)  # held handbrake against W
     held, _ = ctx.truck()
     creep = math.hypot(held["x"] - stopped["x"], held["z"] - stopped["z"])
     for _ in range(5):
         ctx.keys.tap("space", hold=0.1)
         ctx.sleep(0.15)
-    ctx.keys.hold(["space"], 2.0)
+    ctx.hold(["space"], 2.0)
     lost, riding = ctx.probe("lost"), ctx.probe("riding")
     if lost or riding != 1:
         raise CheckFailed(f"Space put the player out of the seat for {lost} ticks (riding {riding})")
@@ -223,7 +240,7 @@ def space_keeps_rider(ctx):
 
 def sneak_dismounts(ctx):
     ctx.fresh_truck()
-    ctx.keys.hold([SNEAK_KEY], 0.6)
+    ctx.hold([SNEAK_KEY], 0.6)
     riding = ctx.probe("riding")
     if riding != 0:
         raise CheckFailed(f"after Sneak the player is still in seat {riding}")
@@ -248,7 +265,7 @@ def select_checks(only):
     return [name for name in CHECKS if name in names]
 
 
-def run_client_input(root, config, run_id, output, only=None):
+def run_client_input(root, config, run_id, output, only=None, trace=False):
     """Deploy, launch, connect, run the checks, close; returns the report stage."""
     names = select_checks(only)
     client_dir = output / "client-input"
@@ -277,18 +294,21 @@ def run_client_input(root, config, run_id, output, only=None):
             frames.mkdir(exist_ok=True)
             connect_client(keys, channel, lambda: linux.chat_open(linux.capture(frames)))
             channel.subscribe("PlayerMessage")
-            ctx = Context(channel, keys, base=None, entity=config["entity_id"])
+            ctx = Context(channel, keys, base=None, entity=config["entity_id"], trace=trace)
             me = query_targets(ctx.run("querytarget @s"))[0]["position"]
             ctx.base = (math.floor(me["x"]), math.floor(me["y"]), math.floor(me["z"]))
             prepare_arena(ctx)
             for name in names:
                 started = time.monotonic()
                 entry = {"name": name}
+                ctx.samples, ctx.started = [], started
                 try:
                     entry.update(status="passed", detail=CHECKS[name](ctx))
                 except CheckFailed as error:
                     entry.update(status="failed", error=str(error))
                 entry["seconds"] = round(time.monotonic() - started, 1)
+                if trace:
+                    entry["trace"] = ctx.samples
                 shot = client_dir / name
                 shot.mkdir(exist_ok=True)
                 with contextlib.suppress(Exception):

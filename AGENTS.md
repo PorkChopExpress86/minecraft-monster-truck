@@ -18,4 +18,4 @@ After finishing changes to `behavior_packs/`, `resource_packs/`, or `scripts/`, 
 
 ### Testing
 
-Before treating a passing Scenario Run as proof that a player-reported bug is fixed, read the blind spots in `docs/LINUX_TESTING.md`.
+A green Scenario Run does not prove a player-reported bug fixed. For key, input or dismount bugs, reproduce with `./test-addon.sh Client`; for the rest, read the blind spots in `docs/LINUX_TESTING.md`.

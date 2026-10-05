@@ -397,6 +397,9 @@ class World:
             return {"statusCode": 0, "statusMessage": f"- mt_probe: {self.riding} (mt_probe)"}
         if line == "scoreboard players list lost":
             return {"statusCode": 0, "statusMessage": f"- mt_probe: {self.lost} (mt_probe)"}
+        if line in ("scoreboard players list sneaking", "scoreboard players list sneak_button",
+                    "scoreboard players list jump"):
+            return {"statusCode": 0, "statusMessage": "- mt_probe: 0 (mt_probe)"}
         return {"statusCode": 0, "statusMessage": "ok"}
 
 
@@ -423,6 +426,24 @@ class WorldInput(FakeInput):
 def run_check(name, world):
     ctx = client_checks.Context(world, WorldInput(world), base=(0, -60, 0), sleep=lambda s: None)
     return client_checks.CHECKS[name](ctx)
+
+
+def test_trace_samples_every_probe_score_while_keys_are_held():
+    world = World()
+    ctx = client_checks.Context(world, WorldInput(world), base=(0, -60, 0), sleep=lambda s: None, trace=True)
+    client_checks.CHECKS["sneak_dismounts"](ctx)
+    assert ctx.samples, "a traced hold records probe samples"
+    sample = ctx.samples[0]
+    assert sample["keys"] == [client_checks.SNEAK_KEY]
+    assert {name: sample[name] for name in client_checks.TRACE_SCORES} == \
+        {"riding": 1, "lost": 0, "sneaking": 0, "sneak_button": 0, "jump": 0}
+
+
+def test_without_trace_holds_record_nothing():
+    world = World()
+    ctx = client_checks.Context(world, WorldInput(world), base=(0, -60, 0), sleep=lambda s: None)
+    client_checks.CHECKS["sneak_dismounts"](ctx)
+    assert ctx.samples == []
 
 
 def test_a_must_turn_left_and_d_right():

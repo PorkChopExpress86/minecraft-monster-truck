@@ -14,6 +14,10 @@ Tests hard-code spec-defining outcomes: what `CONTEXT.md` terms and the ADRs pro
 
 Production scripts wrap Script API calls in `try`/`catch` so one bad entity cannot stop the tick loop. Keep each `try` around one engine call or one tightly related group, so a failure drops only that work: the handbrake read has its own `try`, separate from the movement read. Flag a `try` that spans independent pieces of work.
 
+## Scenarios don't fake engine-owned player state
+
+A scenario that writes state the engine sets from player input (`isSneaking`, rider lists, button state) to stand in for that input proves only the add-on's reaction to it. Its row in `docs/ACCEPTANCE_COVERAGE.md` names the Client Input Run check that proves the input itself, or says it has none. `two_seat_drop` set `isSneaking` on a seated rider; the real client never reports it, and the add-on blocked every Sneak exit until a Client Input Run showed it.
+
 ## Driver input enters through `driverInput`
 
 Read driver keys and buttons only through `driverInput` in `main.js`. Scenario Runs supply a Simulated Driver's input through that seam (ADR-0016); input read anywhere else is invisible to them.
