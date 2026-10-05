@@ -472,6 +472,12 @@ def test_sneak_must_dismount():
         run_check("sneak_dismounts", World(riding_after_sneak=0, jump_back_on=False))
 
 
+def test_sneak_with_space_held_must_dismount():
+    assert run_check("space_sneak_exits", World(riding_after_sneak=0))
+    with pytest.raises(client_checks.CheckFailed, match="still in seat 1"):
+        run_check("space_sneak_exits", World(riding_after_sneak=1))
+
+
 def test_focus_is_taken_before_the_first_key_with_a_few_activation_attempts():
     calls = {"activate": 0, "guard": 0}
 

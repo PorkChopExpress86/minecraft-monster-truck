@@ -151,7 +151,8 @@ function restoreProtectedRiders(getEntity, landing, rideable) {
  *   jumpedRecently?(player: import("./truck_tick.js").WorldEntity): boolean,
  * }} frame dy: height change since last tick; heading: unit direction of travel;
  *   riderIds / prevRiderIds: seated rider ids this tick and last tick;
- *   jumpedRecently: the player holds Jump (Space) or did within the last few ticks.
+ *   jumpedRecently: the player holds Jump (Space) or did within the last few ticks, while Space can still
+ *   dismount them (their Jump input is not locked).
  */
 export function stepLanding(truck, dimension, landing, frame) {
   const {

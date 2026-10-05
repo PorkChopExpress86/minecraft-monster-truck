@@ -293,6 +293,16 @@ test("an exit without Space on steady ground is still let go, even after an old 
   assert.ok(!world.truck.seated.includes(rider), "a Space press long before is not this exit's cause");
 });
 
+test("with Jump locked (#40) Space cannot dismount, so a rider who leaves holding Space left by Sneak", () => {
+  const rider = createFakePlayer({ id: "rider" });
+  const jumping = new Set(["rider"]);
+  const world = scene({ riders: [rider], driverInput: jumpInput(jumping) });
+  rider.inputPermissions.setPermissionCategory(6, false); // InputPermissionCategory.Jump, as main.js locks it
+  world.step();
+  world.step(() => world.truck.detach(rider));
+  assert.ok(!world.truck.seated.includes(rider), "handbrake held, then Shift: the rider is let go");
+});
+
 test("a Sneak exit soon after a Space re-seat is let go: Space opens no drop window", () => {
   const rider = createFakePlayer({ id: "rider" });
   const jumping = new Set(["rider"]);

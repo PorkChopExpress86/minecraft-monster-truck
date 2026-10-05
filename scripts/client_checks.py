@@ -254,8 +254,22 @@ def sneak_dismounts(ctx):
     return "Sneak got the player out of the truck, they stayed out, and Jump works again"
 
 
+def space_sneak_exits(ctx):
+    ctx.fresh_truck()
+    ctx.hold(["space"], 0.5)  # the handbrake held, then Sneak with it still down
+    ctx.hold(["space", SNEAK_KEY], 0.6)
+    riding = ctx.probe("riding")
+    if riding != 0:
+        raise CheckFailed(f"with Space held, Sneak left the player still in seat {riding}")
+    ctx.sleep(1.0)
+    riding = ctx.probe("riding")
+    if riding != 0:
+        raise CheckFailed(f"with Space held, Sneak got the player out, but the add-on put them back in seat {riding}")
+    return "With the handbrake held, Sneak got the player out of the truck, and they stayed out"
+
+
 CHECKS = {check.__name__: check for check in
-          (w_drives, a_turns_left, d_turns_right, space_keeps_rider, sneak_dismounts)}
+          (w_drives, a_turns_left, d_turns_right, space_keeps_rider, sneak_dismounts, space_sneak_exits)}
 
 
 def select_checks(only):

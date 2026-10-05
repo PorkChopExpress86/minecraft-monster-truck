@@ -90,6 +90,9 @@ import { createLandingState, releaseLanding, stepLanding } from "./landing.js";
 // ticks of the rider holding Jump is that dismount, not a Sneak exit (landing.js). Measured in the real
 // client: Jump reads pressed the tick before such an exit and for 4+ ticks after it (Client Input Run).
 const SPACE_EXIT_GRACE_TICKS = 3;
+// InputPermissionCategory.Jump (@minecraft/server), spelled out so node can load this module. main.js turns
+// it off for seated players (#40), and then Space cannot dismount them: any exit is Sneak, Space held or not.
+const JUMP_PERMISSION = 6;
 
 // Horizontal velocity the engine keeps per tick while airborne; measured in
 // docs/agents/bedrock-physics.md (Air row) — read it before retuning.
@@ -193,6 +196,9 @@ export function tickTruck(truck, dimension, state, input, tick) {
     if (tickNumber - heldAt > SPACE_EXIT_GRACE_TICKS) state.jumpHeldAt.delete(riderId);
   }
   const jumpedRecently = (player) => {
+    try {
+      if (!player.inputPermissions.isPermissionCategoryEnabled(JUMP_PERMISSION)) return false;
+    } catch {}
     try {
       if (driverInput.handbrake(player)) return true;
     } catch {}
