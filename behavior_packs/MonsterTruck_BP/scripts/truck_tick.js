@@ -283,33 +283,7 @@ export function tickTruck(truck, dimension, state, input, tick) {
     truck.setProperty("blake:steer_angle", state.steerAngle);
   } catch {}
 
-  // Update dynamic pitch angle and sync to property
-  const truckRot = truck.getRotation ? truck.getRotation() : { y: 0 };
-  const headRad = (truckRot.y + 90) * (Math.PI / 180);
-  const headX = Math.cos(headRad);
-  const headZ = Math.sin(headRad);
-
-  const frontX = loc.x + headX * AXLE_OFFSET;
-  const frontZ = loc.z + headZ * AXLE_OFFSET;
-  const rearX = loc.x - headX * AXLE_OFFSET;
-  const rearZ = loc.z - headZ * AXLE_OFFSET;
-
-  const frontHeight = sampleGroundHeight(dimension, frontX, loc.y, frontZ);
-  const rearHeight = sampleGroundHeight(dimension, rearX, loc.y, rearZ);
   const verticalVelocity = vel ? vel.y : dy;
-
-  state.pitchAngle = calculateDynamicPitch({
-    frontHeight,
-    rearHeight,
-    currentPitch: state.pitchAngle || 0,
-    isAirborne: Boolean(state.landing.isFalling),
-    inLiquid: inWater || inLava,
-    verticalVelocity,
-    horizontalSpeed: effectiveSpeed
-  });
-  try {
-    truck.setProperty("blake:pitch_angle", state.pitchAngle);
-  } catch {}
 
   // Shoreline Step-Up: driving forward against a bank flush with the liquid surface or up to
   // 2 blocks above it lifts the truck out. Propulsion on liquids is the driving above.
@@ -414,6 +388,33 @@ export function tickTruck(truck, dimension, state, input, tick) {
     protectedRiders,
     jumpedRecently
   });
+
+  // Dynamic Incline Pitch, after the drop lifecycle so this tick's takeoff or landing picks the branch.
+  const truckRot = truck.getRotation ? truck.getRotation() : { y: 0 };
+  const headRad = (truckRot.y + 90) * (Math.PI / 180);
+  const headX = Math.cos(headRad);
+  const headZ = Math.sin(headRad);
+
+  const frontX = loc.x + headX * AXLE_OFFSET;
+  const frontZ = loc.z + headZ * AXLE_OFFSET;
+  const rearX = loc.x - headX * AXLE_OFFSET;
+  const rearZ = loc.z - headZ * AXLE_OFFSET;
+
+  const frontHeight = sampleGroundHeight(dimension, frontX, loc.y, frontZ);
+  const rearHeight = sampleGroundHeight(dimension, rearX, loc.y, rearZ);
+
+  state.pitchAngle = calculateDynamicPitch({
+    frontHeight,
+    rearHeight,
+    currentPitch: state.pitchAngle || 0,
+    isAirborne: Boolean(state.landing.isFalling),
+    inLiquid: inWater || inLava,
+    verticalVelocity,
+    horizontalSpeed: effectiveSpeed
+  });
+  try {
+    truck.setProperty("blake:pitch_angle", state.pitchAngle);
+  } catch {}
 
   // Tire Trample, Molten Tire Trample, and heavy collisions with what the truck touches.
   stepContact(truck, dimension, {

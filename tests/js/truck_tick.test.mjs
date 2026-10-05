@@ -583,6 +583,14 @@ test("wood demolition needs momentum over 0.25 blocks/tick; foliage shears at an
   assert.equal(empty.typeAt(1, GROUND_Y + 1, 1), "minecraft:oak_leaves", "no shearing without a driver");
 });
 
+test("pitch follows a drop from the tick the drop is first seen", () => {
+  const world = scene();
+  world.step(() => world.truck.moveTo({ y: GROUND_Y + 10 }, { velocity: { y: 0 }, isOnGround: false }));
+  assert.equal(world.truck.properties["blake:pitch_angle"], 0, "hanging still, out of the axles' reach");
+  world.step(() => world.truck.moveTo({ y: GROUND_Y + 9.5 }, { velocity: { y: -0.5 }, isOnGround: false }));
+  assert.ok(world.truck.properties["blake:pitch_angle"] < 0, "nose down on the first falling tick, not one later");
+});
+
 test("the truck owns its yaw and shows steering and pitch on its properties", () => {
   const driver = createFakePlayer({ id: "driver" });
   const world = scene({ riders: [driver], driverInput: fixedInput({ strafe: 1 }) });

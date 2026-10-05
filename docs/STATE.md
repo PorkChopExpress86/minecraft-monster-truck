@@ -55,6 +55,7 @@ v1.0.9 (Sneak-exit fix + #40 Jump lock 027a0e6) installed to the local flatpak c
 - Scenario server: official BDS zip sha256 f6348d84...71c6 cached in dist/bedrock-tests/cache; image itzg/minecraft-bedrock-server@sha256:42004bb6...; needs ONLINE_MODE=false, ALLOW_LIST=false, docker -t (else stdout block-buffered); modules @minecraft/server 2.11.0-beta + @minecraft/server-gametest 1.0.0-beta; spawnSimulatedPlayer(DimensionLocation, name, GameMode) top-level.
 - Desktop: KDE Wayland; spectacle installed; no xdotool/ydotool.
 ## Done
+- One-tick pitch lag (2026-10-04) — RESULT: truck_tick.js computes pitch after stepLanding, so takeoff and landing pick the branch on their own tick; node test red->green ('pitch follows a drop from the tick the drop is first seen'), Scenario Run 7f37c28d 22/22 (incline_pitch 1:2 24.4/-24.8, 1:3 18.5/-21.9, 1:1 35.0/-34.7).
 - Client Input Run + Sneak-exit fix (2026-10-04, bb96bde) — RESULT: Client Input Run 701ce9d0 5/5 (W 19.7 blocks, A -67.0, D +69.0, Space 0.00 creep and seated every probe tick, Sneak exits and stays out), Scenario Run 1b703a2d 22/22, pytest 215, node 51. Cause: a riding player never reads isSneaking, so landing.js re-seated every Sneak exit; now re-seats only in drop windows or within 3 ticks of Jump.
 - Human-ticket automation (2026-10-04, 655a5c4) — RESULT: crush_stomp/trample spare tamed wolf, bystander player, parked truck; retrieval by real punches, zombie and lightning kills; seat_swap; ACCEPTANCE_COVERAGE rows 6/19/20/23 Automated.
 - Open-tickets pass (2026-10-03) — RESULT: closed #26 #38 #39 #25 #33; qualifying run 89a23a43 @ 9413ce1 (Static + 21/21 + Linux Client Smoke Run); CI green.
@@ -63,7 +64,6 @@ v1.0.9 (Sneak-exit fix + #40 Jump lock 027a0e6) installed to the local flatpak c
 ## Open items
 - #40 IMPLEMENTED (2026-10-04): main.js lockJump/JUMP_LOCK turns a seated player's Jump input permission off and back on (exit, truck gone, rejoin; never for a Jump someone else turned off); re-seat stays. Evidence: Client run 8565956a with re-seat disabled 2/2 (space_keeps_rider seated every tick, 0.00 creep; sneak_dismounts); query shows Jump disabled seated, enabled after Sneak; full Client 5/5 (5754e3a2), Scenario Run fcbe4d4d 22/22.
 - NOTED (not done): a rider holding Space while pressing Sneak is re-seated (Sneak never reads on a riding player), so the handbrake must be released before Sneak exits.
-- NOTED (not done): one-tick pitch lag — state.isFalling read before update in truck_tick.js (Q3: left alone).
 - NOTED (not done): truck_tick.js:183 `currentRiders.map((r) => r.id)` throws if getRiders() ever yields undefined (only seen with cross-runtime simulated players).
 - PROVING_GROUND item 7 still says '0.55 cruising speed' (movement attribute wording); left as-is.
 ## Failed attempts
