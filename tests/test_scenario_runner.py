@@ -2,6 +2,7 @@
 import io
 import json
 from pathlib import Path
+import re
 import struct
 import subprocess
 import zipfile
@@ -150,6 +151,17 @@ def test_only_narrows_scenarios_in_configured_order_and_rejects_unknown_names():
     for bad in ("jump", "", "smoke,jump"):
         with pytest.raises(scenarios.ScenarioError, match="choose from: smoke, seats, handbrake"):
             scenarios.select_scenarios(config, bad)
+
+
+def test_every_configured_scenario_is_exported_and_every_export_is_configured():
+    # An unexported name only fails as "Unknown scenario" inside a Scenario Run; an unconfigured
+    # export never runs at all.
+    source = (REPO_ROOT / "testing/scenarios/scenarios.js").read_text(encoding="utf-8")
+    block = re.search(r"export const SCENARIOS = \{([^}]*)\};", source)
+    assert block, "scenarios.js must export a SCENARIOS object literal"
+    exported = [name.strip() for name in block.group(1).split(",") if name.strip()]
+    configured = json.loads((REPO_ROOT / "testing/bedrock.json").read_text())["scenario_server"]["scenarios"]
+    assert sorted(exported) == sorted(configured)
 
 
 def tmp_repo(tmp_path):

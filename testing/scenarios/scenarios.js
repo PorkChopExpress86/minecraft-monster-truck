@@ -1,6 +1,7 @@
 import { Direction, GameMode, ItemStack, system, world, EntityDamageCause } from "@minecraft/server";
 import { driverInput } from "../main.js";
 import { DRIVING, headingVector } from "../driving.js";
+import { HIT_COOLDOWN_TICKS } from "../contact.js";
 import {
   board, drive, fill, health, horizontal, park, resetArena, riders, spawnTruck, wait,
 } from "./arena.js";
@@ -46,7 +47,7 @@ async function recordTruckHits(fn) {
       const target = event.hurtEntity;
       hits.push({
         target, typeId: target.typeId, damage: event.damage, cause: event.damageSource.cause,
-        at: { ...target.location }, truckAt: { ...truck.location },
+        at: { ...target.location }, truckAt: { ...truck.location }, tick: system.currentTick,
       });
     }
   });
@@ -56,6 +57,53 @@ async function recordTruckHits(fn) {
     world.afterEvents.entityHurt.unsubscribe(listener);
   }
   return hits;
+}
+
+// One authoritative Tire Trample damage path: no target is hit twice by the same truck inside
+// the hit cooldown (a second damage source would land in the same contact).
+function assertNoDuplicateHits(hits, label) {
+  for (const [i, hit] of hits.entries()) {
+    const twin = hits.slice(i + 1).find(other => other.target.id === hit.target.id && other.tick - hit.tick < HIT_COOLDOWN_TICKS);
+    if (twin) {
+      throw new Error(`${label}: ${hit.typeId} hit twice within ${HIT_COOLDOWN_TICKS} ticks: ` +
+        JSON.stringify([hit, twin].map(h => [h.tick, h.cause, h.damage])));
+    }
+  }
+}
+
+// Bystanders that Crush Stomp and Tire Trample must spare: another player (spawned once per
+// scenario and parked until placed) and a wolf tamed to that player. The owner stands near the
+// wolf: a tamed wolf teleports to an owner far away, which would carry it off the test spot.
+function tamedWolf(dimension, owner, location) {
+  const wolf = dimension.spawnEntity("minecraft:wolf", location);
+  if (!wolf.getComponent("minecraft:tameable")?.tame(owner)) throw new Error("Could not tame the wolf to " + owner.name);
+  // Slowness keeps the wolf from following its owner out of place.
+  wolf.addEffect("slowness", 400, { amplifier: 255, showParticles: false });
+  return wolf;
+}
+
+// Truck-sourced hits on, and health lost by, each bystander; empty when all were spared.
+function bystanderHarm(hits, bystanders) {
+  const harm = [];
+  for (const { label, entity, before } of bystanders) {
+    const taken = hits.filter(hit => hit.target.id === entity.id);
+    const now = entity.isValid ? health(entity) : "gone";
+    if (taken.length || now !== before) harm.push(`${label}: ${JSON.stringify(taken.map(h => [h.cause, h.damage]))} health ${before} -> ${now}`);
+  }
+  return harm;
+}
+
+// Deliberate exit: Sneak. A Simulated Driver sends no key presses, and setting isSneaking does
+// not dismount it, so the sneaking rider is ejected; the add-on reads isSneaking to tell a
+// deliberate exit from an engine detachment. The caller resets isSneaking.
+async function sneakOut(truck, player) {
+  player.isSneaking = true;
+  await wait(1);
+  const engineDismount = !riders(truck).some(rider => rider?.id === player.id);
+  if (!engineDismount) truck.getComponent("minecraft:rideable").ejectRider(player);
+  await wait(1);
+  if (riders(truck).some(rider => rider?.id === player.id)) throw new Error(`${player.name} did not leave the truck`);
+  return `${player.name} ${engineDismount ? "dismounted by sneaking" : "ejected while sneaking (sneak alone did not dismount)"}`;
 }
 
 async function smoke({ dimension, origin, driver, run }) {
@@ -279,28 +327,57 @@ async function handbrake({ dimension, origin, driver, run }) {
   return checks;
 }
 
-async function crush_stomp({ dimension, origin, driver, run }) {
+// Crush Stomp reaches every entity within this distance of the landing (landing.js).
+const CRUSH_STOMP_RADIUS = 3.5;
+
+async function crush_stomp({ dimension, origin, driver, run, spawnPlayer }) {
   const checks = [];
+  const bystander = spawnPlayer("SimulatedBystander");
+  await wait(10);
   for (const height of [4, 2]) {
     park(driver, origin);
+    park(bystander, origin);
     resetArena(dimension, origin);
     // A ledge of the given height; drive off it slowly and land on a mob placed beneath the
     // truck just before touchdown, so no Tire Trample hit precedes the landing.
     fill(dimension, at(origin, -4, 0), at(origin, 4, 8, GROUND_Y + height - 1), "stone");
     const top = GROUND_Y + height;
     const truck = spawnTruck(dimension, run, at(origin, 0, 3, top));
+    const stomping = height >= 3;
+    // On the stomping drop, a tamed wolf, another player, and a parked truck stand inside the
+    // Crush Stomp radius beside the landing; they wait clear of the ledge until placed.
+    const wolf = stomping ? tamedWolf(dimension, bystander, at(origin, -8, -4)) : undefined;
     await wait(10);
     await board(driver, truck, 0);
     let placed = false;
+    const bystanders = [];
     const hits = await recordTruckHits(async () => {
       await drive(driver, 40, {
         forward: 0.3,
         onTick: () => {
           if (!placed && truck.location.y < GROUND_Y + 1.5) {
             placed = true;
-            dimension.spawnEntity("minecraft:zombie", { x: truck.location.x, y: GROUND_Y, z: truck.location.z });
+            const t = truck.location;
+            dimension.spawnEntity("minecraft:zombie", { x: t.x, y: GROUND_Y, z: t.z });
+            if (stomping) {
+              wolf.teleport({ x: t.x + 2.3, y: GROUND_Y, z: t.z });
+              bystander.teleport({ x: t.x + 2.3, y: GROUND_Y, z: t.z + 2 });
+              const parked = spawnTruck(dimension, run, { x: t.x - 3.0, y: GROUND_Y, z: t.z + 0.5 });
+              bystanders.push(
+                { label: "tamed wolf", entity: wolf, before: health(wolf) },
+                { label: "bystander player", entity: bystander, before: health(bystander) },
+                { label: "parked truck", entity: parked, before: health(parked) });
+            }
           }
-          return placed && truck.location.y < GROUND_Y + 0.05;
+          const landed = placed && truck.location.y < GROUND_Y + 0.05;
+          // Crush Stomp measures its radius from the truck at touchdown; the shockwave's impulse
+          // only moves them on a later tick.
+          if (landed) {
+            for (const bystander of bystanders) {
+              bystander.atLanding = bystander.entity.isValid ? horizontal(bystander.entity.location, truck.location) : Infinity;
+            }
+          }
+          return landed;
         },
       });
       await wait(10);
@@ -312,9 +389,19 @@ async function crush_stomp({ dimension, origin, driver, run }) {
     if (crush && crush.damage < 60) throw new Error("Crush Stomp damage below lethal threshold: " + crush.damage);
     if (height < 3 && crush) throw new Error(`${height}-block drop Crush Stomped (drops under 3 blocks must not)`);
     if (health(driver) !== PLAYER_MAX_HEALTH) throw new Error("Driver was hurt by the landing: " + health(driver));
-    checks.push(height >= 3
+    const harm = bystanderHarm(hits, bystanders);
+    if (harm.length) throw new Error(`${height}-block Crush Stomp hurt a protected bystander: ${harm.join("; ")}`);
+    // Every bystander must have been inside the radius at touchdown, or sparing it proves nothing.
+    for (const { label, atLanding } of bystanders) {
+      if (!(atLanding < CRUSH_STOMP_RADIUS)) throw new Error(`${label} was ${atLanding?.toFixed(2)} blocks from the landing, outside the Crush Stomp radius`);
+    }
+    checks.push(stomping
       ? `${height}-block drop: Crush Stomp dealt ${crush.damage} damage to the mob beneath; driver unhurt`
       : `${height}-block drop: no Crush Stomp`);
+    if (stomping) {
+      checks.push(`${height}-block drop: a tamed wolf, another player, and a parked truck inside the radius ` +
+        `(${bystanders.map(b => b.atLanding.toFixed(2)).join(", ")} blocks at touchdown) were not hit and lost no health`);
+    }
   }
   return checks;
 }
@@ -367,20 +454,8 @@ async function two_seat_drop({ dimension, origin, driver, run, spawnPlayer }) {
   checks.push(`${height}-block drop with both seats taken: truck ${healths.truck}/${TRUCK_MAX_HEALTH}, ` +
     `driver and passenger ${PLAYER_MAX_HEALTH}/${PLAYER_MAX_HEALTH}, both still seated`);
 
-  // Deliberate exit: Sneak. A Simulated Driver sends no key presses, and setting isSneaking does
-  // not dismount it, so the sneaking rider is ejected; the add-on reads isSneaking to tell a
-  // deliberate exit from an engine detachment.
-  const rideable = truck.getComponent("minecraft:rideable");
-  const sneakOut = async player => {
-    player.isSneaking = true;
-    await wait(1);
-    const engineDismount = !riders(truck).some(rider => rider?.id === player.id);
-    if (!engineDismount) rideable.ejectRider(player);
-    await wait(1);
-    if (riders(truck).some(rider => rider?.id === player.id)) throw new Error(`${player.name} did not leave the truck`);
-    return `${player.name} ${engineDismount ? "dismounted by sneaking" : "ejected while sneaking (sneak alone did not dismount)"}`;
-  };
-  const passengerExit = await sneakOut(passenger);
+  // Deliberate exit by Sneak (sneakOut).
+  const passengerExit = await sneakOut(truck, passenger);
   // Inside the landing window: fall damage to the passenger who left must land; to the driver
   // still seated it must be cancelled (the control showing the window is still open).
   const before = { driver: health(driver), passenger: health(passenger) };
@@ -397,7 +472,7 @@ async function two_seat_drop({ dimension, origin, driver, run, spawnPlayer }) {
   checks.push(`${passengerExit}; ${probeTick} ticks after landing, 4 fall damage hurt the passenger who left ` +
     `(${before.passenger} -> ${hurt.passenger}) and was cancelled for the driver still seated (${hurt.driver})`);
 
-  const driverExit = await sneakOut(driver);
+  const driverExit = await sneakOut(truck, driver);
   for (const player of [driver, passenger]) player.isSneaking = false;
   checks.push("Sneak exit: " + driverExit);
 
@@ -647,7 +722,7 @@ async function shoreline_wall({ dimension, origin, driver, run }) {
   return checks;
 }
 
-async function trample({ dimension, origin, driver, run }) {
+async function trample({ dimension, origin, driver, run, spawnPlayer }) {
   const checks = [];
   const truck = spawnTruck(dimension, run, at(origin, 0, 2));
   await wait(10);
@@ -691,6 +766,7 @@ async function trample({ dimension, origin, driver, run }) {
       // Knockback is an impulse the engine applies on its next move, so it shows as displacement.
       await wait(2);
     });
+    assertNoDuplicateHits(hits, `input ${forward}`);
     const hit = hits.find(entry => entry.target.id === pig.id);
     if (!hit) {
       throw new Error(`Truck at input ${forward} never trampled the pig: truck z=${(runner.location.z - origin.z).toFixed(1)}, ` +
@@ -720,6 +796,57 @@ async function trample({ dimension, origin, driver, run }) {
     runs.map(r => `input ${r.forward}: ${r.speed.toFixed(2)} blocks/tick -> ${r.damage}`).join("; "));
   checks.push("knockback throws the pig up and away from the truck (2-tick displacement for pig offset from truck): " + runs.map(r =>
     `(${r.v.x.toFixed(2)}, ${r.v.y.toFixed(2)}, ${r.v.z.toFixed(2)}) for (${r.outward.x.toFixed(2)}, ${r.outward.z.toFixed(2)})`).join("; "));
+
+  // Exclusions: one full-speed pass through a pig (the control: Tire Trample is live), then a
+  // tamed wolf, another player, and a parked truck in the truck's path.
+  const bystanderPlayer = spawnPlayer("SimulatedBystander");
+  park(driver, origin);
+  resetArena(dimension, origin);
+  const runner = spawnTruck(dimension, run, at(origin, 0, -4));
+  await wait(10);
+  await board(driver, runner, 0);
+  const pig = dimension.spawnEntity("minecraft:pig", at(origin, 1.5, 12));
+  pig.addEffect("slowness", 200, { amplifier: 255, showParticles: false });
+  bystanderPlayer.teleport(at(origin, 1.5, 24));
+  const wolfSpot = at(origin, -1.5, 18);
+  const wolf = tamedWolf(dimension, bystanderPlayer, wolfSpot);
+  const parked = spawnTruck(dimension, run, at(origin, 0, 32));
+  await wait(5);
+  if (horizontal(wolf.location, wolfSpot) > 1) {
+    throw new Error(`Tamed wolf left its spot in the truck's path: now ${horizontal(wolf.location, wolfSpot).toFixed(2)} blocks away`);
+  }
+  const bystanders = [
+    { label: "tamed wolf", entity: wolf, before: health(wolf), closest: Infinity },
+    { label: "bystander player", entity: bystanderPlayer, before: health(bystanderPlayer), closest: Infinity },
+    { label: "parked truck", entity: parked, before: health(parked), closest: Infinity },
+  ];
+  const hits = await recordTruckHits(async () => {
+    await drive(driver, 80, {
+      onTick: () => {
+        for (const bystander of bystanders) {
+          if (bystander.entity.isValid) bystander.closest = Math.min(bystander.closest, horizontal(runner.location, bystander.entity.location));
+        }
+        return runner.location.z > origin.z + 29;
+      },
+    });
+    await wait(4);
+  });
+  assertNoDuplicateHits(hits, "exclusion pass");
+  if (!hits.some(hit => hit.target.id === pig.id && hit.cause === EntityDamageCause.entityAttack)) {
+    throw new Error("Exclusion pass: the control pig was not trampled, so the pass proves nothing");
+  }
+  const harm = bystanderHarm(hits, bystanders);
+  if (harm.length) throw new Error(`Tire Trample hurt a protected bystander: ${harm.join("; ")}`);
+  // Spared only counts if within reach: the wolf and the player in the truck's 2.25-wide path
+  // (pig hits land at 1.5 off center), the parked truck in a collision (2.25 apart).
+  for (const { label, closest } of bystanders) {
+    const reach = label === "parked truck" ? 2.6 : 1.6;
+    if (!(closest <= reach)) throw new Error(`Exclusion pass: truck came no closer than ${closest.toFixed(2)} blocks to the ${label}`);
+  }
+  checks.push("full-speed pass: trampled the control pig, then drove through a tamed wolf, another player, and into a parked truck " +
+    `(closest ${bystanders.map(b => b.closest.toFixed(2)).join(", ")} blocks) with no hit and no health lost`);
+  checks.push(`no target hit twice by a truck within ${HIT_COOLDOWN_TICKS} ticks in the full-speed pass, ` +
+    "nor within the 2 ticks recorded after each speed run's hit");
   return checks;
 }
 
@@ -856,36 +983,135 @@ async function spawn_sources({ dimension, origin, driver, run }) {
 
 async function retrieval({ dimension, origin, driver, run }) {
   const location = at(origin, 0, 6);
-  const drops = () => {
+  const clear = () => dimension.getEntities({ type: "minecraft:item", location, maxDistance: 6 }).forEach(item => item.remove());
+  // A killed entity can stay valid through its death animation.
+  const dead = truck => !truck.isValid || health(truck) <= 0;
+  // Items are counted as they spawn, so drops that land in fire (lightning ignites the ground)
+  // still count. kill(truck) destroys the truck and resolves once it is gone.
+  const destroy = async kill => {
+    clear();
     const totals = new Map();
-    for (const item of dimension.getEntities({ type: "minecraft:item", location, maxDistance: 6 })) {
-      const stack = item.getComponent("minecraft:item")?.itemStack;
+    const spawned = world.afterEvents.entitySpawn.subscribe(({ entity }) => {
+      if (entity.typeId !== "minecraft:item" || horizontal(entity.location, location) > 6) return;
+      const stack = entity.getComponent("minecraft:item")?.itemStack;
       if (stack) totals.set(stack.typeId, (totals.get(stack.typeId) || 0) + stack.amount);
+    });
+    try {
+      const truck = spawnTruck(dimension, run, location);
+      await wait(5);
+      await kill(truck);
+      if (!dead(truck)) throw new Error("truck survived: health " + health(truck));
+      await wait(10);
+    } finally {
+      world.afterEvents.entitySpawn.unsubscribe(spawned);
     }
+    clear();
     return totals;
   };
-  const clear = () => dimension.getEntities({ type: "minecraft:item", location, maxDistance: 6 }).forEach(item => item.remove());
-  const destroy = async (cause, damagingEntity) => {
-    clear();
-    const truck = spawnTruck(dimension, run, location);
-    await wait(5);
-    truck.applyDamage(5000, damagingEntity ? { cause, damagingEntity } : { cause });
-    await wait(10);
-    return drops();
+  const applied = cause => async truck => {
+    truck.applyDamage(5000, { cause });
+    await wait(2);
   };
-  const retrieved = await destroy(EntityDamageCause.entityAttack, driver);
+  const scrapOnly = (drops, label) => {
+    if ((drops.get("minecraft:iron_ingot") || 0) < 1 || drops.has("blake:monster_truck_vehicle")) {
+      throw new Error(`${label} must drop Scrap only: ${JSON.stringify([...drops])}`);
+    }
+  };
+
+  // A real swing from a Survival player, with the truck worn down first: the blow that would
+  // kill it returns the Vehicle Item.
+  let swings = 0;
+  const retrieved = await destroy(async truck => {
+    truck.getComponent("minecraft:health").setCurrentValue(1);
+    for (let tick = 0; tick < 100 && !dead(truck); tick++) {
+      if (driver.attackEntity(truck)) swings++;
+      await wait(1);
+    }
+  });
   if (retrieved.get("blake:monster_truck_vehicle") !== 1 || retrieved.has("minecraft:iron_ingot")) {
     throw new Error("Player-fatal retrieval must return exactly one Vehicle Item: " + JSON.stringify([...retrieved]));
   }
-  const checks = ["player-fatal dismantling returns exactly one Vehicle Item"];
+  const checks = [`a player's punches (${swings} swings at a worn-down truck) return exactly one Vehicle Item and no Scrap`];
+
   for (const cause of [EntityDamageCause.entityExplosion, EntityDamageCause.lava, EntityDamageCause.fire]) {
-    const scrap = await destroy(cause);
-    if ((scrap.get("minecraft:iron_ingot") || 0) < 1 || scrap.has("blake:monster_truck_vehicle")) {
-      throw new Error(`${cause} destruction must drop Scrap only: ${JSON.stringify([...scrap])}`);
-    }
+    scrapOnly(await destroy(applied(cause)), `${cause} destruction`);
   }
-  clear();
   checks.push("explosion, lava, and fire destruction drop Scrap only");
+
+  // Mob combat: a zombie's fatal blow.
+  const zombie = dimension.spawnEntity("minecraft:zombie", at(origin, 6, 6));
+  try {
+    scrapOnly(await destroy(async truck => {
+      truck.applyDamage(5000, { cause: EntityDamageCause.entityAttack, damagingEntity: zombie });
+      await wait(2);
+    }), "a zombie's fatal blow");
+  } finally {
+    if (zombie.isValid) zombie.remove();
+  }
+  checks.push("a zombie's fatal blow drops Scrap only");
+
+  // Lightning: a real bolt on a worn-down truck; the killing blow must be the lightning itself.
+  let killedBy;
+  const died = world.afterEvents.entityDie.subscribe(event => {
+    if (event.deadEntity.typeId === run.entity_id) killedBy = event.damageSource.cause;
+  });
+  try {
+    scrapOnly(await destroy(async truck => {
+      truck.getComponent("minecraft:health").setCurrentValue(1);
+      dimension.spawnEntity("minecraft:lightning_bolt", truck.location);
+      for (let tick = 0; tick < 40 && !dead(truck); tick++) await wait(1);
+    }), "a lightning kill");
+  } finally {
+    world.afterEvents.entityDie.unsubscribe(died);
+  }
+  if (killedBy !== EntityDamageCause.lightning) throw new Error("Lightning test truck was killed by " + killedBy);
+  checks.push("a lightning strike's fatal blow drops Scrap only");
+  return checks;
+}
+
+// Two players share the truck and swap seats: both leave by Sneak, the passenger takes the Driver
+// Seat and the first driver the Passenger Seat. Only whoever holds seat 0 drives.
+async function seat_swap({ dimension, origin, driver, run, spawnPlayer }) {
+  const checks = [];
+  const truck = spawnTruck(dimension, run, at(origin, 0, 2));
+  await wait(10);
+  await board(driver, truck, 0);
+  const second = spawnPlayer("SimulatedPassenger");
+  await wait(10);
+  await board(second, truck, 1);
+  checks.push(`${driver.name} took the Driver Seat and ${second.name} the Passenger Seat`);
+
+  const exits = [];
+  for (const player of [driver, second]) exits.push(await sneakOut(truck, player));
+  for (const player of [driver, second]) player.isSneaking = false;
+  await wait(5);
+  if (riders(truck).length) throw new Error("Truck still had riders after both left: " + riders(truck).map(r => r?.name).join(","));
+  checks.push("both left by Sneak: " + exits.join("; "));
+
+  await board(second, truck, 0);
+  await board(driver, truck, 1);
+  for (const [player, seat] of [[second, 0], [driver, 1]]) {
+    if (player.getComponent("minecraft:riding")?.entityRidingOn?.id !== truck.id) throw new Error(`${player.name} in seat ${seat} is not riding the truck`);
+  }
+  checks.push(`swapped: ${second.name} in the Driver Seat, ${driver.name} in the Passenger Seat, both riding the truck`);
+
+  // The new passenger's full forward input must not drive; the new driver's must.
+  const parked = truck.location;
+  const { movement } = driverInput;
+  driverInput.movement = player => (player.id === driver.id ? { x: 0, y: 1 } : movement(player));
+  try {
+    await wait(30);
+  } finally {
+    driverInput.movement = movement;
+  }
+  const passengerMoved = horizontal(truck.location, parked);
+  if (passengerMoved > 0.5) throw new Error(`New passenger's input moved the truck ${passengerMoved.toFixed(2)} blocks`);
+  const before = truck.location;
+  await drive(second, 20);
+  const driverMoved = horizontal(truck.location, before);
+  if (driverMoved < 5) throw new Error(`New driver's input moved the truck only ${driverMoved.toFixed(2)} blocks`);
+  checks.push(`after the swap the passenger's input moved the truck ${passengerMoved.toFixed(2)} blocks and ` +
+    `the new driver's ${driverMoved.toFixed(1)} blocks in 20 ticks`);
   return checks;
 }
 
@@ -950,5 +1176,5 @@ export const SCENARIOS = {
   smoke, seats, auto_step, steering, handbrake, crush_stomp, shock_absorption,
   flotation_water, flotation_lava, trample, demolition, foliage_shearing,
   dye_repaint, retrieval, incline_pitch, spawn_sources, two_seat_drop,
-  liquid_start_water, liquid_start_lava, shoreline_wall, shoreline_step,
+  liquid_start_water, liquid_start_lava, shoreline_wall, shoreline_step, seat_swap,
 };
