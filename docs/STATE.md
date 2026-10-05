@@ -61,7 +61,7 @@ v1.0.8 (Sneak-exit fix, Client Input Run bb96bde) installed to the local flatpak
 - ADR-0017 driving + architecture deepening (2026-10-03) — RESULT: run f40f40bf 15/15; deepening commits 39719cd..65478d0, Scenario Runs 15/15 per step.
 - Linux tooling #34-#37 (2026-10-01..03) — RESULT: install_addon.py Linux + --servers; Client Smoke Run 137bd73e; Scenario Run container 5a61248a; Simulated Driver seats and drives (1ec3980a).
 ## Open items
-- #40 (opened 2026-10-04): research stopping Minecraft's own Space dismount at the source (script re-seat stays meanwhile).
+- #40 FINDING (2026-10-04, run a7547b52): disabling the Jump input permission while seated stops the engine's Space dismount and Jump still reads Pressed in inputInfo; Dismount permission blocks Sneak, not Space. Implementation awaits the user's decision (permission persistence, restore on exit/spawn).
 - NOTED (not done): a rider holding Space while pressing Sneak is re-seated (Sneak never reads on a riding player), so the handbrake must be released before Sneak exits.
 - NOTED (not done): one-tick pitch lag — state.isFalling read before update in truck_tick.js (Q3: left alone).
 - NOTED (not done): truck_tick.js:183 `currentRiders.map((r) => r.id)` throws if getRiders() ever yields undefined (only seen with cross-runtime simulated players).
