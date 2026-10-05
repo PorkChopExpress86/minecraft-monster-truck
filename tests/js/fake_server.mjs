@@ -21,6 +21,7 @@ export const fake = {
 
 export const ButtonState = { Pressed: "Pressed", Released: "Released" };
 export const InputButton = { Jump: "Jump", Sneak: "Sneak" };
+export const InputPermissionCategory = { Jump: 6, Dismount: 8 };
 
 export class ItemStack {
   constructor(typeId, amount = 1) {
@@ -49,6 +50,9 @@ export const world = {
   },
   getEntity(id) {
     return fake.entities.get(id);
+  },
+  getAllPlayers() {
+    return [...fake.entities.values()].filter((entity) => entity.typeId === "minecraft:player");
   },
   beforeEvents: {
     entityHurt: {

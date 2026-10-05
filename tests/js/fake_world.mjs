@@ -92,10 +92,24 @@ export function createFakeEntity({ typeId = "minecraft:zombie", location = { x: 
 
 export function createFakePlayer({ id, location = { x: 0, y: 0, z: 0 }, isSneaking = false } = {}) {
   const player = createFakeEntity({ typeId: "minecraft:player", location, id });
+  const disabled = new Set(); // input permission categories turned off
+  const dynamicProperties = new Map();
   Object.assign(player, {
     isSneaking,
     extinguished: 0,
     teleports: [],
+    inputPermissions: {
+      isPermissionCategoryEnabled: (category) => !disabled.has(category),
+      setPermissionCategory(category, isEnabled) {
+        if (isEnabled) disabled.delete(category);
+        else disabled.add(category);
+      },
+    },
+    getDynamicProperty: (identifier) => dynamicProperties.get(identifier),
+    setDynamicProperty(identifier, value) {
+      if (value === undefined) dynamicProperties.delete(identifier);
+      else dynamicProperties.set(identifier, value);
+    },
     extinguishFire() {
       player.extinguished += 1;
       return true;

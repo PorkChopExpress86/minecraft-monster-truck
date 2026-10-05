@@ -248,7 +248,10 @@ def sneak_dismounts(ctx):
     riding = ctx.probe("riding")
     if riding != 0:
         raise CheckFailed(f"Sneak got the player out, but the add-on put them back in seat {riding}")
-    return "Sneak got the player out of the truck, and they stayed out"
+    # Seated players have Jump off so Space cannot dismount them (#40); on foot it must be back on.
+    if ctx.run("inputpermission query @s jump enabled", must_succeed=False).get("statusCode") != 0:
+        raise CheckFailed("Sneak got the player out, but their Jump is still off")
+    return "Sneak got the player out of the truck, they stayed out, and Jump works again"
 
 
 CHECKS = {check.__name__: check for check in

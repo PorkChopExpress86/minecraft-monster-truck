@@ -11,6 +11,7 @@ v1.0.8 (Sneak-exit fix, Client Input Run bb96bde) installed to the local flatpak
 - "if there is something strange then prompt me for input" (re: test thresholds/outcomes)
 - "do not look into the separt containers" (re: NetherNet errors on minecraft-creative/minecraft-survival)
 ## Decisions
+- DECISION (user, 2026-10-04): #40 implement 'Implement, keep re-seat (Recommended)': disable a seated player's Jump input permission while in a truck, restore it on exit, truck removal and spawn/rejoin; keep the script Space re-seat as a backstop.
 - DECISION (user, 2026-10-04): Space-aware re-seat now (a rider who leaves while holding Space/Jump, or whose Jump was held within a few ticks, is put back; other exits on steady ground are Sneak and let go), AND open a ticket to research an engine/entity setting that stops Minecraft's own Space-dismount at the source (the possible one-tick flash, #32).
 - DECISION (user, 2026-10-04): Sneak-exit rule: re-seat a rider who leaves only while the truck is falling or within the landing retention window (the #32 engine glitch); on steady ground anyone who leaves is let go; sneaking mid-drop keeps you in until you land. Replaces 'any non-sneaking detachment is undone' (real client never reports Sneak on a riding player).
 - DECISION (user, 2026-10-04): real-client tests may inject keyboard/mouse through a user-level uinput virtual device (/dev/uinput has a uaccess ACL for specter; no root, no daemon), with a focus guard: verify Minecraft is the active window before every event, abort otherwise. Local only, never CI. Reverses ADR-0016's 'no input injection' -> record in a new ADR.
@@ -61,7 +62,7 @@ v1.0.8 (Sneak-exit fix, Client Input Run bb96bde) installed to the local flatpak
 - ADR-0017 driving + architecture deepening (2026-10-03) — RESULT: run f40f40bf 15/15; deepening commits 39719cd..65478d0, Scenario Runs 15/15 per step.
 - Linux tooling #34-#37 (2026-10-01..03) — RESULT: install_addon.py Linux + --servers; Client Smoke Run 137bd73e; Scenario Run container 5a61248a; Simulated Driver seats and drives (1ec3980a).
 ## Open items
-- #40 FINDING (2026-10-04, run a7547b52): disabling the Jump input permission while seated stops the engine's Space dismount and Jump still reads Pressed in inputInfo; Dismount permission blocks Sneak, not Space. Implementation awaits the user's decision (permission persistence, restore on exit/spawn).
+- #40 IMPLEMENTED (2026-10-04): main.js lockJump/JUMP_LOCK turns a seated player's Jump input permission off and back on (exit, truck gone, rejoin; never for a Jump someone else turned off); re-seat stays. Evidence: Client run 8565956a with re-seat disabled 2/2 (space_keeps_rider seated every tick, 0.00 creep; sneak_dismounts); query shows Jump disabled seated, enabled after Sneak; full Client 5/5 (5754e3a2), Scenario Run fcbe4d4d 22/22.
 - NOTED (not done): a rider holding Space while pressing Sneak is re-seated (Sneak never reads on a riding player), so the handbrake must be released before Sneak exits.
 - NOTED (not done): one-tick pitch lag — state.isFalling read before update in truck_tick.js (Q3: left alone).
 - NOTED (not done): truck_tick.js:183 `currentRiders.map((r) => r.id)` throws if getRiders() ever yields undefined (only seen with cross-runtime simulated players).

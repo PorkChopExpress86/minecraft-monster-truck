@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { ButtonState, InputButton, ItemStack, fake, hurt, runTick } from "./fake_server.mjs";
+import { ButtonState, InputButton, InputPermissionCategory, ItemStack, fake, hurt, runTick } from "./fake_server.mjs";
 import { createFakeDimension, createFakeEntity, createFakePlayer, createFakeTruck } from "./fake_world.mjs";
 
 const main = await import("../../behavior_packs/MonsterTruck_BP/scripts/main.js");
@@ -173,4 +173,63 @@ test("a dimension that cannot be fetched hides its trucks, so their state and ri
     fake.dimensions.overworld = overworld;
   }
   assert.equal(hurt(rider, "fall").cancel, true, "a failed lookup does not end the drop's protection");
+});
+
+// Minecraft dismounts a rider who presses Space, the handbrake; with the Jump input permission off it
+// does not, and Jump still reads as pressed (#40, docs/agents/bedrock-physics.md).
+const jumpEnabled = (player) => player.inputPermissions.isPermissionCategoryEnabled(InputPermissionCategory.Jump);
+
+test("a seated player's Jump is off while in the truck and back on once out of it", () => {
+  const rider = addPlayer("jump-rider");
+  const truck = addTruck({ location: { x: 320.5, y: GROUND_Y, z: 0.5 }, riders: [rider] });
+  runTick();
+  assert.equal(jumpEnabled(rider), false, "Space cannot dismount a seated player");
+  truck.detach(rider); // left by Sneak
+  runTick();
+  assert.equal(jumpEnabled(rider), true, "Jump works again on foot");
+  assert.equal(rider.getDynamicProperty(main.JUMP_LOCK), undefined);
+});
+
+test("a rider whose truck is gone gets Jump back", () => {
+  const rider = addPlayer("jump-orphan");
+  const truck = addTruck({ location: { x: 360.5, y: GROUND_Y, z: 0.5 }, riders: [rider] });
+  runTick();
+  assert.equal(jumpEnabled(rider), false);
+  removeTruck(truck);
+  runTick();
+  assert.equal(jumpEnabled(rider), true);
+});
+
+test("a player who left the world mid-ride gets Jump back when they return", () => {
+  const returning = addPlayer("jump-returning");
+  returning.inputPermissions.setPermissionCategory(InputPermissionCategory.Jump, false);
+  returning.setDynamicProperty(main.JUMP_LOCK, true);
+  runTick();
+  assert.equal(jumpEnabled(returning), true);
+  assert.equal(returning.getDynamicProperty(main.JUMP_LOCK), undefined);
+});
+
+test("a Jump permission turned off by someone else stays off, in the truck and out of it", () => {
+  const player = addPlayer("jump-mapmaker");
+  player.inputPermissions.setPermissionCategory(InputPermissionCategory.Jump, false);
+  runTick();
+  assert.equal(jumpEnabled(player), false, "not the add-on's to turn on");
+  const truck = addTruck({ location: { x: 400.5, y: GROUND_Y, z: 0.5 }, riders: [player] });
+  runTick();
+  truck.detach(player);
+  runTick();
+  assert.equal(jumpEnabled(player), false, "still off after a ride");
+});
+
+test("a dimension that cannot be fetched turns no seated rider's Jump back on", () => {
+  const rider = addPlayer("jump-hidden");
+  addTruck({ location: { x: 440.5, y: GROUND_Y, z: 0.5 }, riders: [rider] });
+  runTick();
+  delete fake.dimensions.overworld;
+  try {
+    runTick();
+  } finally {
+    fake.dimensions.overworld = overworld;
+  }
+  assert.equal(jumpEnabled(rider), false, "the hidden truck may still carry the rider");
 });

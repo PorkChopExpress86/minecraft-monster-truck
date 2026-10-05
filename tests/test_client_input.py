@@ -376,7 +376,7 @@ def test_connect_types_nothing_when_the_chat_never_opens():
 class World:
     """A fake real-client world behind the channel: the truck turns with the held keys."""
 
-    def __init__(self, turn_per_key=None, lost=0, riding_after_sneak=0, mouse_turns_truck=0.0):
+    def __init__(self, turn_per_key=None, lost=0, riding_after_sneak=0, mouse_turns_truck=0.0, jump_back_on=True):
         self.truck = {"x": 0.5, "z": 3.5, "yaw": 0.0}
         self.player_yaw = 0.0
         self.riding = 1
@@ -384,6 +384,7 @@ class World:
         self.turn = turn_per_key or {"a": -40.0, "d": 40.0}
         self.riding_after_sneak = riding_after_sneak
         self.mouse_turns_truck = mouse_turns_truck
+        self.jump_back_on = jump_back_on
         self.commands = []
 
     def command(self, line, timeout=5.0):
@@ -395,6 +396,9 @@ class World:
             return {"statusCode": 0, "details": json.dumps([{"position": {"x": 0, "y": -60, "z": 0}, "yRot": self.player_yaw}])}
         if line == "scoreboard players list riding":
             return {"statusCode": 0, "statusMessage": f"- mt_probe: {self.riding} (mt_probe)"}
+        if line == "inputpermission query @s jump enabled":
+            # The client answers a query with a state: status 0 only when the player is in that state.
+            return {"statusCode": 0 if self.jump_back_on else -2147352576, "statusMessage": "<Jump>: 0 enabled"}
         if line == "scoreboard players list lost":
             return {"statusCode": 0, "statusMessage": f"- mt_probe: {self.lost} (mt_probe)"}
         if line in ("scoreboard players list sneaking", "scoreboard players list sneak_button",
@@ -464,6 +468,8 @@ def test_sneak_must_dismount():
     assert run_check("sneak_dismounts", World(riding_after_sneak=0))
     with pytest.raises(client_checks.CheckFailed, match="still in seat 1"):
         run_check("sneak_dismounts", World(riding_after_sneak=1))
+    with pytest.raises(client_checks.CheckFailed, match="Jump is still off"):
+        run_check("sneak_dismounts", World(riding_after_sneak=0, jump_back_on=False))
 
 
 def test_focus_is_taken_before_the_first_key_with_a_few_activation_attempts():

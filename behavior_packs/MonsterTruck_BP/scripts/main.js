@@ -3,6 +3,7 @@ import {
   world,
   ButtonState,
   InputButton,
+  InputPermissionCategory,
   ItemStack
 } from "@minecraft/server";
 import { shouldShieldRiderFromHeat } from "./amphibious.js";
@@ -30,8 +31,30 @@ const tickInput = {
   protectedRiders,
 };
 
+// Minecraft dismounts a rider who presses Space, the handbrake. With the Jump input permission off it does
+// not, and inputInfo still reads Jump (#40, docs/agents/bedrock-physics.md), so seated players have Jump
+// off. JUMP_LOCK marks a player whose Jump the add-on turned off: Jump comes back on only for them, also
+// after they left the world mid-ride, and never for a player someone else turned it off for.
+export const JUMP_LOCK = "blake:jump_locked";
+
+function lockJump(player, seated) {
+  try {
+    const permissions = player.inputPermissions;
+    if (seated) {
+      if (permissions.isPermissionCategoryEnabled(InputPermissionCategory.Jump)) {
+        permissions.setPermissionCategory(InputPermissionCategory.Jump, false);
+        player.setDynamicProperty(JUMP_LOCK, true);
+      }
+    } else if (player.getDynamicProperty(JUMP_LOCK) === true) {
+      permissions.setPermissionCategory(InputPermissionCategory.Jump, true);
+      player.setDynamicProperty(JUMP_LOCK);
+    }
+  } catch {}
+}
+
 function onTick() {
   const presentTrucks = new Set();
+  const seatedPlayers = new Set();
   // A failed dimension lookup or truck query hides that dimension's trucks, so nothing is
   // known to be gone.
   let sawEveryTruck = true;
@@ -66,8 +89,21 @@ function onTick() {
       truckStates.set(truck.id, state);
       const tickNumber = typeof system.currentTick === "number" ? system.currentTick : currentTick++;
       tickTruck(truck, dimension, state, tickInput, tickNumber);
+      try {
+        for (const rider of truck.getComponent("minecraft:rideable")?.getRiders() ?? []) {
+          if (rider?.typeId === "minecraft:player") seatedPlayers.add(rider.id);
+        }
+      } catch {}
     }
   }
+
+  // A hidden truck may still carry a player, so Jump is only turned back on when every truck was seen.
+  try {
+    for (const player of world.getAllPlayers()) {
+      const seated = seatedPlayers.has(player.id);
+      if (seated || sawEveryTruck) lockJump(player, seated);
+    }
+  } catch {}
 
   if (!sawEveryTruck) return;
   for (const [truckId, state] of truckStates) {
