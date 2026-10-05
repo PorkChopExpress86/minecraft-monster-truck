@@ -1,11 +1,11 @@
 ## Goal
 Set up the add-on for Linux development, debug, install, and fully automate in-game testing of the monster truck.
 ## Now
-v1.0.8 (Sneak-exit fix, Client Input Run bb96bde) installed to the local flatpak client only (dev packs, Dedicated Test World, Playground); servers not deployed. #27/#29/#30/#32 trimmed to human-only residue. Retro items 1-6 (2026-10-04): conftest GIT_* isolation, TEMP-DIAGNOSTIC pre-commit guard, Client --trace, real-client facts in docs/agents/bedrock-physics.md, CODING_STANDARDS engine-state rule, AGENTS.md testing pointer. Commits on main not pushed.
+v1.0.8 (Sneak-exit fix, Client Input Run bb96bde) installed to the local flatpak client and to both servers (minecraft-creative, minecraft-survival; 2026-10-04, install_addon.py --no-rev --servers creative,survival --yes, both restarted). #27/#29/#30/#32 trimmed to human-only residue. Retro items 1-6 (2026-10-04): conftest GIT_* isolation, TEMP-DIAGNOSTIC pre-commit guard, Client --trace, real-client facts in docs/agents/bedrock-physics.md, CODING_STANDARDS engine-state rule, AGENTS.md testing pointer.
 ## Next
 1. User verifies 1.0.8 in game: real Left Shift exits, any Space flash (#32), Shift during a drop.
 2. #40 research (engine Space dismount); #27/#29/#30 manual Proving Ground checks; #31 evidence; #24 parent.
-3. Push main and install to servers (--servers creative,survival) only when the user asks.
+3. Push main only when the user asks.
 ## Constraints
 - "Keep the version and install with #38" (no rev/install until #38 lands)
 - "if there is something strange then prompt me for input" (re: test thresholds/outcomes)
