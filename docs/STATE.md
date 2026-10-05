@@ -1,9 +1,9 @@
 ## Goal
 Set up the add-on for Linux development, debug, install, and fully automate in-game testing of the monster truck.
 ## Now
-v1.0.11 (Sneak-exit fix, #40 Jump lock, pitch-lag fix, empty rider slot fix 5ea3836) installed to the local flatpak client and to both servers (minecraft-creative, minecraft-survival; 2026-10-04, install_addon.py --servers creative,survival --yes, both restarted). #27/#29/#30/#32 trimmed to human-only residue. Retro items 1-6 (2026-10-04): conftest GIT_* isolation, TEMP-DIAGNOSTIC pre-commit guard, Client --trace, real-client facts in docs/agents/bedrock-physics.md, CODING_STANDARDS engine-state rule, AGENTS.md testing pointer.
+v1.0.12 (Sneak-exit fix, #40 Jump lock, pitch-lag fix, empty rider slot fix, Space+Shift exit a1d541d) installed to the local flatpak client and to both servers (minecraft-creative, minecraft-survival; 2026-10-04, install_addon.py --servers creative,survival --yes, both restarted). #27/#29/#30/#32 trimmed to human-only residue. Retro items 1-6 (2026-10-04): conftest GIT_* isolation, TEMP-DIAGNOSTIC pre-commit guard, Client --trace, real-client facts in docs/agents/bedrock-physics.md, CODING_STANDARDS engine-state rule, AGENTS.md testing pointer.
 ## Next
-1. User verifies 1.0.11 in game (#32): real Left Shift exits, nothing flashes on Space, Shift during a drop, two players.
+1. User verifies 1.0.12 in game (#32): real Left Shift exits, nothing flashes on Space, Shift during a drop, two players.
 2. Manual Proving Ground checks #27/#28/#29/#30; then #31 acceptance evidence; then close parent #24.
 ## Constraints
 - "Keep the version and install with #38" (no rev/install until #38 lands)
