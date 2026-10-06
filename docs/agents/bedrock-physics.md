@@ -21,7 +21,7 @@ Every tick an entity touches a block face, the velocity component into that face
 
 ## Damage immunity window
 
-A mob hit again within its immunity window (about 10 ticks) takes, and reports in `entityHurt`, only the excess over the earlier hit. A scenario that checks a damage amount must make that hit the first one, as `crush_stomp` does by spawning the mob just before touchdown. Distinguish hit sources by `damageSource.cause` (Crush Stomp `contact`, Tire Trample `entityAttack`), not by amount; armor changes the amount as well. Only the first hit is comparable: `trample` uses a fresh pig per speed and compares those first hits only.
+A mob hit again within its immunity window (about 10 ticks) takes, and reports in `entityHurt`, only the excess over the earlier hit. A scenario that checks a damage amount must make that hit the first one, as `crush_stomp` does by spawning the mob just before touchdown. Distinguish hit sources by `damageSource.cause` (Crush Stomp `contact`, Tire Trample `entityAttack`), not by amount; armor changes the amount as well. Only the first hit is comparable: `trample` uses a fresh pig per speed and compares those first hits only. A Simulated Player's swings at the truck land one hit every 10 ticks; `attackEntity` returns false in between (`retrieval`, run 2849f48e).
 
 ## Knockback shows on the next move
 
