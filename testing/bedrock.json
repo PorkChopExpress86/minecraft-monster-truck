@@ -21,6 +21,7 @@
       "two_seat_drop", "liquid_start_water", "liquid_start_lava", "shoreline_wall", "shoreline_step",
       "seat_swap"
     ],
+    "opt_in_scenarios": ["retrieval_full_health"],
     "timeout_seconds": 600
   },
   "required_components": ["minecraft:rideable", "minecraft:health"],

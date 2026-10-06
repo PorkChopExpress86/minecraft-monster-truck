@@ -140,9 +140,10 @@ def evaluate(text, run_id, scenarios):
 
 
 def select_scenarios(config, only):
-    """Return a config copy that runs only the named scenarios, in configured order."""
+    """Return a config copy that runs only the named scenarios, in configured order. Opt-in scenarios
+    (opt_in_scenarios: too slow for every run) run only when named, after the configured ones."""
     names = [name.strip() for name in only.split(",") if name.strip()]
-    configured = config["scenario_server"]["scenarios"]
+    configured = config["scenario_server"]["scenarios"] + config["scenario_server"].get("opt_in_scenarios", [])
     unknown = [name for name in names if name not in configured]
     if not names or unknown:
         raise ScenarioError(f"Unknown scenario(s) {unknown or only!r}; choose from: {', '.join(configured)}")

@@ -19,6 +19,7 @@ Linux runs use the flatpak [Minecraft Bedrock Launcher](https://mcpelauncher.rea
 ./test-addon.sh Static     # Script API type check, pytest, validation, packaging; no game launch
 ./test-addon.sh Scenarios  # Headless Scenario Runs only (Docker)
 ./test-addon.sh Scenarios --only flotation_water,handbrake  # Just these scenarios, in configured order
+./test-addon.sh Scenarios --only retrieval_full_health  # Opt-in scenarios (opt_in_scenarios in testing/bedrock.json) run only when named
 ./test-addon.sh Game       # Client Smoke Run only
 ./test-addon.sh Client     # Client Input Run: real key presses in the real client (local only, not in All)
 ./test-addon.sh Client --only sneak_dismounts  # Just these input checks
