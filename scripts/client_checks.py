@@ -34,6 +34,9 @@ PROBE = "mt_probe"  # testing/harness/client_probe.js
 SNEAK_KEY, SNEAK_KEY_CODE = "k", "75"
 # Probe scores a traced run (--trace) samples while keys are held, for diagnosing a failed check.
 TRACE_SCORES = ("riding", "lost", "sneaking", "sneak_button", "jump")
+# How far sneak_during_drop drops the truck: about 1.4 s of fall on the real client, long enough for a focus
+# check of the Sneak hold (one about every 0.6 s) to see the truck still in the air.
+DROP_HEIGHT = 32
 RUN_OPTIONS = {"websockets_enabled": "1", "websocket_encryption": "0",
                "keyboard_type_0_key.sneak": SNEAK_KEY_CODE, "keyboard_type_1_key.sneak": SNEAK_KEY_CODE}
 
@@ -132,10 +135,14 @@ class Context:
         self.samples = []
         self.started = clock()
 
-    def hold(self, keys, seconds):
-        """Hold keys; when tracing, sample every probe score at each focus check of the hold
-        (about 1.5 a second: each sample is one WebSocket query per score)."""
-        self.keys.hold(keys, seconds, on_tick=(lambda: self._sample(keys)) if self.trace else None)
+    def hold(self, keys, seconds, until=None):
+        """Hold keys for `seconds`, or until until() is true at a focus check of the hold; when tracing, sample
+        every probe score at each check (about 1.5 a second: each sample is one WebSocket query per score)."""
+        def tick():
+            if self.trace:
+                self._sample(keys)
+            return bool(until and until())
+        self.keys.hold(keys, seconds, on_tick=tick if self.trace or until else None)
 
     def _sample(self, keys):
         self.samples.append({"t": round(self.clock() - self.started, 2), "keys": list(keys),
@@ -163,17 +170,19 @@ class Context:
             raise ClientInputError(f"The harness probe published no {name!r} score; is the probe pack loaded?")
         return value
 
-    def fresh_truck(self, at=(0.5, 3.5)):
-        """A new truck at arena offset `at` (x, z; default the start), facing +Z, with the player in the Driver Seat."""
+    def fresh_truck(self, at=(0.5, 3.5), up=0):
+        """A new truck at arena offset `at` (x, z; default the start) and `up` blocks above the arena floor,
+        facing +Z, with the player in the Driver Seat."""
         bx, by, bz = self.base
         tx, tz = bx + at[0], bz + at[1]
+        ty = by + up
         self.run("ride @s stop_riding", must_succeed=False)
         self.run(f"kill @e[type={self.entity}]", must_succeed=False)
         self.run("kill @e[type=item]", must_succeed=False)
         self.run(f"tp @s {bx + 0.5} {by} {bz + 0.5} 0 0")
         # The client's summon takes no rotation (that overload needs an experiment), so tp sets the facing.
-        self.run(f"summon {self.entity} {tx} {by} {tz}")
-        self.run(f"tp @e[type={self.entity}] {tx} {by} {tz} 0 0")
+        self.run(f"summon {self.entity} {tx} {ty} {tz}")
+        self.run(f"tp @e[type={self.entity}] {tx} {ty} {tz} 0 0")
         self.sleep(0.5)
         self.run(f"ride @s start_riding @e[type={self.entity},c=1] teleport_rider")
         for _ in range(30):
@@ -312,9 +321,58 @@ def sneak_exits_afloat(ctx):
     return f"Sneak afloat set the player down on the pool's edge, {off:.1f} blocks from the truck"
 
 
+def sneak_during_drop(ctx):
+    # The truck stands on a floating stone platform; removing it drops the truck straight down onto the start
+    # strip, from rest, with the player seated (driving off a ledge spends the short fall on reaching it).
+    bx, by, bz = ctx.base
+    platform = f"{bx - 3} {by + DROP_HEIGHT - 1} {bz + 1} {bx + 3} {by + DROP_HEIGHT - 1} {bz + 6}"
+    ctx.run(f"fill {platform} stone", must_succeed=False)
+    try:
+        ctx.fresh_truck(up=DROP_HEIGHT)
+        ctx.run(f"fill {platform} air")
+        top = by + DROP_HEIGHT
+        # Sneak goes down once the drop is under way, not as the floor goes (a Sneak on steady ground exits).
+        for _ in range(40):
+            if ctx.truck()[0]["y"] < top - 1:
+                break
+            ctx.sleep(0.05)
+        else:
+            raise CheckFailed("the truck never started to fall after its platform was removed")
+        seats = []  # (seat, truck y) at each focus check of the hold
+
+        def landed():
+            seats.append((ctx.probe("riding"), ctx.truck()[0]["y"]))
+            return seats[-1][1] <= by + 0.1
+        ctx.hold([SNEAK_KEY], 4.0, until=landed)
+        if ctx.truck()[0]["y"] > by + 0.1:
+            raise CheckFailed("the truck never landed in 4 s of Sneak")
+        lost = ctx.probe("lost")
+        if any(seat != 1 for seat, _ in seats):
+            raise CheckFailed(f"Sneak during the drop put the player out of the seat (seat, truck y: {seats})")
+        heights = [round(y - by, 1) for _, y in seats if y > by + 0.1]
+        if not heights:
+            raise CheckFailed("Sneak was held, but no focus check saw the truck still in the air; the drop proves nothing")
+        ctx.sleep(1.0)  # past the 8-tick landing window (landing.js RIDER_RETENTION_TICKS)
+        riding = ctx.probe("riding")
+        if riding != 1:
+            raise CheckFailed(f"after landing the player is in seat {riding}, not the Driver Seat")
+        ctx.hold([SNEAK_KEY], 0.6)
+        riding = ctx.probe("riding")
+        if riding != 0:
+            raise CheckFailed(f"after landing, Sneak left the player in seat {riding}")
+        ctx.sleep(1.0)
+        riding = ctx.probe("riding")
+        if riding != 0:
+            raise CheckFailed(f"after landing, Sneak got the player out, but the add-on put them back in seat {riding}")
+    finally:
+        ctx.run(f"fill {platform} air", must_succeed=False)
+    return (f"Sneak held through a {DROP_HEIGHT}-block drop kept the player in the Driver Seat: seated at "
+            f"{heights} blocks up and on landing, {lost} ticks out of the seat by the probe; then Sneak got them out")
+
+
 CHECKS = {check.__name__: check for check in
           (w_drives, a_turns_left, d_turns_right, s_brakes_and_reverses, space_keeps_rider, sneak_dismounts,
-           space_sneak_exits, sneak_exits_afloat)}
+           space_sneak_exits, sneak_exits_afloat, sneak_during_drop)}
 
 
 def select_checks(only, checks=None):

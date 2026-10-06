@@ -3,8 +3,9 @@ Set up the add-on for Linux development, debug, install, and fully automate in-g
 ## Now
 Installed: v1.0.13 (c995a7a) on the local client and servers creative, survival, 2026-10-05.
 Retro 2 (2026-10-05): .claude/skills/open-items (re-checks STATE notes before reporting), scripts/release.py (rev, install, Installed: line, commit, --push), ./test-addon.sh Client --diag <file>, CODING_STANDARDS 'Tests don't fake what the engine decides', doc test that LINUX_TESTING names every client check.
+Client check sneak_during_drop (2026-10-05): #32's 'Shift during a drop' automated; Client 9/9 run 23025b5a; fails with the drop re-seat disabled (run 109563e1). Fall immunity after the exit stays with Scenario two_seat_drop (the client test world is Creative).
 ## Next
-1. User verifies 1.0.13 in game (#32): real Left Shift exits, nothing flashes on Space, Shift during a drop, two players.
+1. User verifies 1.0.13 in game (#32): real Left Shift exits, nothing flashes on Space, two players.
 2. Manual Proving Ground checks #27/#28/#29/#30; then #31 acceptance evidence; then close parent #24.
 ## Constraints
 - "Keep the version and install with #38" (no rev/install until #38 lands)
