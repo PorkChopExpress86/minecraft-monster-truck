@@ -1,4 +1,4 @@
-import { Direction, GameMode, ItemStack, system, world, EntityDamageCause } from "@minecraft/server";
+import { Difficulty, Direction, EnchantmentType, GameMode, ItemStack, system, world, EntityDamageCause } from "@minecraft/server";
 import { driverInput } from "../main.js";
 import { DRIVING, headingVector } from "../driving.js";
 import { HIT_COOLDOWN_TICKS } from "../contact.js";
@@ -1018,20 +1018,43 @@ async function retrieval({ dimension, origin, driver, run }) {
     }
   };
 
-  // A real swing from a Survival player, with the truck worn down first: the blow that would
-  // kill it returns the Vehicle Item.
+  // Real swings from a Survival player take a fresh truck from full health to the fatal blow,
+  // which returns the Vehicle Item. Measured (run 2849f48e): one hit lands every 10 ticks (the
+  // damage immunity window; attackEntity returns false in between). A fist deals 1 (about 500 s
+  // from full); after the 0.25 entity_attack multiplier a netherite sword deals 2.25 and a
+  // Sharpness V netherite sword 3.75: 266 swings, 2666 ticks (about 133 s, run 11fa266d). The
+  // Sharpness V sword keeps the Scenario Run bounded. Over that long, slimes and other hostile
+  // mobs spawned, knocked the driver about (some swings landed as 5.625 critical hits) and killed
+  // them, dropping the sword (runs 12e6c450, f74d9c78), so the swings run on Peaceful.
+  const inventory = driver.getComponent("minecraft:inventory").container;
+  const sword = new ItemStack("minecraft:netherite_sword", 1);
+  sword.getComponent("minecraft:enchantable").addEnchantment({ type: new EnchantmentType("sharpness"), level: 5 });
+  inventory.setItem(driver.selectedSlotIndex, sword);
   let swings = 0;
-  const retrieved = await destroy(async truck => {
-    truck.getComponent("minecraft:health").setCurrentValue(1);
-    for (let tick = 0; tick < 100 && !dead(truck); tick++) {
-      if (driver.attackEntity(truck)) swings++;
-      await wait(1);
-    }
-  });
+  let startHealth;
+  const startTick = system.currentTick;
+  let retrieved;
+  const difficulty = world.getDifficulty();
+  world.setDifficulty(Difficulty.Peaceful);
+  try {
+    retrieved = await destroy(async truck => {
+      startHealth = health(truck);
+      for (let tick = 0; tick < 3200 && !dead(truck); tick++) {
+        if (driver.attackEntity(truck)) swings++;
+        await wait(1);
+      }
+    });
+  } finally {
+    inventory.setItem(driver.selectedSlotIndex, undefined);
+    world.setDifficulty(difficulty);
+  }
+  if (startHealth !== TRUCK_MAX_HEALTH) throw new Error(`Retrieval truck started at ${startHealth} health, not full`);
   if (retrieved.get("blake:monster_truck_vehicle") !== 1 || retrieved.has("minecraft:iron_ingot")) {
     throw new Error("Player-fatal retrieval must return exactly one Vehicle Item: " + JSON.stringify([...retrieved]));
   }
-  const checks = [`a player's punches (${swings} swings at a worn-down truck) return exactly one Vehicle Item and no Scrap`];
+  const checks = [`a player's swings (Sharpness V netherite sword, ${swings} swings over ` +
+    `${system.currentTick - startTick} ticks from ${startHealth} health) ` +
+    "return exactly one Vehicle Item and no Scrap"];
 
   for (const cause of [EntityDamageCause.entityExplosion, EntityDamageCause.lava, EntityDamageCause.fire]) {
     scrapOnly(await destroy(applied(cause)), `${cause} destruction`);
