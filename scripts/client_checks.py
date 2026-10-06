@@ -34,8 +34,9 @@ PROBE = "mt_probe"  # testing/harness/client_probe.js
 SNEAK_KEY, SNEAK_KEY_CODE = "k", "75"
 # Probe scores a traced run (--trace) samples while keys are held, for diagnosing a failed check.
 TRACE_SCORES = ("riding", "lost", "sneaking", "sneak_button", "jump")
-# How far sneak_during_drop drops the truck: about 1.4 s of fall on the real client, long enough for a focus
-# check of the Sneak hold (one about every 0.6 s) to see the truck still in the air.
+# How far sneak_during_drop drops the truck: about 1.4 s of fall on the real client (--diag run 81a440e5),
+# long enough for a focus check of the Sneak hold, each with two queries (about one every 0.6 s, runs
+# 9d4bbbd3 and 42808732), to see the truck still in the air.
 DROP_HEIGHT = 32
 RUN_OPTIONS = {"websockets_enabled": "1", "websocket_encryption": "0",
                "keyboard_type_0_key.sneak": SNEAK_KEY_CODE, "keyboard_type_1_key.sneak": SNEAK_KEY_CODE}
@@ -340,15 +341,17 @@ def sneak_during_drop(ctx):
             raise CheckFailed("the truck never started to fall after its platform was removed")
         seats = []  # (seat, truck y) at each focus check of the hold
 
-        def landed():
+        def record_seat_until_landed():
             seats.append((ctx.probe("riding"), ctx.truck()[0]["y"]))
             return seats[-1][1] <= by + 0.1
-        ctx.hold([SNEAK_KEY], 4.0, until=landed)
+        ctx.hold([SNEAK_KEY], 4.0, until=record_seat_until_landed)
         if ctx.truck()[0]["y"] > by + 0.1:
             raise CheckFailed("the truck never landed in 4 s of Sneak")
-        lost = ctx.probe("lost")
         if any(seat != 1 for seat, _ in seats):
             raise CheckFailed(f"Sneak during the drop put the player out of the seat (seat, truck y: {seats})")
+        lost = ctx.probe("lost")  # every tick since fresh_truck seated the player, between the samples too
+        if lost:
+            raise CheckFailed(f"Sneak during the drop put the player out of the seat for {lost} ticks")
         heights = [round(y - by, 1) for _, y in seats if y > by + 0.1]
         if not heights:
             raise CheckFailed("Sneak was held, but no focus check saw the truck still in the air; the drop proves nothing")
@@ -366,8 +369,8 @@ def sneak_during_drop(ctx):
             raise CheckFailed(f"after landing, Sneak got the player out, but the add-on put them back in seat {riding}")
     finally:
         ctx.run(f"fill {platform} air", must_succeed=False)
-    return (f"Sneak held through a {DROP_HEIGHT}-block drop kept the player in the Driver Seat: seated at "
-            f"{heights} blocks up and on landing, {lost} ticks out of the seat by the probe; then Sneak got them out")
+    return (f"Sneak held through a {DROP_HEIGHT}-block drop kept the player in the Driver Seat: on every "
+            f"tick the probe saw to the landing (sampled at {heights} blocks up); then Sneak got them out")
 
 
 CHECKS = {check.__name__: check for check in

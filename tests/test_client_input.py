@@ -576,6 +576,8 @@ def test_sneak_during_a_drop_keeps_the_rider_until_landing_then_exits():
         run_check("sneak_during_drop", World(riding_in_drop=0))
     with pytest.raises(client_checks.CheckFailed, match="after landing, Sneak left the player in seat 1"):
         run_check("sneak_during_drop", World(riding_after_sneak=1))
+    with pytest.raises(client_checks.CheckFailed, match="out of the seat for 2 ticks"):
+        run_check("sneak_during_drop", World(lost=2))
     with pytest.raises(client_checks.CheckFailed, match="never started to fall"):
         run_check("sneak_during_drop", World(fall_per_query=0.0))
     with pytest.raises(client_checks.CheckFailed, match="still in the air"):
