@@ -153,6 +153,14 @@ def test_only_narrows_scenarios_in_configured_order_and_rejects_unknown_names():
             scenarios.select_scenarios(config, bad)
 
 
+def test_opt_in_scenarios_run_only_when_named_after_the_configured_ones():
+    config = {"scenario_server": {"scenarios": ["smoke", "retrieval"], "opt_in_scenarios": ["retrieval_full_health"]}}
+    assert scenarios.select_scenarios(config, "retrieval_full_health, smoke")["scenario_server"]["scenarios"] == \
+        ["smoke", "retrieval_full_health"]
+    with pytest.raises(scenarios.ScenarioError, match="choose from: smoke, retrieval, retrieval_full_health"):
+        scenarios.select_scenarios(config, "jump")
+
+
 def test_every_configured_scenario_is_exported_and_every_export_is_configured():
     # An unexported name only fails as "Unknown scenario" inside a Scenario Run; an unconfigured
     # export never runs at all.
@@ -160,8 +168,10 @@ def test_every_configured_scenario_is_exported_and_every_export_is_configured():
     block = re.search(r"export const SCENARIOS = \{([^}]*)\};", source)
     assert block, "scenarios.js must export a SCENARIOS object literal"
     exported = [name.strip() for name in block.group(1).split(",") if name.strip()]
-    configured = json.loads((REPO_ROOT / "testing/bedrock.json").read_text())["scenario_server"]["scenarios"]
+    server = json.loads((REPO_ROOT / "testing/bedrock.json").read_text())["scenario_server"]
+    configured = server["scenarios"] + server.get("opt_in_scenarios", [])
     assert sorted(exported) == sorted(configured)
+    assert "retrieval_full_health" in server["opt_in_scenarios"], "the 2-minute full-health punch-down is opt-in"
 
 
 def tmp_repo(tmp_path):
