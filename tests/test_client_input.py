@@ -582,3 +582,39 @@ def test_sneak_during_a_drop_keeps_the_rider_until_landing_then_exits():
         run_check("sneak_during_drop", World(fall_per_query=0.0))
     with pytest.raises(client_checks.CheckFailed, match="still in the air"):
         run_check("sneak_during_drop", World(fall_per_query=20.0))
+
+
+def test_sneak_over_lava_with_no_land_in_reach_keeps_the_rider_seated():
+    world = World(riding_after_sneak=1)
+    assert run_check("sneak_stays_seated_over_lava", world)
+    fills = [line for line in world.commands if line.startswith("fill")]
+    assert any(line.endswith(" lava") for line in fills), "a lava pool is built"
+    assert not fills[-1].endswith(" lava"), "the pool is filled in again"
+    with pytest.raises(client_checks.CheckFailed, match="over lava.*put the player out"):
+        run_check("sneak_stays_seated_over_lava", World(riding_after_sneak=0))
+
+
+def test_palette_screenshots_paint_each_color_and_capture_it():
+    world = World()
+    ctx = client_checks.Context(world, WorldInput(world), base=(0, -60, 0), sleep=lambda s: None)
+    shots = []
+    ctx.capturer = lambda name: shots.append(name) or f"/shots/{name}/minecraft.png"
+    detail = client_checks.CHECKS["palette_screenshots"](ctx)
+    assert len(client_checks.PALETTE) == 16 and client_checks.PALETTE[0] == "red"
+    assert shots == list(client_checks.PALETTE)
+    painted = [line.split()[-1] for line in world.commands if line.startswith("event entity")]
+    assert painted == [f"blake:paint_{color}" for color in client_checks.PALETTE]
+    assert "16" in detail
+
+
+def test_palette_screenshots_fail_when_a_paint_event_is_refused():
+    class Refusing(World):
+        def command(self, line, timeout=5.0):
+            if line.endswith("blake:paint_cyan"):
+                return {"statusCode": -1, "statusMessage": "no such event"}
+            return super().command(line, timeout)
+    world = Refusing()
+    ctx = client_checks.Context(world, WorldInput(world), base=(0, -60, 0), sleep=lambda s: None)
+    ctx.capturer = lambda name: name
+    with pytest.raises(client_checks.CheckFailed, match="cyan"):
+        client_checks.CHECKS["palette_screenshots"](ctx)

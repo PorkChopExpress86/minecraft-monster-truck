@@ -8,6 +8,7 @@ Every key and mouse event passes the focus guard first (bedrock_linux.focus_guar
 """
 import contextlib
 import importlib.util
+import json
 import math
 from pathlib import Path
 import re
@@ -38,6 +39,10 @@ TRACE_SCORES = ("riding", "lost", "sneaking", "sneak_button", "jump")
 # long enough for a focus check of the Sneak hold, each with two queries (about one every 0.6 s, runs
 # 9d4bbbd3 and 42808732), to see the truck still in the air.
 DROP_HEIGHT = 32
+# The Sixteen-Color Palette in the entity's paint-event order (blake:paint_<color>), for palette_screenshots.
+PALETTE = tuple(event.removeprefix("blake:paint_") for event in json.loads(
+    (Path(__file__).resolve().parents[1] / "behavior_packs/MonsterTruck_BP/entities/monster_truck.entity.json")
+    .read_text(encoding="utf-8"))["minecraft:entity"]["events"] if event.startswith("blake:paint_"))
 RUN_OPTIONS = {"websockets_enabled": "1", "websocket_encryption": "0",
                "keyboard_type_0_key.sneak": SNEAK_KEY_CODE, "keyboard_type_1_key.sneak": SNEAK_KEY_CODE}
 
@@ -135,6 +140,10 @@ class Context:
         self.clock = clock
         self.samples = []
         self.started = clock()
+        self.capturer = None  # name -> path of a screenshot of the client, saved under that name
+
+    def capture(self, name):
+        return self.capturer(name)
 
     def hold(self, keys, seconds, until=None):
         """Hold keys for `seconds`, or until until() is true at a focus check of the hold; when tracing, sample
@@ -322,6 +331,28 @@ def sneak_exits_afloat(ctx):
     return f"Sneak afloat set the player down on the pool's edge, {off:.1f} blocks from the truck"
 
 
+def sneak_stays_seated_over_lava(ctx):
+    # A lava pool off to the side of the start, wider than the add-on's reach for dry land (amphibious.js
+    # DRY_LAND_REACH, 4 blocks) on every side of the truck at its middle; filled in again afterwards.
+    bx, by, bz = ctx.base
+    pool = f"{bx - 24} {by - 4} {bz - 10} {bx - 10} {by - 1} {bz + 4}"
+    ctx.run(f"fill {pool} lava", must_succeed=False)
+    try:
+        ctx.fresh_truck(at=(-16.5, -2.5))
+        ctx.sleep(2.0)  # the truck settles afloat
+        ctx.hold([SNEAK_KEY], 0.6)
+        ctx.sleep(1.0)
+        riding = ctx.probe("riding")
+        if riding != 1:
+            raise CheckFailed(f"Sneak over lava with no land in reach put the player out of the Driver Seat (seat {riding})")
+        lost = ctx.probe("lost")
+    finally:
+        ctx.run("ride @s stop_riding", must_succeed=False)
+        ctx.run(f"tp @s {bx + 0.5} {by} {bz + 0.5}", must_succeed=False)
+        ctx.run(f"fill {pool} grass_block", must_succeed=False)
+    return f"Sneak over lava with no land in reach left the player in the Driver Seat ({lost} ticks out by the probe)"
+
+
 def sneak_during_drop(ctx):
     # The truck stands on a floating stone platform; removing it drops the truck straight down onto the start
     # strip, from rest, with the player seated (driving off a ledge spends the short fall on reaching it).
@@ -373,9 +404,33 @@ def sneak_during_drop(ctx):
             f"tick the probe saw to the landing (sampled at {heights} blocks up); then Sneak got them out")
 
 
+def palette_screenshots(ctx):
+    """Not a judgement of looks: paints one parked truck each palette color and screenshots it from the same
+    spot, front three-quarter view, for a person (or Claude) to compare body, hood and wheel-hub accents."""
+    bx, by, bz = ctx.base
+    tx, tz = bx + 0.5, bz + 3.5
+    ctx.run("ride @s stop_riding", must_succeed=False)
+    ctx.run(f"kill @e[type={ctx.entity}]", must_succeed=False)
+    ctx.run(f"summon {ctx.entity} {tx} {by} {tz}")
+    ctx.run(f"tp @e[type={ctx.entity}] {tx} {by} {tz} 0 0")
+    # A fixed free camera, so the player's own view mode (first or third person) never puts them in the shot.
+    ctx.run(f"camera @s set minecraft:free pos {tx + 4} {by + 2.5} {tz + 5} facing {tx} {by + 1} {tz}")
+    shots = {}
+    try:
+        for color in PALETTE:
+            body = ctx.run(f"event entity @e[type={ctx.entity}] blake:paint_{color}", must_succeed=False)
+            if body.get("statusCode") != 0:
+                raise CheckFailed(f"the truck refused paint event {color}: {body.get('statusMessage')}")
+            ctx.sleep(0.5)  # the property reaches the client and the render controller swaps textures
+            shots[color] = str(ctx.capture(color))
+    finally:
+        ctx.run("camera @s clear", must_succeed=False)
+    return f"{len(shots)} palette colors screenshotted for review: " + json.dumps(shots)
+
+
 CHECKS = {check.__name__: check for check in
           (w_drives, a_turns_left, d_turns_right, s_brakes_and_reverses, space_keeps_rider, sneak_dismounts,
-           space_sneak_exits, sneak_exits_afloat, sneak_during_drop)}
+           space_sneak_exits, sneak_exits_afloat, sneak_stays_seated_over_lava, sneak_during_drop, palette_screenshots)}
 
 
 def select_checks(only, checks=None):
@@ -439,6 +494,7 @@ def run_client_input(root, config, run_id, output, only=None, trace=False, diag=
             connect_client(keys, channel, lambda: linux.chat_open(linux.capture(frames)))
             channel.subscribe("PlayerMessage")
             ctx = Context(channel, keys, base=None, entity=config["entity_id"], trace=trace)
+            ctx.capturer = lambda name: linux.capture(mkdir(client_dir / "palette" / name))
             me = query_targets(ctx.run("querytarget @s"))[0]["position"]
             ctx.base = (math.floor(me["x"]), math.floor(me["y"]), math.floor(me["z"]))
             prepare_arena(ctx)
@@ -484,6 +540,11 @@ def prepare_arena(ctx):
         # kill with no targets and a fill that changes nothing ("0 blocks filled") are not setup failures.
         if body.get("statusCode") != 0 and not line.startswith(("kill", "fill")):
             raise ClientInputError(f"{line!r} failed: {body.get('statusMessage')}")
+
+
+def mkdir(path):
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def linux_client():
