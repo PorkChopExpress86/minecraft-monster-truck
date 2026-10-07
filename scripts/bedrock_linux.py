@@ -155,7 +155,9 @@ def focus_guard(work_dir, process):
         window = active_window(work_dir)
         game_pids = {pid for pid, _ in process_group(process.pid)}
         if not window or window.get("caption") != "Minecraft" or window.get("pid") not in game_pids:
-            raise FocusLost(f"active window is {window}, not the launched Minecraft; input stopped")
+            hint = ("; the Claude app raises itself while background agents or commands run, so run Client with "
+                    "nothing in the background") if window and window.get("caption") == "Claude" else ""
+            raise FocusLost(f"active window is {window}, not the launched Minecraft; input stopped{hint}")
     return guard
 
 

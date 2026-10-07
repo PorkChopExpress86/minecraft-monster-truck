@@ -69,3 +69,12 @@ def test_linux_testing_names_every_client_input_check():
     doc = (ROOT / "docs/LINUX_TESTING.md").read_text(encoding="utf-8")
     missing = [name for name in client_checks.CHECKS if f"`{name}`" not in doc]
     assert not missing, f"docs/LINUX_TESTING.md does not name these Client Input Run checks: {missing}"
+
+
+def test_acceptance_coverage_names_every_client_check_and_opt_in_scenario():
+    from scripts import client_checks
+    doc = (ROOT / "docs/ACCEPTANCE_COVERAGE.md").read_text(encoding="utf-8")
+    server = json.loads((ROOT / "testing/bedrock.json").read_text(encoding="utf-8"))["scenario_server"]
+    names = list(client_checks.CHECKS) + server.get("opt_in_scenarios", [])
+    missing = [name for name in names if f"`{name}`" not in doc]
+    assert not missing, f"docs/ACCEPTANCE_COVERAGE.md names no evidence row for: {missing}"

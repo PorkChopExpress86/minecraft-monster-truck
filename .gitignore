@@ -5,3 +5,5 @@ dist/
 .venv-testing/
 testing/bedrock.local.json
 node_modules/
+# Subagent worktrees (Claude Code)
+.claude/worktrees/

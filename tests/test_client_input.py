@@ -281,6 +281,18 @@ def test_focus_guard_passes_only_for_the_launched_minecraft_window(monkeypatch, 
             guard()
 
 
+def test_losing_focus_to_the_claude_app_says_to_run_with_nothing_in_the_background(monkeypatch, tmp_path):
+    monkeypatch.setattr(linux, "process_group", lambda pgid: [(4242, "mcpelauncher-cli")])
+    guard = linux.focus_guard(tmp_path, type("P", (), {"pid": 4000})())
+    fake_kwin(monkeypatch, {"caption": "Claude", "pid": 15227})
+    with pytest.raises(linux_input.FocusLost, match="nothing in the background"):
+        guard()
+    fake_kwin(monkeypatch, {"caption": "Konsole", "pid": 77})
+    with pytest.raises(linux_input.FocusLost) as lost:
+        guard()
+    assert "background" not in str(lost.value)
+
+
 def test_chat_screen_is_recognised_by_its_grey_title_bar(tmp_path):
     from PIL import Image
     chat = Image.new("RGB", (900, 600), (60, 90, 40))

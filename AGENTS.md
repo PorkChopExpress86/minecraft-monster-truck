@@ -18,4 +18,4 @@ After finishing changes to `behavior_packs/`, `resource_packs/`, or `scripts/`, 
 
 ### Testing
 
-A green Scenario Run does not prove a player-reported bug fixed. For key, input or dismount bugs, reproduce with `./test-addon.sh Client`; for the rest, read the blind spots in `docs/LINUX_TESTING.md`.
+A green Scenario Run does not prove a player-reported bug fixed. For key, input or dismount bugs, reproduce with `./test-addon.sh Client`; for the rest, read the blind spots in `docs/LINUX_TESTING.md`. Python tests: `REQUIRE_NODE=1 .venv-testing/bin/python -m pytest -q` (there is no `python` on PATH); a worktree uses the main checkout's `.venv-testing` by absolute path.
