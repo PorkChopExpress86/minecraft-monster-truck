@@ -431,6 +431,11 @@ class WorldInput(FakeInput):
     def hold(self, keys, seconds, on_tick=None):
         """The world moves in 0.1 s steps; on_tick sees it before each step and may end the hold."""
         self.actions.append(("hold", tuple(keys), seconds))
+        world = self.world
+        if client_checks.SNEAK_KEY in keys:
+            # riding_after_sneak: one seat for every Sneak, or a list with the seat after each Sneak in turn.
+            after = world.riding_after_sneak
+            world.sneak_result = after.pop(0) if isinstance(after, list) else after
         for _ in range(max(1, round(seconds / 0.1))):
             if on_tick and on_tick():
                 break
@@ -446,7 +451,7 @@ class WorldInput(FakeInput):
             truck["yaw"] += world.turn.get(key, 0.0) * seconds
         airborne = world.falling
         if client_checks.SNEAK_KEY in keys:
-            world.riding = world.riding_in_drop if airborne else world.riding_after_sneak
+            world.riding = world.riding_in_drop if airborne else world.sneak_result
             if world.riding == 0:
                 world.player_y = world.player_y_after_sneak
 
@@ -585,23 +590,28 @@ def test_sneak_during_a_drop_keeps_the_rider_until_landing_then_exits():
 
 
 def test_sneak_over_lava_with_no_land_in_reach_keeps_the_rider_seated():
-    world = World(riding_after_sneak=1)
+    world = World(riding_after_sneak=[1, 0])
     assert run_check("sneak_stays_seated_over_lava", world)
     fills = [line for line in world.commands if line.startswith("fill")]
     assert any(line.endswith(" lava") for line in fills), "a lava pool is built"
     assert not fills[-1].endswith(" lava"), "the pool is filled in again"
     with pytest.raises(client_checks.CheckFailed, match="over lava.*put the player out"):
-        run_check("sneak_stays_seated_over_lava", World(riding_after_sneak=0))
+        run_check("sneak_stays_seated_over_lava", World(riding_after_sneak=[0, 0]))
+
+
+def test_sneak_over_lava_is_controlled_by_a_sneak_that_lands_once_dry_land_is_in_reach():
+    with pytest.raises(client_checks.CheckFailed, match="never have reached the game"):
+        run_check("sneak_stays_seated_over_lava", World(riding_after_sneak=[1, 1]))
 
 
 def test_palette_screenshots_paint_each_color_and_capture_it():
     world = World()
-    ctx = client_checks.Context(world, WorldInput(world), base=(0, -60, 0), sleep=lambda s: None)
     shots = []
-    ctx.capturer = lambda name: shots.append(name) or f"/shots/{name}/minecraft.png"
+    ctx = client_checks.Context(world, WorldInput(world), base=(0, -60, 0), sleep=lambda s: None,
+                                capture=lambda name: shots.append(name) or f"/shots/{name}/minecraft.png")
     detail = client_checks.CHECKS["palette_screenshots"](ctx)
     assert len(client_checks.PALETTE) == 16 and client_checks.PALETTE[0] == "red"
-    assert shots == list(client_checks.PALETTE)
+    assert shots == [f"palette/{color}" for color in client_checks.PALETTE]
     painted = [line.split()[-1] for line in world.commands if line.startswith("event entity")]
     assert painted == [f"blake:paint_{color}" for color in client_checks.PALETTE]
     assert "16" in detail
@@ -614,7 +624,7 @@ def test_palette_screenshots_fail_when_a_paint_event_is_refused():
                 return {"statusCode": -1, "statusMessage": "no such event"}
             return super().command(line, timeout)
     world = Refusing()
-    ctx = client_checks.Context(world, WorldInput(world), base=(0, -60, 0), sleep=lambda s: None)
-    ctx.capturer = lambda name: name
+    ctx = client_checks.Context(world, WorldInput(world), base=(0, -60, 0), sleep=lambda s: None,
+                                capture=lambda name: name)
     with pytest.raises(client_checks.CheckFailed, match="cyan"):
         client_checks.CHECKS["palette_screenshots"](ctx)

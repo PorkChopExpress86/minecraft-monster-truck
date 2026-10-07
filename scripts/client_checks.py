@@ -130,7 +130,7 @@ def take_focus(activate, guard, attempts=5, sleep=time.sleep):
 
 class Context:
     def __init__(self, ws, keys, base, entity="blake:monster_truck", sleep=time.sleep, trace=False,
-                 clock=time.monotonic):
+                 clock=time.monotonic, capture=None):
         self.ws = ws
         self.keys = keys
         self.base = base
@@ -140,10 +140,7 @@ class Context:
         self.clock = clock
         self.samples = []
         self.started = clock()
-        self.capturer = None  # name -> path of a screenshot of the client, saved under that name
-
-    def capture(self, name):
-        return self.capturer(name)
+        self.capture = capture  # name -> path of a screenshot of the client, saved under client-input/<name>/
 
     def hold(self, keys, seconds, until=None):
         """Hold keys for `seconds`, or until until() is true at a focus check of the hold; when tracing, sample
@@ -339,18 +336,30 @@ def sneak_stays_seated_over_lava(ctx):
     ctx.run(f"fill {pool} lava", must_succeed=False)
     try:
         ctx.fresh_truck(at=(-16.5, -2.5))
-        ctx.sleep(2.0)  # the truck settles afloat
+        ctx.sleep(2.0)  # the truck settles afloat (still and seated by then: run 025c4272)
         ctx.hold([SNEAK_KEY], 0.6)
         ctx.sleep(1.0)
         riding = ctx.probe("riding")
         if riding != 1:
             raise CheckFailed(f"Sneak over lava with no land in reach put the player out of the Driver Seat (seat {riding})")
         lost = ctx.probe("lost")
+        # Control: with dry footing 3 blocks to the truck's side (stone at the lava surface), the same Sneak must
+        # get the player out onto it; otherwise the seated result could be a Sneak that never reached the game.
+        truck, _ = ctx.truck()
+        fx, fz = math.floor(truck["x"]) + 3, math.floor(truck["z"])
+        ctx.run(f"fill {fx} {by - 1} {fz - 1} {fx + 1} {by - 1} {fz + 1} stone")
+        ctx.hold([SNEAK_KEY], 0.6)
+        ctx.sleep(0.5)
+        riding = ctx.probe("riding")
+        if riding != 0:
+            raise CheckFailed(f"with dry land 3 blocks away, Sneak over lava still left the player in seat {riding}: "
+                              "the Sneak key may never have reached the game, so the seated result proves nothing")
     finally:
         ctx.run("ride @s stop_riding", must_succeed=False)
         ctx.run(f"tp @s {bx + 0.5} {by} {bz + 0.5}", must_succeed=False)
         ctx.run(f"fill {pool} grass_block", must_succeed=False)
-    return f"Sneak over lava with no land in reach left the player in the Driver Seat ({lost} ticks out by the probe)"
+    return (f"Sneak over lava with no land in reach left the player in the Driver Seat ({lost} ticks out by the probe); "
+            "with dry land 3 blocks away the same Sneak got them out")
 
 
 def sneak_during_drop(ctx):
@@ -421,8 +430,8 @@ def palette_screenshots(ctx):
             body = ctx.run(f"event entity @e[type={ctx.entity}] blake:paint_{color}", must_succeed=False)
             if body.get("statusCode") != 0:
                 raise CheckFailed(f"the truck refused paint event {color}: {body.get('statusMessage')}")
-            ctx.sleep(0.5)  # the property reaches the client and the render controller swaps textures
-            shots[color] = str(ctx.capture(color))
+            ctx.sleep(0.5)  # the property reaches the client and the textures swap (all 16 shown: run 7c7025f5)
+            shots[color] = str(ctx.capture(f"palette/{color}"))
     finally:
         ctx.run("camera @s clear", must_succeed=False)
     return f"{len(shots)} palette colors screenshotted for review: " + json.dumps(shots)
@@ -493,8 +502,8 @@ def run_client_input(root, config, run_id, output, only=None, trace=False, diag=
             frames.mkdir(exist_ok=True)
             connect_client(keys, channel, lambda: linux.chat_open(linux.capture(frames)))
             channel.subscribe("PlayerMessage")
-            ctx = Context(channel, keys, base=None, entity=config["entity_id"], trace=trace)
-            ctx.capturer = lambda name: linux.capture(mkdir(client_dir / "palette" / name))
+            ctx = Context(channel, keys, base=None, entity=config["entity_id"], trace=trace,
+                          capture=lambda name: linux.capture(mkdir(client_dir / name)))
             me = query_targets(ctx.run("querytarget @s"))[0]["position"]
             ctx.base = (math.floor(me["x"]), math.floor(me["y"]), math.floor(me["z"]))
             prepare_arena(ctx)
