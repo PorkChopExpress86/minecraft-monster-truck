@@ -1009,11 +1009,19 @@ function retrievalBench({ dimension, origin, run }) {
     clear();
     return totals;
   };
-  return { dead, destroy };
+  const oneVehicleItem = (drops, label) => {
+    if (drops.get("blake:monster_truck_vehicle") !== 1 || drops.has("minecraft:iron_ingot")) {
+      throw new Error(`${label} must return exactly one Vehicle Item: ${JSON.stringify([...drops])}`);
+    }
+  };
+  return { dead, destroy, oneVehicleItem };
 }
 
+// retrieval_full_health stops swinging after this many ticks: 2666 measured from full health (run 11fa266d), plus 20%.
+const FULL_HEALTH_SWING_TICKS = 3200;
+
 async function retrieval({ dimension, origin, driver, run }) {
-  const { dead, destroy } = retrievalBench({ dimension, origin, run });
+  const { dead, destroy, oneVehicleItem } = retrievalBench({ dimension, origin, run });
   const applied = cause => async truck => {
     truck.applyDamage(5000, { cause });
     await wait(2);
@@ -1034,9 +1042,7 @@ async function retrieval({ dimension, origin, driver, run }) {
       await wait(1);
     }
   });
-  if (retrieved.get("blake:monster_truck_vehicle") !== 1 || retrieved.has("minecraft:iron_ingot")) {
-    throw new Error("Player-fatal retrieval must return exactly one Vehicle Item: " + JSON.stringify([...retrieved]));
-  }
+  oneVehicleItem(retrieved, "Player-fatal retrieval");
   const checks = [`a player's punches (${swings} swings at a worn-down truck) return exactly one Vehicle Item and no Scrap`];
 
   for (const cause of [EntityDamageCause.entityExplosion, EntityDamageCause.lava, EntityDamageCause.fire]) {
@@ -1076,7 +1082,7 @@ async function retrieval({ dimension, origin, driver, run }) {
 }
 
 async function retrieval_full_health({ dimension, origin, driver, run }) {
-  const { dead, destroy } = retrievalBench({ dimension, origin, run });
+  const { dead, destroy, oneVehicleItem } = retrievalBench({ dimension, origin, run });
   // Real swings from a Survival player take a fresh truck from full health to the fatal blow,
   // which returns the Vehicle Item. Measured (run 2849f48e): one hit lands every 10 ticks (the
   // damage immunity window; attackEntity returns false in between). A fist deals 1 (about 500 s
@@ -1098,7 +1104,7 @@ async function retrieval_full_health({ dimension, origin, driver, run }) {
   try {
     retrieved = await destroy(async truck => {
       startHealth = health(truck);
-      for (let tick = 0; tick < 3200 && !dead(truck); tick++) {
+      for (let tick = 0; tick < FULL_HEALTH_SWING_TICKS && !dead(truck); tick++) {
         if (driver.attackEntity(truck)) swings++;
         await wait(1);
       }
@@ -1108,9 +1114,9 @@ async function retrieval_full_health({ dimension, origin, driver, run }) {
     world.setDifficulty(difficulty);
   }
   if (startHealth !== TRUCK_MAX_HEALTH) throw new Error(`Retrieval truck started at ${startHealth} health, not full`);
-  if (retrieved.get("blake:monster_truck_vehicle") !== 1 || retrieved.has("minecraft:iron_ingot")) {
-    throw new Error("Player-fatal retrieval must return exactly one Vehicle Item: " + JSON.stringify([...retrieved]));
-  }
+  // No entityDie fires: main.js cancels a player's fatal blow and removes the truck itself, and only that
+  // path drops a Vehicle Item, so the drop below also shows the fatal blow was the driver's.
+  oneVehicleItem(retrieved, "Player-fatal retrieval from full health");
   return [`a player's swings (Sharpness V netherite sword, ${swings} swings over ` +
     `${system.currentTick - startTick} ticks from ${startHealth} health) ` +
     "return exactly one Vehicle Item and no Scrap"];
