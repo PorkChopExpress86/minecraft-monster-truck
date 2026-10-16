@@ -4,7 +4,7 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import struct
@@ -115,7 +115,8 @@ def customize_level(data, name, beta_apis=False):
 def check_archive(archive, label, max_file_size=None):
     """Refuse a zip whose members could land outside the extraction directory (or are oversized) before extracting."""
     for item in archive.infolist():
-        path = Path(item.filename)
+        # Member names are POSIX paths; a Windows Path would not count "/abs.txt" as absolute.
+        path = PurePosixPath(item.filename)
         if path.is_absolute() or ".." in path.parts or "\\" in item.filename:
             raise ValueError("Unsafe path in " + label)
         if max_file_size is not None and item.file_size > max_file_size:

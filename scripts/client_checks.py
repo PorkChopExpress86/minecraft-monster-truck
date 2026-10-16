@@ -1,20 +1,22 @@
-"""Client Input Run (ADR-0019): the real Linux client, driven by a virtual keyboard and mouse.
+"""Client Input Run (ADR-0019): the real client, driven by a virtual keyboard and mouse (Linux and Windows).
 
 The run deploys the add-on with the harness in probe mode to the Dedicated Test World, turns the client's
 WebSocket options on for its own duration, launches the client, and joins it to a local WebSocket server by
 typing `/connect` into chat. Each check then presses real keys while reading the client's own world over
 that channel: querytarget for positions and facing, the harness probe's scoreboard for who rides what.
-Every key and mouse event passes the focus guard first (bedrock_linux.focus_guard).
+Every key and mouse event passes the focus guard first (bedrock_linux or windows_input focus_guard).
 """
 import contextlib
 import importlib.util
 import json
 import math
+import os
 from pathlib import Path
 import re
 import shutil
 import sys
 import time
+from urllib.parse import quote
 
 try:
     from . import bedrock_linux as linux
@@ -22,12 +24,14 @@ try:
     from .bedrock_world import SetupError, bootstrap, dedicated_pack_ids, deploy
     from .client_ws import ChannelError, WsChannel, query_targets, score
     from .linux_input import FocusLost, VirtualInput
+    from . import windows_input
 except ImportError:
     import bedrock_linux as linux
     from bedrock_client import await_client_load
     from bedrock_world import SetupError, bootstrap, dedicated_pack_ids, deploy
     from client_ws import ChannelError, WsChannel, query_targets, score
     from linux_input import FocusLost, VirtualInput
+    import windows_input
 
 PROBE = "mt_probe"  # testing/harness/client_probe.js
 # A virtual Shift never reaches the launcher as Sneak (real Shift does), so for the run Sneak is rebound to K,
@@ -93,19 +97,21 @@ def run_options(options, backup_dir):
         options.write_text(text, encoding="utf-8")
 
 
-def connect_client(keys, channel, chat_visible, sleep=time.sleep, attempts=3):
-    """Type `/connect` into the client's chat. '/' opens chat with "/" prefilled but the box unfocused; Enter
-    focuses it; typed text then lands in the box, and Enter sends. Nothing is typed unless the chat screen is
-    seen, since keys typed in the game itself would act as controls."""
+def connect_client(keys, channel, chat_visible, sleep=time.sleep, attempts=3, focus_with_enter=True):
+    """Type `/connect` into the client's chat. '/' opens chat with "/" prefilled; on Linux the box is unfocused
+    and Enter focuses it, while on Windows it is focused already (focus_with_enter False), where an Enter would
+    send the lone "/". Typed text then lands in the box, and Enter sends. Nothing is typed unless the chat
+    screen is seen, since keys typed in the game itself would act as controls."""
     for _ in range(attempts):
         keys.tap("/")
         if not any(chat_visible() or sleep(0.4) for _ in range(20)):
             continue
         sleep(1.0)
-        keys.tap("enter")
-        sleep(1.0)
-        if not chat_visible():
-            continue
+        if focus_with_enter:
+            keys.tap("enter")
+            sleep(1.0)
+            if not chat_visible():
+                continue
         keys.type_text(f"connect 127.0.0.1:{channel.port}")
         sleep(0.5)
         keys.tap("enter")
@@ -472,38 +478,143 @@ def load_diag(path):
     return checks
 
 
-def run_client_input(root, config, run_id, output, only=None, trace=False, diag=None):
+class LinuxClientPort:
+    """The flatpak mcpelauncher client: KWin focus and window control, spectacle captures, a uinput keyboard."""
+
+    focus_with_enter = True  # '/' opens chat with the box unfocused
+    connect_attempts = 3
+
+    def __init__(self):
+        self.errors = (linux.ClientError,)
+        self.process = None
+
+    def bootstrap_client(self):
+        if __package__:
+            from .bedrock_client import LauncherClient
+        else:
+            from bedrock_client import LauncherClient
+        return LauncherClient()
+
+    def launch(self, world, config, output):
+        self.process = linux.launch(world.name, config["linux_client_version"], output / "client-stdout.log")
+
+    def await_ready(self, world, config, output):
+        load = await_client_load(self.process, output / "client-stdout.log", world,
+                                 (dedicated_pack_ids(config)[0], config["harness_uuid"]),
+                                 {**config, "observe_seconds": 0})
+        if load["status"] != "passed":
+            raise ClientInputError("; ".join(load["errors"]))
+        time.sleep(8)  # the world finishes loading chunks and UI after the player spawns
+
+    def guard(self, work_dir):
+        return linux.focus_guard(work_dir, self.process)
+
+    def activate(self, work_dir):
+        linux.activate_window(work_dir)
+
+    def device(self):
+        return None  # VirtualInput's default, the uinput device
+
+    def capture(self, directory):
+        return linux.capture(directory)
+
+    def close(self, work_dir):
+        linux.close(self.process, work_dir)
+
+
+class WindowsClientPort:
+    """Minecraft for Windows: foreground-window focus, HWND captures, SendInput scan codes (windows_input)."""
+
+    focus_with_enter = False  # '/' opens chat with the box already focused
+    # The client signs in and loads the world for about a minute after its window appears, and nothing tells the
+    # runner when it is in the world; '/' does nothing on the menus, so connecting retries until the chat opens.
+    connect_attempts = 15
+
+    def __init__(self):
+        if __package__:
+            from .bedrock_client import WindowsClient
+        else:
+            from bedrock_client import WindowsClient
+        self.client = WindowsClient()
+        self.errors = (SetupError,)
+
+    def bootstrap_client(self):
+        return self.client
+
+    def launch(self, world, config, output):
+        self.client.open_uri("minecraft://?load=" + quote(world.name, safe=""))
+
+    def await_ready(self, world, config, output, sleep=time.sleep):
+        for _ in range(config["timeout_seconds"]):
+            if self._window():
+                return
+            sleep(1.0)
+        raise ClientInputError(f"Minecraft opened no window within {config['timeout_seconds']} seconds")
+
+    def _window(self):
+        if __package__:
+            from .bedrock_client import find_game_window
+        else:
+            from bedrock_client import find_game_window
+        return find_game_window(self.client.user32)
+
+    def guard(self, work_dir):
+        return windows_input.focus_guard()
+
+    def activate(self, work_dir):
+        windows_input.activate_window(self._window)
+
+    def device(self):
+        return windows_input.SendInputDevice()
+
+    def capture(self, directory):
+        # In process: the smoke run's per-capture helper process can stall importing Pillow past its 20 s limit
+        # (run 9b2e3425), and chat detection captures every 0.4 s. No key is held while capturing.
+        if __package__:
+            from .bedrock_client import _capture_game
+        else:
+            from bedrock_client import _capture_game
+        # Its stage lines go to the capture's trace log, as the helper's do.
+        with open(Path(directory) / "capture-trace.log", "w", encoding="utf-8") as trace, \
+                contextlib.redirect_stderr(trace):
+            return _capture_game(Path(directory), self.client.user32)
+
+    def close(self, work_dir):
+        self.client.close(work_dir)
+
+
+def client_port():
+    return WindowsClientPort() if os.name == "nt" else LinuxClientPort()
+
+
+def run_client_input(root, config, run_id, output, only=None, trace=False, diag=None, port=None):
     """Deploy, launch, connect, run the checks (or a --diag file's), close; returns the report stage."""
     checks = load_diag(diag) if diag else CHECKS
     names = select_checks(only, checks)
+    port = client_port() if port is None else port
     client_dir = output / "client-input"
     client_dir.mkdir(parents=True, exist_ok=True)
-    launcher_client = linux_client()
-    local = bootstrap(root, config, launcher_client)
+    local = bootstrap(root, config, port.bootstrap_client())
     world = Path(local["world"]).absolute()
     deploy(root, config, world, run_id, client_probe=True)
-    options = linux.data_dir() / "games/com.mojang/minecraftpe/options.txt"
+    options = world.parent.parent / "minecraftpe/options.txt"  # com.mojang/minecraftWorlds/<world>
     results, errors = [], []
     with run_options(options, client_dir / "options-backup"):
-        process = linux.launch(world.name, config["linux_client_version"], output / "client-stdout.log")
+        port.launch(world, config, output)
         keys = channel = None
         try:
-            load = await_client_load(process, output / "client-stdout.log", world,
-                                     (dedicated_pack_ids(config)[0], config["harness_uuid"]),
-                                     {**config, "observe_seconds": 0})
-            if load["status"] != "passed":
-                raise ClientInputError("; ".join(load["errors"]))
-            time.sleep(8)  # the world finishes loading chunks and UI after the player spawns
-            guard = linux.focus_guard(client_dir, process)
-            take_focus(lambda: linux.activate_window(client_dir), guard)
-            keys = VirtualInput(guard)
+            port.await_ready(world, config, output)
+            guard = port.guard(client_dir)
+            take_focus(lambda: port.activate(client_dir), guard)
+            keys = VirtualInput(guard, device=port.device())
             channel = WsChannel()
             frames = client_dir / "frames"
             frames.mkdir(exist_ok=True)
-            connect_client(keys, channel, lambda: linux.chat_open(linux.capture(frames)))
+            connect_client(keys, channel, lambda: linux.chat_open(port.capture(frames)),
+                           attempts=port.connect_attempts, focus_with_enter=port.focus_with_enter)
             channel.subscribe("PlayerMessage")
             ctx = Context(channel, keys, base=None, entity=config["entity_id"], trace=trace,
-                          capture=lambda name: linux.capture(mkdir(client_dir / name)))
+                          capture=lambda name: port.capture(mkdir(client_dir / name)))
             me = query_targets(ctx.run("querytarget @s"))[0]["position"]
             ctx.base = (math.floor(me["x"]), math.floor(me["y"]), math.floor(me["z"]))
             prepare_arena(ctx)
@@ -521,18 +632,18 @@ def run_client_input(root, config, run_id, output, only=None, trace=False, diag=
                 shot = client_dir / name
                 shot.mkdir(exist_ok=True)
                 with contextlib.suppress(Exception):
-                    entry["screenshot"] = linux.capture(shot)
+                    entry["screenshot"] = port.capture(shot)
                 results.append(entry)
                 print(f"Client check {name}: {entry['status'].upper()} {entry.get('detail') or entry.get('error')}", flush=True)
-        except (ClientInputError, ChannelError, FocusLost, linux.ClientError) as error:
+        except (ClientInputError, ChannelError, FocusLost, *port.errors) as error:
             errors.append(f"{type(error).__name__}: {error}")
         finally:
             for closer in (lambda: keys and keys.close(), lambda: channel and channel.close()):
                 with contextlib.suppress(Exception):
                     closer()
             try:
-                linux.close(process, client_dir)
-            except linux.ClientError as error:
+                port.close(client_dir)
+            except port.errors as error:
                 errors.append(str(error))
     failed = errors or len(results) != len(names) or any(entry["status"] != "passed" for entry in results)
     return {"status": "failed" if failed else "passed", "checks": results, "errors": errors}
@@ -555,10 +666,3 @@ def mkdir(path):
     path.mkdir(parents=True, exist_ok=True)
     return path
 
-
-def linux_client():
-    if __package__:
-        from .bedrock_client import LauncherClient
-    else:
-        from bedrock_client import LauncherClient
-    return LauncherClient()

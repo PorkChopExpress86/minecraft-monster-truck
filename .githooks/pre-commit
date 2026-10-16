@@ -12,4 +12,6 @@ fi
 
 git ls-files -z 'behavior_packs/*.js' 'testing/scenarios/*.js' | xargs -0 -n1 node --check
 node_modules/.bin/tsc -p jsconfig.json
-REQUIRE_NODE=1 .venv-testing/bin/python -m pytest -q
+python=.venv-testing/bin/python
+[[ -x "$python" ]] || python=.venv-testing/Scripts/python.exe  # Windows venv layout
+REQUIRE_NODE=1 "$python" -m pytest -q

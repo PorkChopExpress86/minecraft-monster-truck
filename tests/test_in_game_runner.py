@@ -16,6 +16,7 @@ from scripts import bedrock_world as worlds
 def isolated_home(tmp_path, monkeypatch):
     """Never reach the real Linux desktop or launcher data; clients are injected as FakeClient."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))  # Path.home() on Windows
 
 
 class FakeClient(clients.WindowsClient):

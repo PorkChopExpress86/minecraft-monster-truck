@@ -60,7 +60,7 @@ Add scenarios in `testing/scenarios/scenarios.js` and list them in `scenario_ser
 
 ## Client Input Run
 
-A Client Input Run presses real keys in the real client and asserts the outcome in the client's own world (ADR-0019). It is local only: it takes the keyboard, so it is not part of All and never runs in CI. Step away from the desktop while it runs.
+A Client Input Run presses real keys in the real client and asserts the outcome in the client's own world (ADR-0019). The same checks run on Windows (`WINDOWS_TESTING.md` lists the differences). It is local only: it takes the keyboard, so it is not part of All and never runs in CI. Step away from the desktop while it runs.
 
 1. The runner deploys the add-on plus the harness in probe mode. The harness publishes, every tick, the player's seat (`riding`), ticks spent out of a seat (`lost`), and the Sneak, Jump and look state on the `mt_probe` scoreboard instead of running the showcase.
 2. For the run only, `options.txt` gets `websockets_enabled:1`, `websocket_encryption:0`, and Sneak bound to K (a virtual Shift never reaches this launcher as Sneak; a real Shift does). Only those keys are restored afterwards; the game's other changes are kept.

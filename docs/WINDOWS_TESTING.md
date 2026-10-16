@@ -10,7 +10,7 @@ The runner first captures the Minecraft HWND without changing focus. Uniform fra
 
 Each attempt has a unique directory, a `capture-trace.log` recording the helper's last stage, and an entry with elapsed time and outcome in `capture-attempts.json`. The helper remains bounded to 20 seconds; retries are spaced 15 seconds after an attempt completes. Inspect these files to distinguish helper startup, window lookup, foreground fallback, pixel capture, and PNG saving failures. Shutdown evidence is also saved separately in `shutdown.json`.
 
-The report's `coverage` fields leave visual appearance, audio playback, player-input behavior and feel, multiplayer, and other devices marked `not_verified`. The runner never generates keyboard input. Record those observations with the manual Proving Ground checklist.
+The report's `coverage` fields leave visual appearance, audio playback, player-input behavior and feel, multiplayer, and other devices marked `not_verified`. The smoke run never generates keyboard input; the Client Input Run below does. Record those observations with the manual Proving Ground checklist.
 
 Run `powershell.exe -NoProfile -File .\Test-Addon.ps1` from this repository. Default `All` mode prepares the isolated Python environment, runs static checks, automatically creates and configures a dedicated world when needed, launches it, and checks the runtime harness and fresh content logs. It captures the foreground game window when available and requests normal client shutdown.
 
@@ -46,13 +46,34 @@ Doctor lists GDK and legacy world paths. If several initialized accounts exist, 
 ## Commands and results
 
 ```powershell
-.\Test-Addon.ps1                 # Automatic setup, static checks, and live smoke test
+.\Test-Addon.ps1                 # Automatic setup, static checks, Scenario Runs, and live smoke test
 .\Test-Addon.ps1 -Mode Setup     # Environment setup followed by Bootstrap
 .\Test-Addon.ps1 -Mode Bootstrap # Prepare the dedicated world without running tests
-.\Test-Addon.ps1 -Mode Static    # No Minecraft launch or world changes
+.\Test-Addon.ps1 -Mode Static    # Script API type check, pytest, validation, packaging; no Minecraft launch
+.\Test-Addon.ps1 -Mode Scenarios # Headless Scenario Runs only (Docker Desktop)
+.\Test-Addon.ps1 -Mode Scenarios -Only flotation_water,handbrake
 .\Test-Addon.ps1 -Mode Game      # Live smoke only; static checks not implied
+.\Test-Addon.ps1 -Mode Client    # Client Input Run: real key presses in the real client (local only, not in All)
+.\Test-Addon.ps1 -Mode Client -Only sneak_dismounts -Trace
 .\Test-Addon.ps1 -Mode Doctor    # Read-only installation/world discovery
 ```
+
+Bootstrap, Static, and All also install the dev tooling in `package.json` (Node.js and npm required) and enable the pre-commit hook in `.githooks/`, which Git for Windows runs through its bundled bash. Run pytest directly with `$env:REQUIRE_NODE='1'; .\.venv-testing\Scripts\python.exe -m pytest -q`. Tests that need Linux (`/proc`, the uinput event layout) skip with a reason.
+
+### Scenario Runs
+
+Scenario Runs work as described in [Linux testing](LINUX_TESTING.md#scenario-runs), through Docker Desktop with the Linux engine; the dedicated server container bind-mounts the run directory from this drive. `docker run` has a 120-second limit, so pull the pinned image named by `scenario_server.image` in `testing/bedrock.json` once with `docker pull` before the first run. Full run `8daa081332dc45e19282ba8de88ab671` passed 22/22 on this machine.
+
+### Client Input Run
+
+The checks, probe, and run options are shared with Linux and described in [Linux testing](LINUX_TESTING.md#client-input-run). On Windows:
+
+- Keys go in through `SendInput` as hardware scan codes (`scripts/windows_input.py`). Before every key the focus guard checks that the foreground window belongs to `Minecraft.Windows.exe`; any other window ends the run with every key released. An injected Shift never registers as Sneak here either, so the run binds Sneak to K, as on Linux.
+- The client signs in and loads the world for about a minute after its window appears. Nothing reports when the world is ready, so the runner retries opening chat with `/` until the Chat and Commands screen appears (`/` does nothing on the menus).
+- `/` opens chat with the text box already focused. Pressing Enter there would send a lone `/`, so the runner types `connect` straight away.
+- Screenshots are taken in the runner process. The smoke run's per-capture helper process sometimes stalled while importing Pillow, past its 20-second limit (run `9b2e3425ca50445ea7f991a45822127a`).
+
+Full run `b6ac98092dcc41b99fa26e6aaf171759` passed all 11 checks. Leave the keyboard and mouse alone while it runs, and run it in the foreground with nothing else running.
 
 Every invocation writes `dist/bedrock-tests/<run-id>/report.json` and updates `dist/bedrock-tests/latest.json`. Static runs retain command output and pytest JUnit XML; live runs retain fresh content-log evidence and screenshots of the game viewport. Capturing brings Minecraft to the foreground. Mode and per-stage results distinguish a static-only pass from a full pass.
 
