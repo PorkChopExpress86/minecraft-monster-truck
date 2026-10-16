@@ -221,7 +221,7 @@ test("on steady ground a rider who leaves is let go; over liquid the rider is se
     assert.ok(!world.truck.seated.includes(rider), "not pulled back into the seat");
     assert.equal(world.input.protectedRiders.has("rider"), false, "and no longer protected");
   }
-  // Sneaking on land: the rider leaves and loses protection.
+  // Sneaking on land: the rider leaves, dismounts to the side of the driver door, and loses protection.
   {
     const rider = createFakePlayer({ id: "rider" });
     const world = scene({ riders: [rider] });
@@ -230,7 +230,10 @@ test("on steady ground a rider who leaves is let go; over liquid the rider is se
     rider.isSneaking = true;
     world.step(() => world.truck.detach(rider));
     assert.ok(!world.truck.seated.includes(rider));
-    assert.equal(rider.teleports.length, 0);
+    assert.equal(rider.teleports.length, 1, "teleported out of the cab");
+    const { location } = rider.teleports[0];
+    assert.ok(location.x > world.truck.location.x + 1.125, "dismount is out to the side of the driver door to the side of the truck");
+    assert.equal(location.y, GROUND_Y, "feet on the ground");
     assert.equal(world.input.protectedRiders.has("rider"), false);
   }
   // Sneaking over water: set down on the nearest dry footing (the roof does not hold a player).
