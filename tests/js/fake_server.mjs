@@ -1,14 +1,9 @@
 // A stand-in for the @minecraft/server module so node can import main.js. Importing this file
 // registers a resolve hook that maps "@minecraft/server" to it; import it before main.js.
 // `fake` records what main.js subscribed and lets tests place dimensions and entities.
-import { registerHooks } from "node:module";
+import { register } from "node:module";
 
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "@minecraft/server") return { url: import.meta.url, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-});
+register("./fake_server_hooks.mjs", import.meta.url);
 
 export const fake = {
   intervals: [],

@@ -3,7 +3,7 @@
 // Stomp (ADR-0017). truck_tick.js calls stepLanding once per tick with this module's slice of
 // truck state; main.js's entityHurt handler asks absorbsFallDamage. Must not import
 // @minecraft/server, so node can load it.
-import { findDryLanding } from "./amphibious.js";
+import { findDryLanding, isLiquidBlock } from "./amphibious.js";
 import { damageEntity, isProtectedTarget } from "./contact.js";
 
 export const PNEUMATIC_VENT_SOUND = "random.fizz";
@@ -72,6 +72,53 @@ export function calculateWheelContactOffsets(
     { x: -dir.x * forwardDist + perp.x * lateralDist, z: -dir.z * forwardDist + perp.z * lateralDist },
     { x: -dir.x * forwardDist - perp.x * lateralDist, z: -dir.z * forwardDist - perp.z * lateralDist },
   ];
+}
+
+/**
+ * Find a standing position beside the vehicle door for a dismounting rider.
+ * Driver door is out to the left side (+perp direction, 1.8 blocks from centerline).
+ * Passenger door is out to the right side (-perp direction, -1.8 blocks from centerline).
+ * @param {import("./truck_tick.js").WorldDimension} dimension
+ * @param {import("./truck_tick.js").Vector3} loc
+ * @param {{ x: number, z: number }} heading
+ * @param {boolean} [isPassenger=false]
+ * @returns {import("./truck_tick.js").Vector3}
+ */
+export function findDoorLanding(dimension, loc, heading, isPassenger = false) {
+  const dirX = heading.x;
+  const dirZ = heading.z;
+  const primarySide = isPassenger ? -1 : 1;
+  const forwardOffset = 0.15;
+  const sideDistances = [1.8, 1.5, 2.2];
+
+  for (const sideSign of [primarySide, -primarySide]) {
+    for (const dist of sideDistances) {
+      const targetX = loc.x + dirZ * (dist * sideSign) + dirX * forwardOffset;
+      const targetZ = loc.z - dirX * (dist * sideSign) + dirZ * forwardOffset;
+      const bx = Math.floor(targetX);
+      const bz = Math.floor(targetZ);
+      const cy = Math.floor(loc.y);
+
+      if (!dimension || typeof dimension.getBlock !== "function") {
+        return { x: targetX, y: loc.y, z: targetZ };
+      }
+
+      for (const y of [cy, cy + 1, cy - 1, cy - 2]) {
+        try {
+          const below = dimension.getBlock({ x: bx, y: y - 1, z: bz });
+          const feet = dimension.getBlock({ x: bx, y: y, z: bz });
+          const head = dimension.getBlock({ x: bx, y: y + 1, z: bz });
+          if (below && !below.isAir && !isLiquidBlock(below.typeId) && (!feet || feet.isAir) && (!head || head.isAir)) {
+            return { x: targetX, y, z: targetZ };
+          }
+        } catch {}
+      }
+    }
+  }
+
+  const fallbackX = loc.x + dirZ * (1.8 * primarySide) + dirX * forwardOffset;
+  const fallbackZ = loc.z - dirX * (1.8 * primarySide) + dirZ * forwardOffset;
+  return { x: fallbackX, y: loc.y, z: fallbackZ };
 }
 
 /**
@@ -217,6 +264,11 @@ export function stepLanding(truck, dimension, landing, frame) {
             protectedRiders.delete(playerId);
             landing.protectedRiderIds?.delete(playerId);
           } else {
+            const isPassenger = prevRiderIds.indexOf(playerId) === 1;
+            const doorLanding = findDoorLanding(dimension, loc, heading, isPassenger);
+            if (doorLanding && player.teleport) {
+              player.teleport(doorLanding, { dimension });
+            }
             protectedRiders.delete(playerId);
             landing.protectedRiderIds?.delete(playerId);
           }

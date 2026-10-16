@@ -113,3 +113,30 @@ test("a Crush Stomp whose entity query fails still sounds and shows the explosio
   assert.ok(world.dimension.sounds.some((sound) => sound.soundId === "random.explode"));
   assert.ok(world.dimension.particles.some((p) => p.effectName === "minecraft:large_explosion"));
 });
+
+test("findDoorLanding places driver on the left and passenger on the right outside collision box", async () => {
+  const { findDoorLanding } = await import("../../behavior_packs/MonsterTruck_BP/scripts/landing.js");
+  const dimension = createFakeDimension();
+  // Truck at (10, 61, 10), heading South (+Z)
+  const loc = { x: 10, y: GROUND_Y, z: 10 };
+  const headingSouth = { x: 0, z: 1 };
+
+  // Driver door: +perp (+X), forward (+Z)
+  const driverLanding = findDoorLanding(dimension, loc, headingSouth, false);
+  assert.equal(driverLanding.y, GROUND_Y);
+  assert.ok(driverLanding.x >= loc.x + 1.8 - 0.001, "driver is to the left (+X for South heading)");
+  assert.ok(driverLanding.z >= loc.z + 0.15 - 0.001, "driver is slightly forward aligned with cab");
+
+  // Passenger door: -perp (-X), forward (+Z)
+  const passengerLanding = findDoorLanding(dimension, loc, headingSouth, true);
+  assert.equal(passengerLanding.y, GROUND_Y);
+  assert.ok(passengerLanding.x <= loc.x - 1.8 + 0.001, "passenger is to the right (-X for South heading)");
+  assert.ok(passengerLanding.z >= loc.z + 0.15 - 0.001, "passenger is slightly forward aligned with cab");
+
+  // Heading East (+X)
+  const headingEast = { x: 1, z: 0 };
+  const driverEast = findDoorLanding(dimension, loc, headingEast, false);
+  assert.ok(driverEast.z <= loc.z - 1.8 + 0.001, "driver is to the left (-Z for East heading)");
+  assert.ok(driverEast.x >= loc.x + 0.15 - 0.001, "driver is forward (+X for East heading)");
+});
+
