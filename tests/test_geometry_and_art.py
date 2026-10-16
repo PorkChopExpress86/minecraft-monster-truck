@@ -64,3 +64,25 @@ def test_cab_geometry_sightlines_and_transparency():
     with Image.open(tex_path) as img:
         pixel = img.getpixel((20, 80))
         assert pixel[3] == 0, f"Glass swatch alpha must be 0 (100% transparent), got {pixel[3]}"
+
+
+def test_realistic_engine_and_suspension_geometry():
+    """Verify detailed engine block, supercharger scoop, roll cage, and 4-link coilover suspension."""
+    geo_path = REPO_ROOT / "resource_packs" / "MonsterTruck_RP" / "models" / "entity" / "monster_truck.geo.json"
+    with open(geo_path, "r", encoding="utf-8") as f:
+        geom = json.load(f)["minecraft:geometry"][0]
+
+    bones = {b["name"]: b for b in geom["bones"]}
+
+    # Roll cage contains structural tubing cubes
+    assert len(bones["roll_cage"].get("cubes", [])) >= 8, "Roll cage must have structural tubing cubes"
+
+    # Suspension contains live axles, 4-link control arms, and dual reservoir coilovers
+    susp_cubes = bones["suspension"].get("cubes", [])
+    assert len(susp_cubes) >= 20, "Suspension must have detailed 4-link and coilover assemblies"
+
+    # Body contains exposed engine block and supercharger blower assembly
+    body_cubes = bones["body"].get("cubes", [])
+    blower_cubes = [c for c in body_cubes if c.get("origin", [0, 0, 0])[1] >= 33 and c.get("origin", [0, 0, 0])[2] < -15]
+    assert len(blower_cubes) >= 3, "Engine blower and intake scoop must be present on hood"
+
