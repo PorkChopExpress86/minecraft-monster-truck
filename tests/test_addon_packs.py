@@ -141,6 +141,7 @@ def test_stage_test_pack_keeps_ids_and_lets_the_caller_customize_the_behavior_pa
 def machine(tmp_path, monkeypatch):
     """Fake Windows (GDK and legacy UWP) and Linux (flatpak, native mcpelauncher) game data locations."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))  # Path.home() on Windows
     monkeypatch.setenv("APPDATA", str(tmp_path / "roaming"))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
     users = tmp_path / "roaming/Minecraft Bedrock/Users"

@@ -1,5 +1,6 @@
 import io
 import json
+import os
 from pathlib import Path
 import struct
 import zipfile
@@ -114,7 +115,8 @@ def archive_with(name, data=b"x"):
     return zipfile.ZipFile(payload)
 
 
-@pytest.mark.parametrize("name", ["../escaped.txt", "/abs.txt", "dir\\escaped.txt"])
+@pytest.mark.parametrize("name", ["../escaped.txt", "/abs.txt", pytest.param("dir\\escaped.txt", marks=pytest.mark.skipif(
+    os.name == "nt", reason="zipfile on Windows reads a backslash member name as '/', so it cannot escape"))])
 def test_check_archive_rejects_member_paths_that_could_escape(name):
     with pytest.raises(ValueError, match="Unsafe path in fixture archive"):
         world.check_archive(archive_with(name), "fixture archive")

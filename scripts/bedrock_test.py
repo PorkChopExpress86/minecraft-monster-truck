@@ -22,7 +22,6 @@ else:
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WINDOWS = os.name == "nt"
 
 
 def load_config(root):
@@ -267,15 +266,13 @@ def main(argv=None, root=ROOT, client=None):
                 if report["static"]["status"] != "passed":
                     report.update(status="failed", exit_code=1)
                     return report["exit_code"]
-            if args.mode == "scenarios" or (args.mode == "all" and "scenario_server" in config and not WINDOWS):
+            if args.mode == "scenarios" or (args.mode == "all" and "scenario_server" in config):
                 report["scenarios"] = run_scenario_stage(root, config, run_id, output, args.only)
                 if report["scenarios"]["status"] != "passed":
                     report.update(status="failed", exit_code=1)
                     return report["exit_code"]
             if args.mode == "client":
                 # Client Input Run (ADR-0019): local only, and never part of All, since it takes over the desktop.
-                if WINDOWS:
-                    raise SetupError("The Client Input Run drives the Linux client only")
                 report["client_input"] = run_client_stage(root, config, run_id, output, args.only, args.trace, args.diag)
                 if report["client_input"]["status"] != "passed":
                     report.update(status="failed", exit_code=1)

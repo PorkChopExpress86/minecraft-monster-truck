@@ -155,13 +155,15 @@ def run_scenarios(root, config, run_id, output, run=docker, clock=time.monotonic
     server = config["scenario_server"]
     name = "monster-truck-scenario-" + run_id
     data = prepare_server(root, config, run_id, output)
+    # The server writes /data as the host user; Docker Desktop on Windows maps bind-mount ownership itself.
+    owner = ["-e", f"UID={os.getuid()}", "-e", f"GID={os.getgid()}"] if hasattr(os, "getuid") else []
     # A TTY keeps the server's stdout line-buffered so markers are visible while it runs.
     started = run("run", "-d", "-t", "--name", name, "--network", "none",
                   "-e", "EULA=TRUE", "-e", "VERSION=EXISTING", "-e", f"LEVEL_NAME={LEVEL}",
                   "-e", "GAMEMODE=creative", "-e", "ALLOW_CHEATS=true", "-e", "ONLINE_MODE=false",
                   "-e", "ALLOW_LIST=false",
                   "-e", "CONTENT_LOG_CONSOLE_OUTPUT_ENABLED=true",
-                  "-e", f"UID={os.getuid()}", "-e", f"GID={os.getgid()}",
+                  *owner,
                   "-v", f"{data}:/data", server["image"])
     if started.returncode:
         shutil.rmtree(data, ignore_errors=True)

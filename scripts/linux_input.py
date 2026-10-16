@@ -3,7 +3,6 @@
 Every press goes through a focus guard first. Keys reach whichever window has focus, so a guard that finds
 another window active aborts the run, and every key still held is released before the abort propagates.
 """
-import fcntl
 import os
 import struct
 import time
@@ -41,6 +40,8 @@ class UinputDevice:
     """A virtual keyboard plus relative mouse. /dev/uinput carries a uaccess ACL for the seat user, so no root."""
 
     def __init__(self, name=b"monster-truck-client-input"):
+        import fcntl  # Unix only; this module is also imported on Windows, for FocusLost
+
         self.fd = os.open("/dev/uinput", os.O_WRONLY | os.O_NONBLOCK)
         try:
             for etype in (EV_KEY, EV_REL):
@@ -60,6 +61,8 @@ class UinputDevice:
         os.write(self.fd, event_bytes(etype, code, value))
 
     def close(self):
+        import fcntl
+
         try:
             fcntl.ioctl(self.fd, UI_DEV_DESTROY)
         finally:

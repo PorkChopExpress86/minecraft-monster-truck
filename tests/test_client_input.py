@@ -1,5 +1,6 @@
 """Client Input Run building blocks: uinput virtual input behind a focus guard (ADR-0019)."""
 import struct
+import sys
 
 import pytest
 
@@ -39,6 +40,7 @@ def keys(events):
     return [(code, value) for etype, code, value in (e for e in events if e != "closed") if etype == linux_input.EV_KEY]
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="struct input_event uses the Linux C long size")
 def test_event_bytes_is_a_kernel_input_event():
     data = linux_input.event_bytes(linux_input.EV_KEY, 30, 1)
     assert len(data) == struct.calcsize("llHHi") == 24
@@ -383,6 +385,60 @@ def test_connect_types_nothing_when_the_chat_never_opens():
                                      attempts=2)
     assert ("type", "connect 127.0.0.1:19131") not in keys.actions
     assert keys.actions.count(("tap", "/")) == 2
+
+
+def test_on_windows_slash_opens_chat_with_the_box_focused_so_no_enter_comes_before_typing():
+    # An Enter there would send the lone "/" and close the chat, and the typed text would act as controls.
+    keys = FakeInput()
+    screens = iter([False, True])
+    client_checks.connect_client(keys, FakeConnectChannel(True), chat_visible=lambda: next(screens),
+                                 sleep=lambda s: None, focus_with_enter=False)
+    assert keys.actions == [("tap", "/"), ("type", "connect 127.0.0.1:19131"), ("tap", "enter")]
+
+
+# ---------- Windows input (windows_input) ----------
+
+from scripts import windows_input  # noqa: E402
+
+
+class FakeUser32:
+    def __init__(self):
+        self.sent = []
+
+    def SendInput(self, count, pointer, size):
+        event = pointer._obj
+        self.sent.append((event.type, event.u.ki.wScan, event.u.ki.dwFlags) if event.type == windows_input.INPUT_KEYBOARD
+                         else (event.type, event.u.mi.dx, event.u.mi.dy, event.u.mi.dwFlags))
+        return count
+
+
+def test_windows_device_sends_linux_key_codes_as_scan_codes_and_skips_sync_events():
+    user32 = FakeUser32()
+    virtual = linux_input.VirtualInput(lambda: None, device=windows_input.SendInputDevice(user32),
+                                       sleep=lambda s: None)
+    virtual.tap("w")
+    down, up = windows_input.KEYEVENTF_SCANCODE, windows_input.KEYEVENTF_SCANCODE | windows_input.KEYEVENTF_KEYUP
+    assert user32.sent == [(windows_input.INPUT_KEYBOARD, 0x11, down), (windows_input.INPUT_KEYBOARD, 0x11, up)]
+
+
+def test_windows_device_moves_the_mouse_relatively():
+    user32 = FakeUser32()
+    linux_input.VirtualInput(lambda: None, device=windows_input.SendInputDevice(user32),
+                             sleep=lambda s: None).move_mouse(4, -2, steps=1)
+    assert user32.sent == [(windows_input.INPUT_MOUSE, 4, 0, windows_input.MOUSEEVENTF_MOVE),
+                           (windows_input.INPUT_MOUSE, 0, -2, windows_input.MOUSEEVENTF_MOVE)]
+
+
+@pytest.mark.parametrize("window", [None, {"caption": "Claude", "pid": 7, "process": "claude.exe"},
+                                    {"caption": "Minecraft", "pid": 8, "process": "code.exe"}])
+def test_windows_focus_guard_stops_input_unless_minecraft_is_in_front(window):
+    with pytest.raises(linux_input.FocusLost, match="not Minecraft"):
+        windows_input.focus_guard(current=lambda: window)()
+
+
+def test_windows_focus_guard_passes_for_minecraft_for_windows():
+    windows_input.focus_guard(current=lambda: {"caption": "Minecraft", "pid": 9,
+                                               "process": "minecraft.windows.exe"})()
 
 
 class World:

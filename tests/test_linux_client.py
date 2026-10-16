@@ -1,6 +1,7 @@
 """Linux (flatpak mcpelauncher) client path of the Bedrock smoke runner."""
 import signal
 import subprocess
+import sys
 
 import pytest
 
@@ -13,6 +14,7 @@ from scripts import bedrock_world as world_setup
 @pytest.fixture
 def launcher(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Path.home() on Windows
     monkeypatch.delenv("APPDATA", raising=False)
     monkeypatch.delenv("LOCALAPPDATA", raising=False)
     data = tmp_path / ".var/app/io.mrarm.mcpelauncher/data/mcpelauncher"
@@ -62,7 +64,7 @@ class Sandbox:
         monkeypatch.setattr(linux, "process_group", lambda pgid: list(self.members) if pgid == 4242 else [])
         monkeypatch.setattr(linux, "run_kwin_script", lambda *a: self.event("window close"))
         monkeypatch.setattr(linux.os, "kill", lambda pid, sig: self.event((pid, sig)))
-        monkeypatch.setattr(linux.os, "killpg", lambda *a: self.events.append(("killpg",) + a))
+        monkeypatch.setattr(linux.os, "killpg", lambda *a: self.events.append(("killpg",) + a), raising=False)
         monkeypatch.setattr(linux.time, "monotonic", lambda: self.clock)
         monkeypatch.setattr(linux.time, "sleep", self.sleep)
 
@@ -122,6 +124,7 @@ def test_close_does_nothing_when_the_sandbox_is_already_gone(monkeypatch, tmp_pa
     assert sandbox.events == []
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="reads /proc and starts a POSIX process group")
 def test_process_group_lists_live_members_with_names_containing_spaces():
     child = subprocess.Popen(["sleep", "30"], start_new_session=True)
     try:
