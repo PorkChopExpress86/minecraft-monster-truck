@@ -39,13 +39,69 @@ def generate():
     # Bold stepped contrasting side graphics.
     for x in [-14.1,14]:
         for z,y in [(-5,29),(-2,30),(1,31),(4,30),(7,29)]:add([x,y,z],[0.1,2,3],'shade')
+
+    # Realistic Exposed V8 Engine & Supercharger Blower
+    # Engine Block sitting in the front bay under cowl/hood
+    add([-7,27,-19],[14,7,10],'metal')
+    # Twin valve covers (angled look)
+    add([-8,33,-19],[4,2.5,9],'shade');add([4,33,-19],[4,2.5,9],'shade')
+    # Blower / Supercharger case rising through the hood
+    add([-4.5,33,-18],[9,4.5,8],'metal')
+    # Prominent triple-butterfly scoop air intake
+    add([-4,37.5,-19],[8,3,7],'metal')
+    # Scoop intake openings
+    add([-3.5,38,-19.2],[7,2,0.2],'rubber')
+    # Dual side exhaust zoomie headers emerging under cab sides
+    for side,x in [(-1,-14.5),(1,12.5)]:
+        for z_off in [-6,-3,0,3]:
+            add([x,22,z_off],[2,2.5,2],'metal')
+            add([x+(0.5 if side>0 else -0.5),21,z_off+0.5],[2,1.5,1],'rubber')
+
+    # Cab interior roll cage in roll_cage bone
+    cage=[]
+    def add_cage(o,s,m='metal',**kw):cage.append(cube(o,s,m,**kw))
+    for x in [-12.5,10.5]:
+        for z in [-8,9]:add_cage([x,28,z],[2,18,2],'metal')
+    for x in [-12.5,10.5]:add_cage([x,44,-8],[2,2,19],'metal')
+    for z in [-8,9]:add_cage([-12.5,44,z],[25,2,2],'metal')
+    # Diagonal bed roll-bar supports
+    for x in [-12.5,10.5]:add_cage([x,28,11],[2,16,11],'metal')
+
+    # Heavy-duty tubular chassis frame and realistic monster truck suspension
     frame=[]
+    # Main longitudinal frame rails
     for x in [-9,7]:frame.append(cube([x,17,-23],[2,5,46],'rubber'))
+    # Frame crossmembers
+    for z in [-20,-4,12]:frame.append(cube([-7,19,z],[14,3,3],'metal'))
+
+    # Heavy duty live axles and differential pumpkin housings
     for z in [-18,18]:
         frame.append(cube([-21,11,z-1.5],[42,3,3],'metal'))
         frame.append(cube([-4,9,z-3],[8,6,6],'rubber'))
-        for x in [-11,9]:frame.append(cube([x,12,z-1],[2,12,2],'metal'))
-    bones=[{'name':'root','pivot':[0,0,0]}, {'name':'body','parent':'root','pivot':[0,24,0],'cubes':body}, {'name':'roll_cage','parent':'body','pivot':[0,24,0]}, {'name':'suspension','parent':'root','pivot':[0,0,0],'cubes':frame}]
+        # 4-Link Suspension Control Arms: lower triangulated trailing arms from center cradle to axles
+        for side,x_mount in [(-1,-7),(1,5)]:
+            # Lower control arm
+            frame.append(cube([x_mount,13,-14 if z<0 else 2],[2,2,14],'metal'))
+            # Upper triangulated link
+            frame.append(cube([x_mount+side,16,-10 if z<0 else 4],[2,2,10],'metal'))
+        # Nitrogen dual-reservoir piggyback coilover shocks (two per corner: main body + reservoir canister)
+        for x in [-12,10]:
+            # Main high-travel coil shock cylinder
+            frame.append(cube([x,11.5,z-1.5],[2.5,13.5,3],'metal'))
+            # Coil spring outer wrap detail
+            frame.append(cube([x-0.2,14,z-1.7],[2.9,8,3.4],'shade'))
+            # Piggyback remote nitrogen reservoir
+            frame.append(cube([x+(1.5 if x>0 else -1.5),16,z-1],[1.5,7,2],'metal'))
+        # Heavy-duty steering tie rod across axle
+        frame.append(cube([-19,13.5,z-2],[38,1.5,1.5],'metal'))
+
+    bones=[
+        {'name':'root','pivot':[0,0,0]},
+        {'name':'body','parent':'root','pivot':[0,24,0],'cubes':body},
+        {'name':'roll_cage','parent':'body','pivot':[0,24,0],'cubes':cage},
+        {'name':'suspension','parent':'root','pivot':[0,0,0],'cubes':frame}
+    ]
+
     for name,x,z in [('wheel_fl',20,-18),('wheel_fr',-20,-18),('wheel_rl',20,18),('wheel_rr',-20,18)]:
         pivot=[x,12,z];parts=[]
         steer_name = name.replace('wheel_', 'steer_')
