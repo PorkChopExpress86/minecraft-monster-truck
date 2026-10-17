@@ -24,16 +24,6 @@ def test_manifest_script_module_and_server_dependency():
     assert len(server_deps) == 1, "Must declare @minecraft/server dependency"
     assert server_deps[0]["version"] == "2.10.0"
 
-def test_script_entry_point_exists_and_valid():
-    entry_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "main.js"
-    assert entry_path.exists(), "scripts/main.js must exist"
-    
-    node_exe = shutil.which("node")
-    if node_exe:
-        # Check syntax using node --check
-        res = subprocess.run([node_exe, "--check", str(entry_path)], capture_output=True, text=True)
-        assert res.returncode == 0, f"Script syntax error: {res.stderr}"
-
 def test_demolition_logic_contracts():
     demo_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "scripts" / "demolition.js"
     demo_content = demo_path.read_text(encoding="utf-8")

@@ -52,7 +52,7 @@ def test_stepping_and_movement_tuning():
     assert comps["minecraft:friction_modifier"]["value"] == 1.15
     
     # Behavior format version must be at least 1.26.20 for corrected friction semantics
-    assert data["format_version"] >= "1.26.20"
+    assert tuple(int(part) for part in data["format_version"].split(".")) >= (1, 26, 20)
 
 def test_canopy_clearance_collision_profile():
     entity_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "entities" / "monster_truck.entity.json"

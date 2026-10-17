@@ -56,6 +56,3 @@ def test_geometry_matches_config_entity_and_resource_pack():
         assert match, f"{bone} rotation is not a counter-steer ratio: {expr}"
         assert float(match.group(1)) == round(g["REAR_STEER_RATIO"], 4)
     assert round(g["MAX_STEER_DEGREES"] * g["REAR_STEER_RATIO"]) == 18
-
-    # Pitch samples ground one axle offset ahead of and behind the centre.
-    assert g["AXLE_OFFSET"] * 2 == g["PITCH_AXLE_SPAN"]

@@ -281,7 +281,15 @@ def sneak_dismounts(ctx):
 
 def space_sneak_exits(ctx):
     ctx.fresh_truck()
-    ctx.hold(["space"], 0.5)  # the handbrake held, then Sneak with it still down
+    jump = []
+
+    def read_jump():
+        jump.append(ctx.probe("jump"))
+        return False
+
+    ctx.hold(["space"], 0.5, until=read_jump)  # the handbrake held, then Sneak with it still down
+    if 1 not in jump:
+        raise CheckFailed(f"the probe never saw Space held (jump {jump}), so the exit would prove only Sneak")
     ctx.hold(["space", SNEAK_KEY], 0.6)
     riding = ctx.probe("riding")
     if riding != 0:
@@ -331,6 +339,11 @@ def sneak_exits_afloat(ctx):
         raise CheckFailed(f"Sneak afloat dropped into the water: the player is {player['y'] - by:+.2f} blocks from "
                           "the pool's grass edge")
     off = math.hypot(player["x"] - truck["x"], player["z"] - truck["z"])
+    # The pool's nearest grass is 2.5 blocks from the truck's middle (half a block allowed for drift), and
+    # findDryLanding looks no farther than DRY_LAND_REACH + 0.5 (4.5): nearer is the roof or the pool, farther is
+    # not the edge.
+    if not 2.0 <= off <= 4.5:
+        raise CheckFailed(f"Sneak afloat set the player down {off:.1f} blocks from the truck, not on the pool's edge")
     return f"Sneak afloat set the player down on the pool's edge, {off:.1f} blocks from the truck"
 
 
