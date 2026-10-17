@@ -1,7 +1,8 @@
 import { Difficulty, Direction, EnchantmentType, GameMode, ItemStack, system, world, EntityDamageCause } from "@minecraft/server";
 import { driverInput } from "../main.js";
 import { DRIVING, headingVector } from "../driving.js";
-import { HIT_COOLDOWN_TICKS } from "../contact.js";
+import { HIT_COOLDOWN_TICKS, isInContactPerimeter } from "../contact.js";
+import { TRUCK_WIDTH } from "../geometry.js";
 import {
   board, drive, fill, health, horizontal, park, resetArena, riders, spawnTruck, wait,
 } from "./arena.js";
@@ -167,9 +168,17 @@ async function auto_step({ dimension, origin, driver, run }) {
   truck = spawnTruck(dimension, run, at(origin, 0, 2));
   await wait(10);
   await board(driver, truck, 0);
-  await drive(driver, 30);
+  // The wall's face is 9.5 blocks out; the 2.25-wide collision box meets it with its middle at +8.375.
+  let pushed = 0;
+  await drive(driver, 40, {
+    onTick: () => {
+      if (truck.location.z - origin.z > 8) pushed++;
+      return false;
+    },
+  });
   if (truck.location.z > origin.z + 10) throw new Error("Truck drove over a 3-block wall");
-  checks.push("a 3-block wall stops the truck");
+  if (pushed < 15) throw new Error(`3-block wall: truck never drove up against it (pushed ${pushed} ticks, z=${(truck.location.z - origin.z).toFixed(1)})`);
+  checks.push(`a 3-block wall stops the truck: driven into it for ${pushed} ticks, not climbed`);
   return checks;
 }
 
@@ -264,8 +273,16 @@ async function handbrake({ dimension, origin, driver, run }) {
   let truck = spawnTruck(dimension, run, at(origin, 0, -4));
   await wait(10);
   await board(driver, truck, 0);
-  await drive(driver, 30);
   let last = truck.location;
+  let speed = 0;
+  await drive(driver, 30, {
+    onTick: () => {
+      speed = horizontal(truck.location, last);
+      last = truck.location;
+      return false;
+    },
+  });
+  if (speed < DRIVING.topSpeed / 2) throw new Error(`Truck was at ${speed.toFixed(2)} blocks/tick, not at speed, when the handbrake went on`);
   let stopTick;
   await drive(driver, 40, {
     forward: 0,
@@ -279,7 +296,7 @@ async function handbrake({ dimension, origin, driver, run }) {
   });
   if (stopTick === undefined || stopTick > 30) throw new Error("Handbrake did not stop the truck within 1.5 s");
   if (Math.abs(yawOf(truck)) > 0.5) throw new Error("Straight handbrake stop turned the truck: yaw " + yawOf(truck));
-  checks.push(`straight handbrake stop from speed in ${stopTick} ticks without turning`);
+  checks.push(`straight handbrake stop from ${speed.toFixed(2)} blocks/tick in ${stopTick} ticks without turning`);
   const parkedAt = truck.location;
   await drive(driver, 20, { forward: 1, handbrake: true });
   if (horizontal(truck.location, parkedAt) > 0.1) throw new Error("Truck crept forward with the handbrake held");
@@ -729,11 +746,16 @@ async function trample({ dimension, origin, driver, run, spawnPlayer }) {
   await board(driver, truck, 0);
   // Parked: a mob touching the tires is unharmed.
   const parkedAt = truck.location;
+  let parkedPig;
   const parkedHits = await recordTruckHits(async () => {
-    dimension.spawnEntity("minecraft:pig", at(origin, 1.5, 2));
+    parkedPig = dimension.spawnEntity("minecraft:pig", at(origin, 1.5, 2));
+    parkedPig.addEffect("slowness", 200, { amplifier: 255, showParticles: false });
     await wait(30);
   });
   if (parkedHits.length) throw new Error("Parked truck damaged a mob: " + JSON.stringify(parkedHits.map(hit => [hit.cause, hit.damage])));
+  if (!parkedPig.isValid || !isInContactPerimeter(parkedPig.location, truck.location, headingVector(yawOf(truck)))) {
+    throw new Error("Parked truck: the pig was not at its tires after 30 ticks, so sparing it proves nothing");
+  }
   checks.push(`parked truck (moved ${horizontal(truck.location, parkedAt).toFixed(3)} blocks) dealt no damage to a pig at its tires for 30 ticks`);
   truck.remove();
 
@@ -859,7 +881,10 @@ async function demolition({ dimension, origin, driver, run }) {
   await board(driver, truck, 0);
   await wait(30);
   if (dimension.getBlock(at(origin, 0, 5)).typeId !== "minecraft:oak_planks") throw new Error("Parked truck demolished wood");
-  checks.push("parked truck leaves wood intact");
+  // The planks' face is 4.5 blocks out.
+  const gap = origin.z + 4.5 - (truck.location.z + TRUCK_WIDTH / 2);
+  if (gap > 0.5) throw new Error(`Parked truck stood ${gap.toFixed(2)} blocks short of the planks, so leaving them proves nothing`);
+  checks.push(`parked truck leaves wood intact (front ${gap.toFixed(2)} blocks from the planks)`);
   // Driven through a plank wall and a glass wall; stone stays.
   fill(dimension, at(origin, -2, 12), at(origin, 2, 12, GROUND_Y + 1), "oak_planks");
   fill(dimension, at(origin, -2, 20), at(origin, 2, 20, GROUND_Y + 1), "glass");

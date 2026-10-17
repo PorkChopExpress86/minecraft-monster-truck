@@ -631,7 +631,7 @@ test("an empty rider slot neither stops the tick nor promotes the passenger to d
   world.truck.seated.unshift(undefined);
   for (let i = 0; i < 5; i++) world.step();
   assert.deepEqual(world.state.riders, ["passenger"], "only riders the runtime can see are tracked");
-  assert.equal(world.truck.location.z, 0.5, "nobody this runtime can read is driving");
+  assert.deepEqual(world.truck.impulses, [], "nobody this runtime can read is driving");
 });
 
 test("a drop with an empty rider slot runs its landing lifecycle", () => {
@@ -656,7 +656,8 @@ test("the truck owns its yaw and shows steering and pitch on its properties", ()
   const driver = createFakePlayer({ id: "driver" });
   const world = scene({ riders: [driver], driverInput: fixedInput({ strafe: 1 }) });
   world.step();
-  assert.deepEqual(world.truck.rotation, { x: 0, y: 0 }, "a parked truck does not spin");
   assert.equal(world.truck.properties["blake:steer_angle"], -DRIVING.steerRate, "A turns the wheels left");
   assert.equal(world.truck.properties["blake:pitch_angle"], 0, "level on flat ground");
+  world.step(() => { world.truck.rotation = { x: 0, y: 90 }; }); // a yaw the engine left on the truck
+  assert.deepEqual(world.truck.rotation, { x: 0, y: 0 }, "a parked truck does not spin");
 });

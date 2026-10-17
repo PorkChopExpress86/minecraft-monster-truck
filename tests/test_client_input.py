@@ -445,7 +445,8 @@ class World:
     """A fake real-client world behind the channel: the truck turns with the held keys."""
 
     def __init__(self, turn_per_key=None, lost=0, riding_after_sneak=0, mouse_turns_truck=0.0, jump_back_on=True,
-                 s_speed=-7.4, player_y_after_sneak=-60.0, riding_in_drop=1, fall_per_query=1.0):
+                 s_speed=-7.4, player_y_after_sneak=-60.0, player_xz_after_sneak=(0.5, -9.5), riding_in_drop=1,
+                 fall_per_query=1.0, space_registers=True):
         self.truck = {"x": 0.5, "y": -60.0, "z": 3.5, "yaw": 0.0}
         self.player_yaw = 0.0
         self.riding = 1
@@ -455,8 +456,12 @@ class World:
         self.mouse_turns_truck = mouse_turns_truck
         self.jump_back_on = jump_back_on
         self.s_speed = s_speed  # blocks/s the truck moves along +Z while S is held (negative: reversing)
-        self.player_y = -60.0
+        self.player = {"x": 0.0, "y": -60.0, "z": 0.0}
         self.player_y_after_sneak = player_y_after_sneak
+        # Where a Sneak out sets the player down; the default is the grass beside sneak_exits_afloat's pool.
+        self.player_xz_after_sneak = player_xz_after_sneak
+        self.space_registers = space_registers  # whether the probe sees Space while it is held
+        self.held = ()
         self.riding_in_drop = riding_in_drop  # seat after Sneak while the truck falls (1: the add-on reseats)
         # Once its floor is removed, a raised truck falls this far between one querytarget and the next.
         self.fall_per_query = fall_per_query
@@ -477,7 +482,7 @@ class World:
                 self.falling = t["y"] > -60
             return {"statusCode": 0, "details": json.dumps([{"position": {"x": t["x"], "y": t["y"], "z": t["z"]}, "yRot": t["yaw"]}])}
         if line.startswith("querytarget @s"):
-            return {"statusCode": 0, "details": json.dumps([{"position": {"x": 0, "y": self.player_y, "z": 0}, "yRot": self.player_yaw}])}
+            return {"statusCode": 0, "details": json.dumps([{"position": self.player, "yRot": self.player_yaw}])}
         if line == "scoreboard players list riding":
             return {"statusCode": 0, "statusMessage": f"- mt_probe: {self.riding} (mt_probe)"}
         if line == "inputpermission query @s jump enabled":
@@ -485,8 +490,10 @@ class World:
             return {"statusCode": 0 if self.jump_back_on else -2147352576, "statusMessage": "<Jump>: 0 enabled"}
         if line == "scoreboard players list lost":
             return {"statusCode": 0, "statusMessage": f"- mt_probe: {self.lost} (mt_probe)"}
-        if line in ("scoreboard players list sneaking", "scoreboard players list sneak_button",
-                    "scoreboard players list jump"):
+        if line == "scoreboard players list jump":
+            jump = int(self.space_registers and "space" in self.held)
+            return {"statusCode": 0, "statusMessage": f"- mt_probe: {jump} (mt_probe)"}
+        if line in ("scoreboard players list sneaking", "scoreboard players list sneak_button"):
             return {"statusCode": 0, "statusMessage": "- mt_probe: 0 (mt_probe)"}
         return {"statusCode": 0, "statusMessage": "ok"}
 
@@ -504,10 +511,14 @@ class WorldInput(FakeInput):
             # riding_after_sneak: one seat for every Sneak, or a list with the seat after each Sneak in turn.
             after = world.riding_after_sneak
             world.sneak_result = after.pop(0) if isinstance(after, list) else after
-        for _ in range(max(1, round(seconds / 0.1))):
-            if on_tick and on_tick():
-                break
-            self.step(keys, min(0.1, seconds))
+        world.held = tuple(keys)
+        try:
+            for _ in range(max(1, round(seconds / 0.1))):
+                if on_tick and on_tick():
+                    break
+                self.step(keys, min(0.1, seconds))
+        finally:
+            world.held = ()
 
     def step(self, keys, seconds):
         world, truck = self.world, self.world.truck
@@ -521,7 +532,8 @@ class WorldInput(FakeInput):
         if client_checks.SNEAK_KEY in keys:
             world.riding = world.riding_in_drop if airborne else world.sneak_result
             if world.riding == 0:
-                world.player_y = world.player_y_after_sneak
+                x, z = world.player_xz_after_sneak
+                world.player.update(x=x, y=world.player_y_after_sneak, z=z)
 
     def move_mouse(self, dx, dy, steps=10, interval=0.02):
         super().move_mouse(dx, dy, steps, interval)
@@ -578,6 +590,8 @@ def test_sneak_with_space_held_must_dismount():
     assert run_check("space_sneak_exits", World(riding_after_sneak=0))
     with pytest.raises(client_checks.CheckFailed, match="still in seat 1"):
         run_check("space_sneak_exits", World(riding_after_sneak=1))
+    with pytest.raises(client_checks.CheckFailed, match="never saw Space held"):
+        run_check("space_sneak_exits", World(riding_after_sneak=0, space_registers=False))
 
 
 def test_s_must_brake_then_reverse_in_a_straight_line():
@@ -596,6 +610,10 @@ def test_sneak_afloat_must_set_the_player_down_out_of_the_liquid():
         run_check("sneak_exits_afloat", World(riding_after_sneak=1))
     with pytest.raises(client_checks.CheckFailed, match="dropped into the water"):
         run_check("sneak_exits_afloat", World(player_y_after_sneak=-61.0))
+    with pytest.raises(client_checks.CheckFailed, match="0.0 blocks from the truck"):
+        run_check("sneak_exits_afloat", World(player_xz_after_sneak=(0.5, -6.5)))  # on the roof
+    with pytest.raises(client_checks.CheckFailed, match="6.5 blocks from the truck"):
+        run_check("sneak_exits_afloat", World(player_xz_after_sneak=(0.5, 0.0)))  # back at the start
 
 
 def test_focus_is_taken_before_the_first_key_with_a_few_activation_attempts():

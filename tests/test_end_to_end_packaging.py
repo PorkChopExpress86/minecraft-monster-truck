@@ -4,8 +4,8 @@ from scripts.package_addon import build_addon
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-def test_full_project_packaging_and_archives():
-    dist_dir = REPO_ROOT / "dist"
+def test_full_project_packaging_and_archives(tmp_path):
+    dist_dir = tmp_path / "dist"
     addon_path = build_addon(repo_root=REPO_ROOT, dist_dir=dist_dir)
     
     assert addon_path.exists()
