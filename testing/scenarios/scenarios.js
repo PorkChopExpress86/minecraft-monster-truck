@@ -527,6 +527,95 @@ async function two_seat_drop({ dimension, origin, driver, run, spawnPlayer }) {
   return checks;
 }
 
+// A driver the engine detaches mid-drop with a passenger aboard is put back in the Driver Seat, ahead of
+// the passenger, and keeps the controls. addRider appends and the engine seats riders in list order (run
+// bc1ec0a3: ejecting the driver moved the passenger to the Driver Seat), so a plain re-add would hand the
+// passenger the wheel. The exit is an engine dismount (ejectRider) with isSneaking unset; the same exit
+// past the landing window lets the driver go, which shows the eject lands.
+async function reseat_keeps_seats({ dimension, origin, driver, run, spawnPlayer }) {
+  const checks = [];
+  const height = 8;
+  fill(dimension, at(origin, -4, 0), at(origin, 4, 8, GROUND_Y + height - 1), "stone");
+  const truck = spawnTruck(dimension, run, at(origin, 0, 3, GROUND_Y + height));
+  await wait(10);
+  await board(driver, truck, 0);
+  const passenger = spawnPlayer("SimulatedPassenger");
+  await wait(10);
+  await board(passenger, truck, 1);
+  const rideable = truck.getComponent("minecraft:rideable");
+  const names = () => riders(truck).map(rider => rider?.name);
+  const seated = []; // [ticks since the eject, rider names], every tick until 10 ticks after landing
+  let ejectedAt;
+  let ejectedY;
+  let landedAt;
+  await drive(driver, 90, {
+    forward: 0.3,
+    onTick: () => {
+      const y = truck.location.y - GROUND_Y;
+      if (ejectedAt === undefined) {
+        if (truck.isOnGround || y > height - 1.5 || y < 2) return false;
+        rideable.ejectRider(driver);
+        ejectedAt = system.currentTick;
+        ejectedY = y;
+        return false;
+      }
+      seated.push([system.currentTick - ejectedAt, names()]);
+      if (landedAt === undefined && truck.isOnGround && y < 0.05) landedAt = system.currentTick;
+      return landedAt !== undefined && system.currentTick - landedAt >= 10;
+    },
+  });
+  if (ejectedAt === undefined) throw new Error(`Truck never fell free of the mesa: y=${(truck.location.y - GROUND_Y).toFixed(2)}`);
+  if (landedAt === undefined) throw new Error(`Truck never landed after the ${height}-block drop: y=${(truck.location.y - GROUND_Y).toFixed(2)}`);
+  const expected = JSON.stringify([driver.name, passenger.name]);
+  const trace = seated.map(([t, who]) => `+${t} [${who.join(",")}]`).join(" ");
+  const settledAt = seated.find(([, who]) => JSON.stringify(who) === expected)?.[0];
+  if (settledAt === undefined || settledAt > 4) {
+    throw new Error(`Driver ejected at y=${ejectedY.toFixed(2)} was not back in the Driver Seat ahead of the passenger within 4 ticks: ${trace}`);
+  }
+  if (seated.some(([t, who]) => t > settledAt && JSON.stringify(who) !== expected)) {
+    throw new Error(`Riders changed again after the driver was put back: ${trace}`);
+  }
+  const healths = { truck: health(truck), driver: health(driver), passenger: health(passenger) };
+  if (healths.truck !== TRUCK_MAX_HEALTH || healths.driver !== PLAYER_MAX_HEALTH || healths.passenger !== PLAYER_MAX_HEALTH) {
+    throw new Error(`The drop hurt someone: ${JSON.stringify(healths)}`);
+  }
+  checks.push(`driver ejected at y=${ejectedY.toFixed(2)} of the ${height}-block drop; riders read [driver, passenger] from ${settledAt} ticks after ` +
+    `the eject through ${seated.at(-1)[0]} (${trace}); after landing truck ${healths.truck}/${TRUCK_MAX_HEALTH}, ` +
+    `driver and passenger ${PLAYER_MAX_HEALTH}/${PLAYER_MAX_HEALTH}`);
+
+  // Each sits on their own side of the cab: the driver on the truck's left, the passenger on its right.
+  await wait(20);
+  const head = headingVector(yawOf(truck));
+  const sideOf = player => ((player.location.x - truck.location.x) * head.z - (player.location.z - truck.location.z) * head.x);
+  const sides = { driver: +sideOf(driver).toFixed(2), passenger: +sideOf(passenger).toFixed(2) };
+  if (!(sides.driver > 0.2 && sides.passenger < -0.2)) throw new Error(`Riders are not in their own seats: ${JSON.stringify(sides)} blocks left of the middle`);
+  checks.push(`driver ${sides.driver} blocks left of the middle, passenger ${sides.passenger}`);
+
+  // Only the driver drives.
+  const parked = truck.location;
+  const { movement } = driverInput;
+  driverInput.movement = player => (player.id === passenger.id ? { x: 0, y: 1 } : movement(player));
+  try {
+    await wait(30);
+  } finally {
+    driverInput.movement = movement;
+  }
+  const passengerMoved = horizontal(truck.location, parked);
+  if (passengerMoved > 0.5) throw new Error(`Passenger's input moved the truck ${passengerMoved.toFixed(2)} blocks`);
+  const before = truck.location;
+  await drive(driver, 20);
+  const driverMoved = horizontal(truck.location, before);
+  if (driverMoved < 5) throw new Error(`Driver's input moved the truck only ${driverMoved.toFixed(2)} blocks`);
+  checks.push(`the passenger's input moved the truck ${passengerMoved.toFixed(2)} blocks and the driver's ${driverMoved.toFixed(1)} blocks in 20 ticks`);
+
+  // Past the landing window the same exit lets the driver go.
+  rideable.ejectRider(driver);
+  await wait(5);
+  if (names().includes(driver.name)) throw new Error("Driver who left on steady ground was put back in the seat");
+  checks.push("the same eject on steady ground, past the landing window, let the driver go");
+  return checks;
+}
+
 async function liquid_crossing({ dimension, origin, driver, run }, liquid) {
   // Liquid pool flush with the ground, then a long 1-block-high bank that doubles as the
   // overland reference lane: the truck must cross liquid at full overland cruising speed.
@@ -1323,5 +1412,5 @@ export const SCENARIOS = {
   smoke, seats, auto_step, steering, handbrake, crush_stomp, shock_absorption,
   flotation_water, flotation_lava, trample, demolition, foliage_shearing,
   dye_repaint, retrieval, retrieval_full_health, incline_pitch, spawn_sources, two_seat_drop,
-  liquid_start_water, liquid_start_lava, shoreline_wall, shoreline_step, seat_swap, door_dismount,
+  liquid_start_water, liquid_start_lava, shoreline_wall, shoreline_step, seat_swap, door_dismount, reseat_keeps_seats,
 };
