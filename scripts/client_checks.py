@@ -276,7 +276,19 @@ def sneak_dismounts(ctx):
     # Seated players have Jump off so Space cannot dismount them (#40); on foot it must be back on.
     if ctx.run("inputpermission query @s jump enabled", must_succeed=False).get("statusCode") != 0:
         raise CheckFailed("Sneak got the player out, but their Jump is still off")
-    return "Sneak got the player out of the truck, they stayed out, and Jump works again"
+    # On flat ground the add-on sets the driver down outside the Driver Seat's door, the truck's left
+    # (landing.js findDoorLanding: 1.5 to 2.2 blocks out, beside the cab), standing on the arena floor.
+    truck, yaw = ctx.truck()
+    player = query_targets(ctx.run("querytarget @s"))[0]["position"]
+    hx, hz = -math.sin(math.radians(yaw)), math.cos(math.radians(yaw))
+    dx, dz = player["x"] - truck["x"], player["z"] - truck["z"]
+    out, ahead = dx * hz - dz * hx, dx * hx + dz * hz
+    where = f"{out:+.2f} blocks out of the driver's door and {ahead:+.2f} ahead of the truck's middle"
+    if not 1.4 <= out <= 2.3 or abs(ahead) > 1:
+        raise CheckFailed(f"Sneak set the player down {where}, not beside the driver's door (1.5 to 2.2 out)")
+    if abs(player["y"] - ctx.base[1]) > 0.1:
+        raise CheckFailed(f"Sneak set the player down {where} but {player['y'] - ctx.base[1]:+.2f} blocks off the floor")
+    return f"Sneak got the player out of the truck, {where}; they stayed out, and Jump works again"
 
 
 def space_sneak_exits(ctx):

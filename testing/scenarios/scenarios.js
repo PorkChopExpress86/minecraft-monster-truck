@@ -1193,6 +1193,54 @@ async function seat_swap({ dimension, origin, driver, run, spawnPlayer }) {
   return checks;
 }
 
+// Sneak on flat ground sets a rider down outside the door of the seat they left, with the other seat
+// still taken: the driver out of the left door, the passenger out of the right (+X and -X facing +Z),
+// 1.5 to 2.2 blocks from the truck's middle, standing on a solid block with two blocks of air above.
+// Each rider boards from the side opposite their door, so the engine leaving them where they boarded
+// cannot pass. sneakOut fakes the Sneak (isSneaking, then ejectRider); sneak_dismounts is the client side.
+async function door_dismount({ dimension, origin, driver, run, spawnPlayer }) {
+  const checks = [];
+  const passenger = spawnPlayer("SimulatedPassenger");
+  await wait(10);
+  for (const [leaving, seat, door] of [[driver, 0, 1], [passenger, 1, -1]]) {
+    park(driver, origin);
+    park(passenger, origin);
+    resetArena(dimension, origin);
+    const truck = spawnTruck(dimension, run, at(origin, 0, 4));
+    await wait(10);
+    const t = truck.location;
+    await board(driver, truck, 0, { x: t.x - 2, y: t.y, z: t.z });
+    await board(passenger, truck, 1, { x: t.x + 2, y: t.y, z: t.z });
+    const exit = await sneakOut(truck, leaving);
+    leaving.isSneaking = false;
+    await wait(5);
+    const stayed = riders(truck).map(rider => rider?.id);
+    const other = seat === 0 ? passenger : driver;
+    if (!stayed.includes(other.id)) throw new Error(`seat ${seat} exit: ${other.name} left the truck too`);
+    const truckAt = truck.location;
+    const p = leaving.location;
+    const head = headingVector(yawOf(truck));
+    // The door side of seat 0 is the truck's left: (head.z, -head.x).
+    const side = ((p.x - truckAt.x) * head.z - (p.z - truckAt.z) * head.x) * door;
+    const ahead = (p.x - truckAt.x) * head.x + (p.z - truckAt.z) * head.z;
+    const where = `at (${(p.x - truckAt.x).toFixed(2)}, ${(p.y - truckAt.y).toFixed(2)}, ${(p.z - truckAt.z).toFixed(2)}) from the truck`;
+    if (!(side >= 1.5 - 0.1 && side <= 2.2 + 0.1)) {
+      throw new Error(`seat ${seat} exit: ${leaving.name} ${where}, ${side.toFixed(2)} blocks out of its door (1.5 to 2.2)`);
+    }
+    if (Math.abs(ahead) > 1) throw new Error(`seat ${seat} exit: ${leaving.name} ${where}, not beside the cab`);
+    const feet = { x: Math.floor(p.x), y: Math.floor(p.y + 0.01), z: Math.floor(p.z) };
+    const below = dimension.getBlock({ ...feet, y: feet.y - 1 });
+    const air = [0, 1].map(dy => dimension.getBlock({ ...feet, y: feet.y + dy })?.isAir);
+    if (!below || below.isAir || below.isLiquid || !air[0] || !air[1]) {
+      throw new Error(`seat ${seat} exit: ${leaving.name} ${where} stands on ${below?.typeId} with air above ${JSON.stringify(air)}`);
+    }
+    checks.push(`seat ${seat}: ${exit}; set down ${side.toFixed(2)} blocks out of the ${door > 0 ? "left (driver's)" : "right (passenger's)"} ` +
+      `door, ${ahead.toFixed(2)} ahead of the middle, on ${below.typeId} with two air above; ${other.name} still seated`);
+    truck.remove();
+  }
+  return checks;
+}
+
 async function incline_pitch({ dimension, origin, driver, run }) {
   const checks = [];
   for (const [rise, run_] of [[1, 2], [1, 3], [1, 1]]) {
@@ -1254,5 +1302,5 @@ export const SCENARIOS = {
   smoke, seats, auto_step, steering, handbrake, crush_stomp, shock_absorption,
   flotation_water, flotation_lava, trample, demolition, foliage_shearing,
   dye_repaint, retrieval, retrieval_full_health, incline_pitch, spawn_sources, two_seat_drop,
-  liquid_start_water, liquid_start_lava, shoreline_wall, shoreline_step, seat_swap,
+  liquid_start_water, liquid_start_lava, shoreline_wall, shoreline_step, seat_swap, door_dismount,
 };

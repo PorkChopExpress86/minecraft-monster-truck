@@ -546,8 +546,13 @@ def run_check(name, world):
     return client_checks.CHECKS[name](ctx)
 
 
+# Where the add-on sets a Sneak exit from the Driver Seat down: 1.8 blocks out of the truck's left door, 0.15 ahead
+# of its middle, for fresh_truck's truck at (0.5, 3.5) facing +Z (landing.js findDoorLanding).
+DRIVER_DOOR = (2.3, 3.65)
+
+
 def test_trace_samples_every_probe_score_while_keys_are_held():
-    world = World()
+    world = World(player_xz_after_sneak=DRIVER_DOOR)
     ctx = client_checks.Context(world, WorldInput(world), base=(0, -60, 0), sleep=lambda s: None, trace=True)
     client_checks.CHECKS["sneak_dismounts"](ctx)
     assert ctx.samples, "a traced hold records probe samples"
@@ -558,7 +563,7 @@ def test_trace_samples_every_probe_score_while_keys_are_held():
 
 
 def test_without_trace_holds_record_nothing():
-    world = World()
+    world = World(player_xz_after_sneak=DRIVER_DOOR)
     ctx = client_checks.Context(world, WorldInput(world), base=(0, -60, 0), sleep=lambda s: None)
     client_checks.CHECKS["sneak_dismounts"](ctx)
     assert ctx.samples == []
@@ -579,11 +584,23 @@ def test_space_fails_if_the_rider_left_the_seat_for_even_one_tick():
 
 
 def test_sneak_must_dismount():
-    assert run_check("sneak_dismounts", World(riding_after_sneak=0))
+    assert run_check("sneak_dismounts", World(riding_after_sneak=0, player_xz_after_sneak=DRIVER_DOOR))
     with pytest.raises(client_checks.CheckFailed, match="still in seat 1"):
         run_check("sneak_dismounts", World(riding_after_sneak=1))
     with pytest.raises(client_checks.CheckFailed, match="Jump is still off"):
-        run_check("sneak_dismounts", World(riding_after_sneak=0, jump_back_on=False))
+        run_check("sneak_dismounts", World(riding_after_sneak=0, jump_back_on=False, player_xz_after_sneak=DRIVER_DOOR))
+
+
+def test_sneak_must_set_the_driver_down_beside_the_drivers_door():
+    assert "+1.80 blocks out of the driver's door and +0.15 ahead" in \
+        run_check("sneak_dismounts", World(player_xz_after_sneak=DRIVER_DOOR))
+    for xz, where in [((-1.3, 3.65), r"-1\.80 blocks out of the driver's door and \+0\.15 ahead"),  # passenger door
+                      ((5.0, 3.65), r"\+4\.50 blocks out"),  # too far out
+                      ((2.3, 6.5), r"\+3\.00 ahead")]:  # level with the front wheels, not the cab
+        with pytest.raises(client_checks.CheckFailed, match=f"{where}.*not beside the driver's door"):
+            run_check("sneak_dismounts", World(player_xz_after_sneak=xz))
+    with pytest.raises(client_checks.CheckFailed, match=r"\+3\.00 blocks off the floor"):  # on the roof
+        run_check("sneak_dismounts", World(player_xz_after_sneak=DRIVER_DOOR, player_y_after_sneak=-57.0))
 
 
 def test_sneak_with_space_held_must_dismount():
