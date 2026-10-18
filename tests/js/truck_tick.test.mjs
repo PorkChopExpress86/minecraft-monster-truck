@@ -3,9 +3,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { createTruckState, tickTruck } from "../../behavior_packs/MonsterTruck_BP/scripts/truck_tick.js";
-import { DRIVING } from "../../behavior_packs/MonsterTruck_BP/scripts/driving.js";
+import { AIR_DRAG_RETENTION, createTruckState, tickTruck } from "../../behavior_packs/MonsterTruck_BP/scripts/truck_tick.js";
+import { DRIVING, groundRetention } from "../../behavior_packs/MonsterTruck_BP/scripts/driving.js";
 import { LIQUID_DRAG_RETENTION, SHORELINE_LIFT } from "../../behavior_packs/MonsterTruck_BP/scripts/amphibious.js";
+import { MOLTEN_TIRE_TICKS } from "../../behavior_packs/MonsterTruck_BP/scripts/contact.js";
+import { PITCH_AXLE_SPAN } from "../../behavior_packs/MonsterTruck_BP/scripts/geometry.js";
 import {
   createFakeDimension,
   createFakeEntity,
@@ -349,7 +351,10 @@ test("a Sneak exit soon after a Space re-seat is let go: Space opens no drop win
 });
 
 test("liquid propulsion follows the driver's W input and crosses at overland speed", () => {
-  for (const [liquid, retention] of [["minecraft:water", LIQUID_DRAG_RETENTION.water], ["minecraft:lava", LIQUID_DRAG_RETENTION.lava]]) {
+  for (const [liquid, retention] of [
+    ["minecraft:water", LIQUID_DRAG_RETENTION.water], ["minecraft:lava", LIQUID_DRAG_RETENTION.lava],
+    ["minecraft:flowing_water", LIQUID_DRAG_RETENTION.water], ["minecraft:flowing_lava", LIQUID_DRAG_RETENTION.lava],
+  ]) {
     const driver = createFakePlayer({ id: "driver" });
     const world = scene({ riders: [driver], isOnGround: false, driverInput: fixedInput({ forward: 1 }) });
     world.dimension.setBlock(0, GROUND_Y, 0, liquid);
@@ -650,6 +655,99 @@ test("pitch follows a drop from the tick the drop is first seen", () => {
   assert.equal(world.truck.properties["blake:pitch_angle"], 0, "hanging still, out of the axles' reach");
   world.step(() => world.truck.moveTo({ y: GROUND_Y + 9.5 }, { velocity: { y: -0.5 }, isOnGround: false }));
   assert.ok(world.truck.properties["blake:pitch_angle"] < 0, "nose down on the first falling tick, not one later");
+});
+
+// The driven velocity is divided by what the engine's drag keeps, so the truck covers its speed: on land
+// that is the ground block under the truck (groundRetention), in the air AIR_DRAG_RETENTION.
+test("on land the push makes up for the friction of the block under the truck", () => {
+  for (const ground of ["minecraft:stone", "minecraft:ice"]) {
+    const world = scene({ riders: [createFakePlayer({ id: "driver" })], driverInput: fixedInput({ forward: 1 }) });
+    world.dimension.fillLayer(GROUND_Y - 1, ground);
+    world.step();
+    assert.equal(world.truck.impulses.length, 1, ground);
+    assert.equal(world.truck.impulses[0].z, DRIVING.acceleration / groundRetention(ground), ground);
+  }
+  assert.notEqual(groundRetention("minecraft:stone"), groundRetention("minecraft:ice"), "the two grounds tell the reads apart");
+});
+
+test("lifted clear of the water by a Shoreline Step-Up, the push makes up for air drag", () => {
+  const driver = createFakePlayer({ id: "driver" });
+  const world = scene({ riders: [driver], truckAt: { x: 0.5, y: GROUND_Y + 0.6, z: 0.5 }, isOnGround: false,
+    driverInput: fixedInput({ forward: 1 }) });
+  world.dimension.setBlock(0, GROUND_Y, 0, "minecraft:water");
+  // A bank 1 above the water surface, 1.5 blocks ahead: the lift starts on the first tick.
+  for (const x of [-1, 0, 1]) for (const y of [GROUND_Y, GROUND_Y + 1]) world.dimension.setBlock(x, y, 2, "minecraft:dirt");
+  world.step();
+  assert.equal(world.truck.impulses[0].z, DRIVING.acceleration / LIQUID_DRAG_RETENTION.water, "afloat: water drag");
+  const seen = world.truck.impulses.length;
+  // Risen out of the water block, still short of the bank top, not on the ground.
+  world.step(() => world.truck.moveTo({ y: GROUND_Y + 1.2 }, { velocity: { y: 0.5 }, isOnGround: false }));
+  const push = world.truck.impulses.slice(seen).find((impulse) => impulse.y === 0);
+  assert.equal(push.z, (2 * DRIVING.acceleration) / AIR_DRAG_RETENTION);
+});
+
+test("a truck held still by a wall drives on from the motion it actually made, except afloat", () => {
+  // From rest, W adds DRIVING.acceleration a tick; once the commanded speed beats the 0 blocks/tick
+  // actually moved by more than DRIVING.blockedTolerance, driving restarts from the measured 0.
+  const blockedAfter = Math.floor(DRIVING.blockedTolerance / DRIVING.acceleration) + 1;
+  const world = scene({ riders: [createFakePlayer({ id: "driver" })], driverInput: fixedInput({ forward: 1 }) });
+  for (let i = 0; i <= blockedAfter; i++) world.step();
+  const stone = groundRetention("minecraft:stone");
+  const commanded = world.truck.impulses.map((impulse) => +(impulse.z * stone).toFixed(9));
+  assert.equal(commanded[blockedAfter - 1], +(blockedAfter * DRIVING.acceleration).toFixed(9), `${commanded}`);
+  assert.equal(world.truck.impulses[blockedAfter].z, DRIVING.acceleration / stone, "the wall reset the speed to what was measured");
+
+  // Afloat, a bank is Shoreline Step-Up's to climb: the same stall keeps the commanded speed.
+  const afloat = scene({ riders: [createFakePlayer({ id: "driver" })], isOnGround: false, driverInput: fixedInput({ forward: 1 }) });
+  afloat.dimension.setBlock(0, GROUND_Y, 0, "minecraft:water");
+  for (let i = 0; i <= blockedAfter; i++) afloat.step();
+  const floating = +(afloat.truck.impulses[blockedAfter].z * LIQUID_DRAG_RETENTION.water).toFixed(9);
+  assert.equal(floating, +((blockedAfter + 1) * DRIVING.acceleration).toFixed(9));
+});
+
+test("on a slope the pitch settles at the angle between the front and rear axles' ground", () => {
+  // One block of rise between the axles, which sit AXLE_OFFSET ahead of and behind the middle.
+  const settled = Math.round(Math.atan2(1, PITCH_AXLE_SPAN) * 180 / Math.PI);
+  for (const [raisedZ, sign] of [[1, 1], [-1, -1]]) {
+    const world = scene();
+    for (const x of [-1, 0, 1]) world.dimension.setBlock(x, GROUND_Y, raisedZ, "minecraft:stone");
+    for (let i = 0; i < 30; i++) world.step();
+    assert.equal(world.truck.properties["blake:pitch_angle"], sign * settled, sign > 0 ? "nose up a rise" : "nose down a dip");
+  }
+});
+
+test("a rider in seat 0 drives and a rider in seat 1 does not", () => {
+  const push = (pressing) => {
+    const riders = [createFakePlayer({ id: "driver" }), createFakePlayer({ id: "passenger" })];
+    const world = scene({ riders, driverInput: {
+      movement: (player) => ({ x: 0, y: player.id === pressing ? 1 : 0 }),
+      handbrake: () => false,
+    } });
+    world.step();
+    return world.truck.impulses;
+  };
+  assert.deepEqual(push("passenger"), [], "the Passenger Seat has no throttle");
+  assert.equal(push("driver")[0].z, DRIVING.acceleration / groundRetention("minecraft:stone"));
+});
+
+test("Molten Tire Trample lasts MOLTEN_TIRE_TICKS after the truck leaves lava", () => {
+  const world = scene({ isOnGround: false });
+  world.dimension.setBlock(0, GROUND_Y, 0, "minecraft:lava");
+  const inLava = world.step();
+  world.dimension.setBlock(0, GROUND_Y, 0, "minecraft:air");
+  while (world.tick < inLava + MOLTEN_TIRE_TICKS - 2) world.step();
+  const tramples = [];
+  for (const age of [MOLTEN_TIRE_TICKS - 1, MOLTEN_TIRE_TICKS]) {
+    const zombie = createFakeEntity({ location: { x: 0.5, y: GROUND_Y, z: 3 } });
+    world.dimension.entities.push(zombie);
+    world.step(() => world.truck.moveTo({}, { velocity: { z: 0.5 }, isOnGround: true }));
+    assert.equal(world.tick, inLava + age);
+    tramples.push({ age, hit: zombie.damage.length, burning: zombie.fire.length });
+  }
+  assert.deepEqual(tramples, [
+    { age: MOLTEN_TIRE_TICKS - 1, hit: 1, burning: 1 },
+    { age: MOLTEN_TIRE_TICKS, hit: 1, burning: 0 },
+  ]);
 });
 
 test("the truck owns its yaw and shows steering and pitch on its properties", () => {

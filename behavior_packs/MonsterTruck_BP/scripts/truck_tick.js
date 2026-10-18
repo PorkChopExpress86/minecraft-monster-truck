@@ -96,7 +96,7 @@ const JUMP_PERMISSION = 6;
 
 // Horizontal velocity the engine keeps per tick while airborne; measured in
 // docs/agents/bedrock-physics.md (Air row) — read it before retuning.
-const AIR_DRAG_RETENTION = 0.91;
+export const AIR_DRAG_RETENTION = 0.91;
 
 /** @returns {TruckState} */
 export function createTruckState() {
