@@ -94,6 +94,31 @@ test("an entity that throws when read does not spare the entities after it", () 
   assert.equal(target.damage.length, 1, "the next entity is still trampled");
 });
 
+// Tamed companions as the 2.10 Script API shows them (measured on the dedicated server, run d5985204): a
+// tamed wolf has the minecraft:is_tamed component and no longer a minecraft:tameable one; an untamed wolf
+// has a tameable whose isTamed is false and no is_tamed. EntityTameableComponent.isTamed (index.d.ts) is
+// true for a tamed entity that keeps its tameable component.
+function wolf(components) {
+  const target = scene("minecraft:wolf");
+  target.target.getComponent = (id) => components[id];
+  return target;
+}
+
+test("a tamed wolf (minecraft:is_tamed) is not trampled; an untamed one is", () => {
+  const tamed = wolf({ "minecraft:is_tamed": { typeId: "minecraft:is_tamed" } });
+  tamed.contact(0.5);
+  assert.deepEqual(tamed.target.damage.map((hit) => hit.amount), [], "tamed: spared");
+  const untamed = wolf({ "minecraft:tameable": { typeId: "minecraft:tameable", isTamed: false } });
+  untamed.contact(0.5);
+  assert.equal(untamed.target.damage.length, 1, "untamed: trampled");
+});
+
+test("an entity whose tameable component reports isTamed is not trampled", () => {
+  const tamed = wolf({ "minecraft:tameable": { typeId: "minecraft:tameable", isTamed: true } });
+  tamed.contact(0.5);
+  assert.deepEqual(tamed.target.damage.map((hit) => hit.amount), []);
+});
+
 // getRiders() can hold an empty slot for a rider this script runtime cannot see (a simulated player
 // spawned by another pack); the riders after it are still riders.
 test("a rider seated behind an empty rider slot is still the truck's own rider", () => {
