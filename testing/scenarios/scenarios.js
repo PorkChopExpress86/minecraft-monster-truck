@@ -439,9 +439,11 @@ async function shock_absorption({ dimension, origin, driver, run }) {
   return ["16-block drop: rider and truck took no fall damage", "driver stayed seated through the landing"];
 }
 
-// Pneumatic Shock Absorption with both seats taken, then a deliberate Sneak exit inside the
-// landing's protection window: fall damage to the rider who left must land at once, while the
-// rider still seated is protected at the same tick; later on-foot falls hurt both (no leak).
+// Pneumatic Shock Absorption with both seats taken, then exits as a real rider makes them. A real
+// Sneak never reads as sneaking on a rider (Client Input Run sneak_during_drop), so inside the
+// landing window the add-on puts a rider who leaves back in the seat, still protected; once the
+// window has passed, the same exit lets them go and fall damage lands; later on-foot falls hurt both
+// (no leak). The exits are engine dismounts (ejectRider) and isSneaking is never set.
 async function two_seat_drop({ dimension, origin, driver, run, spawnPlayer }) {
   const checks = [];
   const height = 8;
@@ -471,27 +473,46 @@ async function two_seat_drop({ dimension, origin, driver, run, spawnPlayer }) {
   checks.push(`${height}-block drop with both seats taken: truck ${healths.truck}/${TRUCK_MAX_HEALTH}, ` +
     `driver and passenger ${PLAYER_MAX_HEALTH}/${PLAYER_MAX_HEALTH}, both still seated`);
 
-  // Deliberate exit by Sneak (sneakOut).
-  const passengerExit = await sneakOut(truck, passenger);
-  // Inside the landing window: fall damage to the passenger who left must land; to the driver
-  // still seated it must be cancelled (the control showing the window is still open).
-  const before = { driver: health(driver), passenger: health(passenger) };
+  const rideable = truck.getComponent("minecraft:rideable");
+  const seatOf = player => riders(truck).findIndex(rider => rider?.id === player.id);
   const fall = { cause: EntityDamageCause.fall };
+  // Inside the landing window the passenger leaves; the add-on puts them back, and fall damage to
+  // both riders is cancelled.
+  rideable.ejectRider(passenger);
+  const leftAt = system.currentTick - landedAt;
+  await wait(3);
+  if (seatOf(passenger) !== 1 || seatOf(driver) !== 0) {
+    throw new Error(`Passenger who left ${leftAt} ticks after landing was not put back in seat 1: riders ${JSON.stringify(riders(truck).map(r => r?.name))}`);
+  }
+  const before = { driver: health(driver), passenger: health(passenger) };
   passenger.applyDamage(4, fall);
   driver.applyDamage(4, fall);
   const probeTick = system.currentTick - landedAt;
   await wait(1);
-  const hurt = { driver: health(driver), passenger: health(passenger) };
-  if (!(hurt.driver === before.driver)) throw new Error(`Seated driver not protected ${probeTick} ticks after landing: ${JSON.stringify(hurt)}`);
-  if (!(hurt.passenger < before.passenger)) {
-    throw new Error(`Fall protection leaked after the Sneak exit: passenger took no fall damage ${probeTick} ticks after landing ${JSON.stringify(hurt)}`);
+  const inWindow = { driver: health(driver), passenger: health(passenger) };
+  if (inWindow.driver !== before.driver || inWindow.passenger !== before.passenger) {
+    throw new Error(`Fall damage ${probeTick} ticks after landing was not cancelled for the riders: ${JSON.stringify({ before, inWindow })}`);
   }
-  checks.push(`${passengerExit}; ${probeTick} ticks after landing, 4 fall damage hurt the passenger who left ` +
-    `(${before.passenger} -> ${hurt.passenger}) and was cancelled for the driver still seated (${hurt.driver})`);
+  checks.push(`the passenger who left ${leftAt} ticks after landing was put back in seat 1; ${probeTick} ticks after landing ` +
+    `4 fall damage was cancelled for both riders (${inWindow.driver}, ${inWindow.passenger})`);
 
-  const driverExit = await sneakOut(truck, driver);
-  for (const player of [driver, passenger]) player.isSneaking = false;
-  checks.push("Sneak exit: " + driverExit);
+  // Past the window (8 ticks from the re-seat), the same exit lets the passenger go and fall damage lands.
+  await wait(12);
+  rideable.ejectRider(passenger);
+  const exitAt = system.currentTick - landedAt;
+  await wait(5);
+  if (seatOf(passenger) !== -1) throw new Error(`Passenger who left ${exitAt} ticks after landing was put back in the seat`);
+  passenger.applyDamage(4, fall);
+  await wait(1);
+  const afterExit = health(passenger);
+  if (!(afterExit < inWindow.passenger)) {
+    throw new Error(`Fall protection leaked after the exit: passenger took no fall damage ${exitAt + 5} ticks after landing (${afterExit})`);
+  }
+  checks.push(`the passenger who left ${exitAt} ticks after landing stayed out, and 4 fall damage hurt them ` +
+    `(${inWindow.passenger} -> ${afterExit})`);
+  rideable.ejectRider(driver);
+  await wait(5);
+  if (seatOf(driver) !== -1) throw new Error("Driver who left after the landing window was put back in the seat");
 
   // Unrelated falls, clear of the truck and the mesa: 6 blocks onto open ground.
   const standing = { driver: health(driver), passenger: health(passenger) };
@@ -500,7 +521,7 @@ async function two_seat_drop({ dimension, origin, driver, run, spawnPlayer }) {
   await wait(40);
   const after = { driver: health(driver), passenger: health(passenger) };
   if (!(after.driver < standing.driver) || !(after.passenger < standing.passenger)) {
-    throw new Error(`Fall protection leaked after the Sneak exit: ${JSON.stringify({ standing, after })}`);
+    throw new Error(`Fall protection leaked after the exit: ${JSON.stringify({ standing, after })}`);
   }
   checks.push(`after exiting, a 6-block on-foot fall hurts: driver ${standing.driver} -> ${after.driver}, passenger ${standing.passenger} -> ${after.passenger}`);
   return checks;
