@@ -96,7 +96,7 @@ The personal `minecraft-addon-testing` skill scaffolds repository-owned code. It
 - `scripts/bedrock_world.py`: pinned world download, safe extraction, copied-world NBT customization, the backed-up content-log setting change, and claiming (configure/bootstrap) and deploying into the Dedicated Test World.
 - `requirements-testing.txt`: dependencies for that repository's actual static commands. Keep its pins aligned with verified tooling.
 
-For this repository, static checks run pytest, `scripts/validate_project.py`, and `scripts/package_addon.py`. Runtime assertions check spawning `blake:monster_truck`, health/rideable components, and two seats. Rendering quality, audio, driving, and obstacle behavior remain in [the proving-ground checklist](PROVING_GROUND.md).
+For this repository, static checks run pytest, `scripts/validate_project.py`, and `scripts/package_addon.py`. Runtime assertions check spawning `blake:monster_truck`, health/rideable components, and two seats. Driving, steering, and obstacle behavior are asserted by Scenario Runs and, with real key presses, by the Client Input Run below; rendering quality, audio, and driving feel remain in [the proving-ground checklist](PROVING_GROUND.md).
 
 ## Compatibility evidence
 
@@ -106,6 +106,6 @@ Microsoft documents [GDK data/log locations](https://learn.microsoft.com/en-us/m
 
 ## Heavy-duty behavior coverage
 
-The add-on harness tests 1,000 maximum health, a real melee hit reduced from 40 to 10 damage, ignored fall damage, fire/lava hazard damage, no damage to a nearby pig while parked, and a mob killed through the scripted Speed-Scaled Tire Trample path. Static checks guard the script-driven driving model (throttle, A/D steering, Handbrake Drift), the 3-block-drop Crush Stomp threshold, protected-target exclusions, damage scaling, spawn sources, retrieval/Scrap ownership, and projectile/explosion reduction settings. Driver Seat Spacebar input, rider retention, visible clearance, and subjective driving feel remain manual Proving Ground checks.
+The add-on harness tests 1,000 maximum health, a real melee hit reduced from 40 to 10 damage, ignored fall damage, fire/lava hazard damage, no damage to a nearby pig while parked, and a mob killed through the scripted Speed-Scaled Tire Trample path. Static checks guard the script-driven driving model (throttle, A/D steering, Handbrake Drift), the 3-block-drop Crush Stomp threshold, protected-target exclusions, damage scaling, spawn sources, retrieval/Scrap ownership, and projectile/explosion reduction settings. Driver Seat Spacebar input and rider retention are automated: the Client Input Run's `space_keeps_rider` holds the real Space key and requires the player in the Driver Seat on every tick the probe sees, and the `handbrake` scenario checks the seat on every tick of a drift. Visible clearance and subjective driving feel remain manual Proving Ground checks.
 
 The heavy-duty All run `12393dfe1fdd487fb4bdebe991aae73c` passed 59 static tests, packaging, and all runtime checks with zero content errors/warnings. A temporary two-block stone ledge was also traversed using horizontal impulses and its original blocks restored. This verifies engine stepping independently of keyboard input.
