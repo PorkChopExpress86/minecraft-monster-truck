@@ -46,7 +46,7 @@ A driven truck's distance per tick in a liquid wobbles even while its commanded 
 
 ## Script runtimes
 
-A GameTest simulated player exists as a player object only in the script runtime that spawned it; other packs see `undefined` (ADR-0016). It never reports `inputInfo` movement or button state. Setting `isSneaking` on a seated simulated player does not dismount it; `two_seat_drop` ejects the sneaking rider with `ejectRider`, so the add-on still sees a Sneak exit. Its item uses (`useItemOnBlock`) are rate-limited: a use right after a registered one returns false for up to 8 ticks, so `spawn_sources` retries every tick.
+A GameTest simulated player exists as a player object only in the script runtime that spawned it; other packs see `undefined` (ADR-0016). It never reports `inputInfo` movement or button state. Setting `isSneaking` on a seated simulated player does not dismount it; `sneakOut` (used by `seat_swap` and `door_dismount`) ejects the sneaking rider with `ejectRider`, so the add-on still sees a Sneak exit. Its item uses (`useItemOnBlock`) are rate-limited: a use right after a registered one returns false for up to 8 ticks, so `spawn_sources` retries every tick.
 
 ## The real client (Client Input Run)
 
