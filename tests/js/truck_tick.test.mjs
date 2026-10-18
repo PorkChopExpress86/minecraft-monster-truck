@@ -750,6 +750,17 @@ test("Molten Tire Trample lasts MOLTEN_TIRE_TICKS after the truck leaves lava", 
   ]);
 });
 
+test("falling while moving forward, the nose follows the flight path", () => {
+  // 0.3 down and 0.6 forward a tick: the path's angle, not the steeper vertical-only tilt (0.3 x 30).
+  const world = scene();
+  world.step(() => world.truck.moveTo({ y: GROUND_Y + 20 }, { velocity: { y: 0 }, isOnGround: false }));
+  for (let i = 1; i <= 20; i++) {
+    world.step(() => world.truck.moveTo({ y: GROUND_Y + 20 - 0.3 * i, z: 0.5 + 0.6 * i },
+      { velocity: { y: -0.3, z: 0.6 }, isOnGround: false }));
+  }
+  assert.equal(world.truck.properties["blake:pitch_angle"], Math.round(Math.atan2(-0.3, 0.6) * 180 / Math.PI));
+});
+
 test("the truck owns its yaw and shows steering and pitch on its properties", () => {
   const driver = createFakePlayer({ id: "driver" });
   const world = scene({ riders: [driver], driverInput: fixedInput({ strafe: 1 }) });
