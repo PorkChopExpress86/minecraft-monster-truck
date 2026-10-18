@@ -121,9 +121,13 @@ export function createFakePlayer({ id, location = { x: 0, y: 0, z: 0 }, isSneaki
   return player;
 }
 
+// Seats follow the rider list: whoever is listed first sits in the Driver Seat. addRider appends at once;
+// ejectRider takes effect at the end of the tick (endTick), until when the rider stays listed and cannot
+// be added again (BDS run bc1ec0a3).
 export function createFakeTruck({ location = { x: 0.5, y: 61, z: 0.5 }, yaw = 0, isOnGround = true, riders = [] } = {}) {
   const truck = createFakeEntity({ typeId: "blake:monster_truck", location });
   const seated = [...riders];
+  const leaving = [];
   Object.assign(truck, {
     velocity: { x: 0, y: 0, z: 0 },
     rotation: { x: 0, y: yaw },
@@ -131,6 +135,7 @@ export function createFakeTruck({ location = { x: 0.5, y: 61, z: 0.5 }, yaw = 0,
     properties: {},
     cleared: 0,
     seated,
+    ejections: [],
     getVelocity() {
       return { ...truck.velocity };
     },
@@ -151,8 +156,13 @@ export function createFakeTruck({ location = { x: 0.5, y: 61, z: 0.5 }, yaw = 0,
       return {
         getRiders: () => [...seated],
         addRider(rider) {
-          if (!seated.includes(rider)) seated.push(rider);
+          if (seated.includes(rider)) return false;
+          seated.push(rider);
           return true;
+        },
+        ejectRider(rider) {
+          truck.ejections.push(rider.id);
+          if (seated.includes(rider) && !leaving.includes(rider)) leaving.push(rider);
         },
       };
     },
@@ -160,6 +170,10 @@ export function createFakeTruck({ location = { x: 0.5, y: 61, z: 0.5 }, yaw = 0,
     detach(rider) {
       const i = seated.indexOf(rider);
       if (i >= 0) seated.splice(i, 1);
+    },
+    // End of the engine tick: the riders ejected this tick leave their seats.
+    endTick() {
+      for (const rider of leaving.splice(0)) truck.detach(rider);
     },
     // Place the truck where the engine moved it this tick.
     moveTo(location, { velocity, isOnGround } = {}) {
