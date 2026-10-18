@@ -34,6 +34,7 @@ Preconditions:
 - **Incline pitch verification.** Run `powershell.exe -NoProfile -File .\Test-Addon.ps1 -Mode Scenarios -Only incline_pitch`. The scenario asserts that chassis pitch smoothly tracks hill climbs and drops.
 - **Real client throttle drive.** Run `powershell.exe -NoProfile -File .\Test-Addon.ps1 -Mode Client -Only w_drives -Trace`. The runner injects physical W keystrokes into the real game window, asserting forward travel exceeding 20 blocks.
 - **Real client reverse drive.** Run `powershell.exe -NoProfile -File .\Test-Addon.ps1 -Mode Client -Only s_brakes_and_reverses -Trace`. The runner injects physical S keystrokes, asserting deceleration followed by straight rearward displacement.
+- **Door-side dismount.** Run `powershell.exe -NoProfile -File .\Test-Addon.ps1 -Mode Scenarios -Only door_dismount`. With both seats taken, the scenario sets the driver and then, in a fresh truck, the passenger down 1.5 to 2.2 blocks out of their own seat's door (the truck's left for the driver, its right for the passenger), on a solid block with two blocks of air above. Its Sneak is faked; `-Mode Client -Only sneak_dismounts` checks that a real Sneak sets the driver down outside the driver's door.
 - **Real client steering.** Run `powershell.exe -NoProfile -File .\Test-Addon.ps1 -Mode Client -Only a_turns_left,d_turns_right -Trace`. The runner asserts that A produces negative yaw deflection and D produces positive yaw deflection.
 
 ## Gotchas

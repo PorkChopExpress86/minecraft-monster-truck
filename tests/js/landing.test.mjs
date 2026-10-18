@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import {
   absorbsFallDamage,
   createLandingState,
+  findDoorLanding,
   stepLanding,
 } from "../../behavior_packs/MonsterTruck_BP/scripts/landing.js";
 import { createFakeDimension, createFakeEntity, createFakePlayer, createFakeTruck } from "./fake_world.mjs";
@@ -114,29 +115,108 @@ test("a Crush Stomp whose entity query fails still sounds and shows the explosio
   assert.ok(world.dimension.particles.some((p) => p.effectName === "minecraft:large_explosion"));
 });
 
-test("findDoorLanding places driver on the left and passenger on the right outside collision box", async () => {
-  const { findDoorLanding } = await import("../../behavior_packs/MonsterTruck_BP/scripts/landing.js");
+// Door-side dismount (findDoorLanding): a truck at (10, 61, 10) on flat stone. Facing +Z (South) the
+// driver's door is on its left (+X) and the passenger's on its right (-X); the rider is set down beside
+// the cab, 0.15 ahead of the truck's middle. Positions are rounded so float noise does not hide the diff.
+const SOUTH = { x: 0, z: 1 };
+const DOOR_Z = 10.15;
+const at6 = (p) => ({ x: +p.x.toFixed(6), y: +p.y.toFixed(6), z: +p.z.toFixed(6) });
+
+function doorWorld() {
   const dimension = createFakeDimension();
-  // Truck at (10, 61, 10), heading South (+Z)
+  dimension.fillLayer(GROUND_Y - 1, "minecraft:stone", 10, 10, 6);
+  return dimension;
+}
+
+// Two blocks of stone where a rider's feet and head would go: no footing in that column.
+function wall(dimension, x, z = 10) {
+  dimension.setBlock(x, GROUND_Y, z, "minecraft:stone");
+  dimension.setBlock(x, GROUND_Y + 1, z, "minecraft:stone");
+}
+
+test("on open ground the driver is set down 1.8 blocks out of the left door, the passenger out of the right", () => {
+  const dimension = doorWorld();
   const loc = { x: 10, y: GROUND_Y, z: 10 };
-  const headingSouth = { x: 0, z: 1 };
+  assert.deepEqual(at6(findDoorLanding(dimension, loc, SOUTH, false)), { x: 11.8, y: GROUND_Y, z: DOOR_Z });
+  assert.deepEqual(at6(findDoorLanding(dimension, loc, SOUTH, true)), { x: 8.2, y: GROUND_Y, z: DOOR_Z });
+  // Facing +X (East) the driver's left is -Z.
+  assert.deepEqual(at6(findDoorLanding(dimension, loc, { x: 1, z: 0 }, false)), { x: 10.15, y: GROUND_Y, z: 8.2 });
+});
 
-  // Driver door: +perp (+X), forward (+Z)
-  const driverLanding = findDoorLanding(dimension, loc, headingSouth, false);
-  assert.equal(driverLanding.y, GROUND_Y);
-  assert.ok(driverLanding.x >= loc.x + 1.8 - 0.001, "driver is to the left (+X for South heading)");
-  assert.ok(driverLanding.z >= loc.z + 0.15 - 0.001, "driver is slightly forward aligned with cab");
+test("a blocked spot outside the door sets the rider down 1.5 blocks out, then 2.2", () => {
+  const dimension = doorWorld();
+  // From x 10.375, 1.8 out is column 12 and 1.5 out is column 11.
+  wall(dimension, 12);
+  assert.deepEqual(at6(findDoorLanding(dimension, { x: 10.375, y: GROUND_Y, z: 10 }, SOUTH, false)),
+    { x: 11.875, y: GROUND_Y, z: DOOR_Z }, "1.8 blocked: 1.5 out");
 
-  // Passenger door: -perp (-X), forward (+Z)
-  const passengerLanding = findDoorLanding(dimension, loc, headingSouth, true);
-  assert.equal(passengerLanding.y, GROUND_Y);
-  assert.ok(passengerLanding.x <= loc.x - 1.8 + 0.001, "passenger is to the right (-X for South heading)");
-  assert.ok(passengerLanding.z >= loc.z + 0.15 - 0.001, "passenger is slightly forward aligned with cab");
+  const nearBlocked = doorWorld();
+  // From x 10, 1.5 and 1.8 out are both column 11 and 2.2 out is column 12.
+  wall(nearBlocked, 11);
+  assert.deepEqual(at6(findDoorLanding(nearBlocked, { x: 10, y: GROUND_Y, z: 10 }, SOUTH, false)),
+    { x: 12.2, y: GROUND_Y, z: DOOR_Z }, "1.8 and 1.5 blocked: 2.2 out");
+});
 
-  // Heading East (+X)
-  const headingEast = { x: 1, z: 0 };
-  const driverEast = findDoorLanding(dimension, loc, headingEast, false);
-  assert.ok(driverEast.z <= loc.z - 1.8 + 0.001, "driver is to the left (-Z for East heading)");
-  assert.ok(driverEast.x >= loc.x + 0.15 - 0.001, "driver is forward (+X for East heading)");
+test("with its own door side walled in, a rider is set down out of the other side", () => {
+  const loc = { x: 10, y: GROUND_Y, z: 10 };
+  const driverSideWalled = doorWorld();
+  wall(driverSideWalled, 11);
+  wall(driverSideWalled, 12);
+  assert.deepEqual(at6(findDoorLanding(driverSideWalled, loc, SOUTH, false)), { x: 8.2, y: GROUND_Y, z: DOOR_Z });
+
+  const passengerSideWalled = doorWorld();
+  wall(passengerSideWalled, 8);
+  wall(passengerSideWalled, 7);
+  assert.deepEqual(at6(findDoorLanding(passengerSideWalled, loc, SOUTH, true)), { x: 11.8, y: GROUND_Y, z: DOOR_Z });
+});
+
+test("outside the door the rider stands one block up a step, or one or two blocks down a dip, step first", () => {
+  const loc = { x: 10, y: GROUND_Y, z: 10 };
+  const step = doorWorld();
+  step.setBlock(11, GROUND_Y, 10, "minecraft:stone");
+  assert.deepEqual(at6(findDoorLanding(step, loc, SOUTH, false)), { x: 11.8, y: GROUND_Y + 1, z: DOOR_Z }, "up a step");
+
+  const dip = doorWorld();
+  dip.setBlock(11, GROUND_Y - 1, 10, "minecraft:air");
+  dip.setBlock(11, GROUND_Y - 2, 10, "minecraft:stone");
+  assert.deepEqual(at6(findDoorLanding(dip, loc, SOUTH, false)), { x: 11.8, y: GROUND_Y - 1, z: DOOR_Z }, "down one");
+
+  const deepDip = doorWorld();
+  deepDip.setBlock(11, GROUND_Y - 1, 10, "minecraft:air");
+  deepDip.setBlock(11, GROUND_Y - 3, 10, "minecraft:stone");
+  assert.deepEqual(at6(findDoorLanding(deepDip, loc, SOUTH, false)), { x: 11.8, y: GROUND_Y - 2, z: DOOR_Z }, "down two");
+
+  // A block at foot height over a two-deep hole offers both; the step up wins.
+  const both = doorWorld();
+  both.setBlock(11, GROUND_Y, 10, "minecraft:stone");
+  both.setBlock(11, GROUND_Y - 1, 10, "minecraft:air");
+  both.setBlock(11, GROUND_Y - 3, 10, "minecraft:stone");
+  assert.deepEqual(at6(findDoorLanding(both, loc, SOUTH, false)), { x: 11.8, y: GROUND_Y + 1, z: DOOR_Z }, "step before dip");
+});
+
+test("with no block lookup the rider is set down 1.8 blocks out of their own door at the truck's height", () => {
+  const loc = { x: 10, y: GROUND_Y + 0.4, z: 10 };
+  for (const dimension of [undefined, {}]) {
+    assert.deepEqual(at6(findDoorLanding(dimension, loc, SOUTH, false)), { x: 11.8, y: GROUND_Y + 0.4, z: DOOR_Z });
+    assert.deepEqual(at6(findDoorLanding(dimension, loc, SOUTH, true)), { x: 8.2, y: GROUND_Y + 0.4, z: DOOR_Z });
+  }
+});
+
+test("a rider who leaves on steady ground is set down outside the door of the seat they left", () => {
+  for (const [seat, expectedX] of [[0, 2.3], [1, -1.3]]) {
+    const riders = [createFakePlayer({ id: "driver" }), createFakePlayer({ id: "passenger" })];
+    const world = scene({ riders });
+    world.dimension.fillLayer(GROUND_Y - 1, "minecraft:stone");
+    const leaving = riders[seat];
+    world.truck.detach(leaving);
+    stepLanding(world.truck, world.dimension, world.landing, frame(world, {
+      prevRiderIds: ["driver", "passenger"],
+      getEntity: (id) => riders.find((rider) => rider.id === id),
+    }));
+    assert.equal(leaving.teleports.length, 1, `seat ${seat}: set down once`);
+    assert.deepEqual(at6(leaving.teleports[0].location), { x: expectedX, y: GROUND_Y, z: 0.65 }, `seat ${seat}`);
+    assert.equal(leaving.teleports[0].options.dimension, world.dimension);
+    assert.equal(riders[1 - seat].teleports.length, 0, "the rider still seated stays put");
+  }
 });
 
