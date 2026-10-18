@@ -34,4 +34,4 @@ Preconditions:
 
 - In vanilla Minecraft Bedrock, Space normally dismounts vehicles; the add-on overrides this by toggling Jump input permission off while seated.
 - Crush Stomp requires a genuine airborne drop of at least 3 blocks; driving over a small 1- or 2-block ledge does not trigger Crush Stomp.
-- Deliberate Sneak dismount terminates fall protection after an 8-tick safety window; exiting mid-air will cause the falling player to take normal personal fall damage upon hitting the ground.
+- Sneak cannot get a rider out mid-air: through a drop and for 8 ticks after landing the add-on puts a rider who leaves back in the seat, still protected (`-Mode Client -Only sneak_during_drop`). After that window Sneak gets them out and fall protection ends with the exit.

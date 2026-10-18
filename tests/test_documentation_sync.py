@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,6 +70,19 @@ def test_linux_testing_names_every_client_input_check():
     doc = (ROOT / "docs/LINUX_TESTING.md").read_text(encoding="utf-8")
     missing = [name for name in client_checks.CHECKS if f"`{name}`" not in doc]
     assert not missing, f"docs/LINUX_TESTING.md does not name these Client Input Run checks: {missing}"
+
+
+def test_acceptance_coverage_cites_only_node_tests_that_exist():
+    # A citation is `<file>.test.mjs` followed by quoted test names (or parts of one), up to the next `, ; or |.
+    doc = (ROOT / "docs/ACCEPTANCE_COVERAGE.md").read_text(encoding="utf-8")
+    names = {path.name: re.findall(r'^test\("((?:[^"\\]|\\.)*)"', path.read_text(encoding="utf-8"), re.M)
+             for path in (ROOT / "tests/js").glob("*.test.mjs")}
+    cited = [(file, quote) for file, span in re.findall(r"`(\w+\.test\.mjs)`([^`;|]*)", doc)
+             for quote in re.findall(r'"([^"]+)"', span)]
+    assert cited, "the coverage doc cites node tests by name"
+    missing = [f'{file} "{quote}"' for file, quote in cited
+               if not any(quote in name for name in names.get(file, []))]
+    assert not missing, f"docs/ACCEPTANCE_COVERAGE.md cites node tests that do not exist: {missing}"
 
 
 def test_acceptance_coverage_names_every_client_check_and_opt_in_scenario():
