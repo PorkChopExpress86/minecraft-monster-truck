@@ -128,6 +128,23 @@ test("a player's fatal blow returns exactly one Vehicle Item; other damage does 
   assert.equal(removed, 1);
 });
 
+test("two fatal blows in one tick return one Vehicle Item, not two", () => {
+  const truck = addTruck({ location: { x: 180.5, y: GROUND_Y, z: 0.5 } });
+  const spawned = [];
+  truck.dimension = { spawnItem: (item) => spawned.push(item.typeId) };
+  truck.getComponent = (id) => (id === "minecraft:health" ? { currentValue: 100 } : undefined);
+  truck.remove = () => {
+    truck.isValid = false; // as the engine does for a removed entity
+  };
+  const runsBefore = fake.runs.length;
+  for (const id of ["retriever-a", "retriever-b"]) {
+    assert.equal(hurt(truck, "entityAttack", { damage: 100, damagingEntity: createFakePlayer({ id }) }).cancel, true);
+  }
+  for (const run of fake.runs.slice(runsBefore)) run();
+  assert.deepEqual(spawned, ["blake:monster_truck_vehicle"]);
+  assert.equal(truck.isValid, false);
+});
+
 function removeTruck(truck) {
   overworld.entities.splice(overworld.entities.indexOf(truck), 1);
 }
