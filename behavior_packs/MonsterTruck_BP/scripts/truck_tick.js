@@ -32,6 +32,7 @@ import { createLandingState, releaseLanding, stepLanding } from "./landing.js";
  *   typeId: string,
  *   isValid: boolean,
  *   location: Vector3,
+ *   dimension: { id: string },
  *   isSneaking?: boolean,
  *   applyImpulse(vector: Vector3): void,
  *   applyDamage(amount: number, options?: DamageOptions): boolean,
@@ -58,6 +59,7 @@ import { createLandingState, releaseLanding, stepLanding } from "./landing.js";
  * }} TruckEntity
  * @typedef {{ typeId: string, isAir: boolean, setType(blockType: string): void }} WorldBlock
  * @typedef {{
+ *   id: string,
  *   getBlock(location: Vector3): WorldBlock | undefined,
  *   getEntities(options?: { type?: string, location?: Vector3, maxDistance?: number }): WorldEntity[],
  *   spawnParticle(effectName: string, location: Vector3): void,
@@ -388,6 +390,7 @@ export function tickTruck(truck, dimension, state, input, tick) {
     dy,
     verticalVelocity,
     heading: { x: dirX, z: dirZ },
+    facing: headingVector(drive.state.yaw),
     rideable,
     riderIds: state.riders,
     prevRiderIds: prevRiders,

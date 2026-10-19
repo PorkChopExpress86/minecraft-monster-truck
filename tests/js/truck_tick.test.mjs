@@ -260,6 +260,28 @@ test("on steady ground a rider who leaves is let go; over liquid the rider is se
   }
 });
 
+// The door is fixed to the truck's facing, not to where it last moved: a driver who leaves while the truck
+// still rolls backward, or slides sideways in a Handbrake Drift, is set down out of the driver's door.
+// The truck faces +Z (yaw 0) at (0.5, 61, 0.5) and the fake engine moves it this tick; the door point is
+// 1.8 blocks to +X and 0.15 to +Z of where the truck now is.
+test("a driver who leaves while reversing or sliding is set down out of the driver's door of the truck's facing", () => {
+  const at6 = (p) => ({ x: +p.x.toFixed(6), y: +p.y.toFixed(6), z: +p.z.toFixed(6) });
+  for (const [motion, moved, expected] of [
+    ["reversing", { z: 0.2 }, { x: 2.3, y: GROUND_Y, z: 0.35 }],
+    ["sliding to +X", { x: 0.8 }, { x: 2.6, y: GROUND_Y, z: 0.65 }],
+  ]) {
+    const driver = createFakePlayer({ id: "driver" });
+    const world = scene({ riders: [driver] });
+    world.step();
+    world.step(() => {
+      world.truck.moveTo(moved);
+      world.truck.detach(driver);
+    });
+    assert.equal(driver.teleports.length, 1, `${motion}: set down once`);
+    assert.deepEqual(at6(driver.teleports[0].location), expected, `${motion}: out of the driver's door`);
+  }
+});
+
 // Liquid in every column within reach of the truck: no dry footing to set a rider down on.
 function liquidAllAround(liquid) {
   const rider = createFakePlayer({ id: "rider" });

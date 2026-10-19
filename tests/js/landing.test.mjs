@@ -21,6 +21,7 @@ function frame(world, overrides = {}) {
     dy: 0,
     verticalVelocity: 0,
     heading: { x: 0, z: 1 },
+    facing: { x: 0, z: 1 },
     rideable: world.truck.getComponent("minecraft:rideable"),
     riderIds: world.truck.seated.map((rider) => rider.id),
     prevRiderIds: world.truck.seated.map((rider) => rider.id),
@@ -217,6 +218,30 @@ test("a rider who leaves on steady ground is set down outside the door of the se
     assert.deepEqual(at6(leaving.teleports[0].location), { x: expectedX, y: GROUND_Y, z: 0.65 }, `seat ${seat}`);
     assert.equal(leaving.teleports[0].options.dimension, world.dimension);
     assert.equal(riders[1 - seat].teleports.length, 0, "the rider still seated stays put");
+  }
+});
+
+// Only a rider the engine set down beside the seat is moved to the door. One who left by /tp, an ender
+// pearl, chorus fruit or a portal is where they went, in whatever dimension, and stays there. BDS run
+// bd5d8c33: an ejected rider stands 0.96 blocks from the truck's middle (0.45, 0, -0.85) when parked and
+// 1.15 at top speed; a teleported one is at the destination, and the 1.0.14 candidate pulled them back.
+test("a rider who left to somewhere far from the truck, or to another dimension, stays there; one beside the seat goes to the door", () => {
+  const cases = [
+    ["beside the seat", { x: 0.95, y: GROUND_Y, z: -0.35 }, "minecraft:overworld", [{ x: 2.3, y: GROUND_Y, z: 0.65 }]],
+    ["30 blocks away", { x: 0.5, y: GROUND_Y, z: 30.5 }, "minecraft:overworld", []],
+    ["in the nether", { x: 0.5, y: GROUND_Y + 1, z: 0.5 }, "minecraft:nether", []],
+  ];
+  for (const [label, location, dimensionId, expected] of cases) {
+    const rider = createFakePlayer({ id: "rider" });
+    const world = scene({ riders: [rider] });
+    world.dimension.fillLayer(GROUND_Y - 1, "minecraft:stone");
+    world.truck.detach(rider);
+    rider.location = location;
+    rider.dimension = { id: dimensionId };
+    world.protectedRiders.set("rider", world.truck.id);
+    stepLanding(world.truck, world.dimension, world.landing, frame(world, { prevRiderIds: ["rider"], getEntity: () => rider }));
+    assert.deepEqual(rider.teleports.map((t) => at6(t.location)), expected, label);
+    assert.equal(world.protectedRiders.has("rider"), false, `${label}: protection ends with the exit`);
   }
 });
 
