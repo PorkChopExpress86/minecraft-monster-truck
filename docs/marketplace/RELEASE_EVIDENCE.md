@@ -1,32 +1,60 @@
 # Monster Truck release evidence
 
-Checked September 7, 2026, America/Chicago (September 8 UTC).
+Version 1.0.14, checked October 18, 2026, America/Chicago. This replaces the September 7 record for 1.0.13 and earlier builds.
 
 ## Build
 
-- Artifact: `dist/MonsterTruck.mcaddon`
-- Size: 21,158 bytes
-- SHA-256: `BBFFB7A9235A695000FC87C95FFEDDF498FF1424EA8D84A6DCED6154C7EC1193`
-- Command: `powershell.exe -NoProfile -File .\Test-Addon.ps1 -Mode All`
-- Run: `417c38379e9c421fb63bd080d67d3e23`
-- [Local report](../../dist/bedrock-tests/417c38379e9c421fb63bd080d67d3e23/report.json)
+- Version: 1.0.14, both packs, `@minecraft/server` 2.10.0
+- Release commit: `f6c0899` (`Release 1.0.14`); the code under test is `30ab1b1`, and the release commit changes only the version numbers and `docs/STATE.md`
+- Artifact: `dist/MonsterTruck.mcaddon`, 54,134 bytes
+- SHA-256: `FFB737097ADA5BC8C4D699B8B6F716DCAE6E6FBA5CB0E2EE75C314D0ED6B38FD`
+- Contents: `MonsterTruck_BP.mcpack` (16 files) and `MonsterTruck_RP.mcpack` (31 files). No file name in either pack contains `test`, `harness` or `scenario`.
+- Installed by `python scripts/release.py` to the local Windows client, 10 locations verified in sync. Not installed to the Docker servers.
 
-## Observed results
+## Automated results
 
-59 pytest tests passed. Repository validation and packaging returned exit code 0.
+| Layer | Command | Result | Run or commit |
+| --- | --- | --- | --- |
+| Unit and contract tests | `REQUIRE_NODE=1 python -m pytest -q` | 244 passed, 3 skipped (Linux-only) | pre-commit hook on `f6c0899` |
+| Node behaviour tests | `node --test tests/js/` | 85 of 85 | `6641908` |
+| Script API types | `npx tsc -p jsconfig.json` | clean | `6641908` |
+| Repository validator | `python scripts/validate_project.py` | passed | `9ce1a95` |
+| Creator Tools 0.20.0 | `mct validate all --if dist/MonsterTruck.mcaddon` | 0 errors, 11 warnings, 11 recommendations | 1.0.14 package |
+| Scenario Run, headless BDS 1.26.52.3 | `python scripts/bedrock_test.py scenarios` | 25 of 25 | `08ca30f0` on `06f6338`, `9392b0b5` on `6641908` |
+| Opt-in scenario | `--only retrieval_full_health` | passed | `d28cf989` |
 
-The runtime harness emitted PASS for six colors, required components and two seats per vehicle; two-block stepping with horizontal impulses; 1,000 health; 75% melee damage reduction; fall damage immunity; stationary contact safety; and a moving truck killing a mob.
+The 11 Creator Tools warnings do not stop the packs loading. Seven `UNLINK` warnings name vanilla items the recipe uses. Two `JSON 192` warnings say `item_texture.json` uses a string where the schema expects an array; the game accepts both. `COMJSON 134` asks for a `uv_anim` key the game does not require, and `FORMATVER 238` says the animation controller format is newer than the schema expects.
 
-The overall run returned exit code 1. Its error was `Showcase requires at least two successful screenshots`; the capture note was `Minecraft screenshot capture exceeded 20 seconds`. There were no captured screenshots in this run. Final logs were collected, and the report listed no content warnings. Do not turn the harness PASS into a claim that the complete workflow passed.
+## Real Windows client
 
-## Visual review
+| Run | Mode | Result |
+| --- | --- | --- |
+| `4736a428` on `6641908` | Client Input Run | 10 of 11. `sneak_dismounts` failed on a test bug: `querytarget` reports a player at eye height. Fixed in `30ab1b1`. |
+| `5f3261ce` on `30ab1b1` | Client Input Run, `sneak_dismounts` and `sneak_exits_afloat` | 2 of 2. The driver lands 1.80 blocks out of the driver's door, on the floor. |
+| `43a2463f` on `f6c0899` | Client Smoke Run | Gameplay 32 of 32, content logs clean, screenshots passed. Failed only because Minecraft took longer than 30 seconds to close. |
+| `08e233d6` on `f6c0899` | Client Smoke Run | Gameplay 32 of 32, content logs clean, shutdown passed. Failed only because 1 screenshot was captured and the showcase needs 2. |
 
-Both existing `docs/images/` images were opened and inspected during preparation. They show all six colors with recognizable truck geometry and no obvious missing-texture pattern. The close-up is the stronger lead image. The other image contains background animals and a narrow dark left border; both use a flat test-world setting. Neither shows actual driving or seated players. These are portfolio candidates, not final Marketplace artwork.
+Both runs on the release commit passed every gameplay check with clean content logs. The screenshot and shutdown failures come from the capture tooling, which has timed out on this machine since September. That cause is still not established.
 
-## Outstanding evidence
+The client screenshots show the new engine and suspension model with no missing-texture pattern.
 
-A Game-only retry (`04d08c90bbde43d0af98241f5a587d17`) reproduced the same screenshot timeout and overall failure, while the runtime assertions again emitted PASS. No cause has been established for the capture failure.
+## Defects found and fixed in this release
 
-The outer archive and both inner MCPacks were inspected: only the two production packs and their expected assets are included; no test scripts, local configuration, or test world were present. The official `@minecraft/creator-tools` npm package was resolved to version 0.17.8, but its initial `mct --help` invocation did not finish and was interrupted. No official validator results are claimed.
+- **Seat order.** A rider the add-on put back in the truck landed in the last seat, so after a mid-drop detach the passenger took the controls. `reseat()` in `landing.js` now restores the previous seat order (`b37a457`). Covered by `reseat_keeps_seats` and `lava_stay_keeps_seats`, which fail on the old code (run `1d95aa46`).
+- **Door side while reversing.** The door side followed the direction of travel, so a driver who left while reversing came out of the passenger's door. It now follows the truck's facing (`6641908`).
+- **Teleport pull-back.** A rider who left by `/tp`, an ender pearl or a portal was pulled back to the truck's door. The door teleport now applies only within 3 blocks of the truck, in the same dimension (`6641908`).
 
-Official Creator Tools validation, a successful fresh screenshot workflow, manual controls/audio/multiplayer acceptance, asset rights confirmation, and any additional target-device testing remain open. The portfolio and submission drafts are not approval or certification claims.
+## Known issues
+
+- Getting out beside tall grass, flowers, snow layers or carpet can set the player one block above the ground. They drop one block and take no damage.
+- Riding the truck shows its 1,000 health as a 10-row block of mount hearts on the HUD (Client Smoke Run screenshots).
+- The Client Smoke Run harness check "parked truck leaves mob unharmed" failed once in four real-client runs (`1ac43d79`). The cause was not caught. The same steps on BDS left the pig unharmed (`92ff6cf3`).
+- Several scenarios assert the Survival driver's health. Over a full run, hunger can cost the driver 1 point, so `reseat_keeps_seats` ignores starvation damage. The cause is inferred, not measured.
+
+## Not verified
+
+- Two real players in one world, including the one tick a passenger spends off the truck when a reseat restores the seat order.
+- Controller and touch input, and any device other than this Windows PC.
+- Audible engine sounds, existing-world activation, save and reload, and other add-ons in the same world.
+- The manual checks in issues #27 to #32.
+- Asset ownership, creator identity, key art and a gameplay trailer for Marketplace submission.

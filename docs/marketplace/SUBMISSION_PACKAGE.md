@@ -74,7 +74,7 @@ Repository source is evidence of a production path, not a legal certification of
 - [ ] Confirm keyboard driving, dye interaction, crafting, deployment, retrieval, and audible engine sounds manually.
 - [ ] Verify driver and passenger with two real players; controller and touch input on intended devices.
 - [ ] Test existing-world activation, save/reload, pack updates, and coexistence with representative other add-ons.
-- [ ] Run official Creator Tools validation and review findings; local pytest is not Marketplace certification.
+- [x] Run official Creator Tools validation and review findings; local pytest is not Marketplace certification. 1.0.14: 0 errors, see [release evidence](RELEASE_EVIDENCE.md).
 - [x] Verify release archive excludes test harness, local configuration, and test world; see [release evidence](RELEASE_EVIDENCE.md).
 - [ ] Complete ownership confirmations, creator identity, contact, and portfolio links.
 - [ ] Produce final key art and gameplay trailer to the partner specifications.
