@@ -482,7 +482,8 @@ class World:
                 self.falling = t["y"] > -60
             return {"statusCode": 0, "details": json.dumps([{"position": {"x": t["x"], "y": t["y"], "z": t["z"]}, "yRot": t["yaw"]}])}
         if line.startswith("querytarget @s"):
-            return {"statusCode": 0, "details": json.dumps([{"position": self.player, "yRot": self.player_yaw}])}
+            eyes = {**self.player, "y": self.player["y"] + client_checks.PLAYER_EYE_HEIGHT}
+            return {"statusCode": 0, "details": json.dumps([{"position": eyes, "yRot": self.player_yaw}])}
         if line == "scoreboard players list riding":
             return {"statusCode": 0, "statusMessage": f"- mt_probe: {self.riding} (mt_probe)"}
         if line == "inputpermission query @s jump enabled":
