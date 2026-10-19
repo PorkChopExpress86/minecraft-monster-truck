@@ -12,6 +12,11 @@ export const PNEUMATIC_DUST_PARTICLE = "minecraft:campfire_smoke_particle";
 export const CRUSH_STOMP_MIN_DROP = 3;
 // Ticks after a landing or an engine detachment during which riders are reseated and protected.
 const RIDER_RETENTION_TICKS = 8;
+// A rider the engine sets down after a Sneak stands within this many blocks of the truck's middle when
+// the add-on sees the exit: 0.96 parked, 1.15 at top speed, 1.55 reversing (docs/agents/bedrock-physics.md,
+// Dismount placement), with one more tick at top speed to spare. A rider found farther away, or in
+// another dimension, left by /tp, an ender pearl, chorus fruit or a portal, and stays where they went.
+const SNEAK_EXIT_REACH = 3;
 const CRUSH_STOMP_RADIUS = 3.5;
 // EntityDamageCause value (@minecraft/server), spelled out so node can load this module.
 /** @type {import("./truck_tick.js").DamageCause} */
@@ -82,13 +87,13 @@ export function calculateWheelContactOffsets(
  * Passenger door is out to the right side (-perp direction, -1.8 blocks from centerline).
  * @param {import("./truck_tick.js").WorldDimension} dimension
  * @param {import("./truck_tick.js").Vector3} loc
- * @param {{ x: number, z: number }} heading
+ * @param {{ x: number, z: number }} facing unit direction the truck faces; the doors are fixed to it
  * @param {boolean} [isPassenger=false]
  * @returns {import("./truck_tick.js").Vector3}
  */
-export function findDoorLanding(dimension, loc, heading, isPassenger = false) {
-  const dirX = heading.x;
-  const dirZ = heading.z;
+export function findDoorLanding(dimension, loc, facing, isPassenger = false) {
+  const dirX = facing.x;
+  const dirZ = facing.z;
   const primarySide = isPassenger ? -1 : 1;
   const forwardOffset = 0.15;
   const sideDistances = [1.8, 1.5, 2.2];
@@ -121,6 +126,19 @@ export function findDoorLanding(dimension, loc, heading, isPassenger = false) {
   const fallbackX = loc.x + dirZ * (1.8 * primarySide) + dirX * forwardOffset;
   const fallbackZ = loc.z - dirX * (1.8 * primarySide) + dirZ * forwardOffset;
   return { x: fallbackX, y: loc.y, z: fallbackZ };
+}
+
+/**
+ * Whether a rider who just left the seat is where the engine's own dismount puts them: in the truck's
+ * dimension, within SNEAK_EXIT_REACH of its middle.
+ * @param {import("./truck_tick.js").WorldEntity} player
+ * @param {import("./truck_tick.js").WorldDimension} dimension the truck's
+ * @param {import("./truck_tick.js").Vector3} loc the truck's
+ */
+function leftBesideTheSeat(player, dimension, loc) {
+  if (player.dimension.id !== dimension.id) return false;
+  const p = player.location;
+  return Math.hypot(p.x - loc.x, p.y - loc.y, p.z - loc.z) <= SNEAK_EXIT_REACH;
 }
 
 /**
@@ -230,6 +248,7 @@ function restoreProtectedRiders(getEntity, landing, rideable) {
  *   dy: number,
  *   verticalVelocity: number,
  *   heading: { x: number, z: number },
+ *   facing: { x: number, z: number },
  *   rideable: import("./truck_tick.js").Rideable | undefined,
  *   riderIds: string[],
  *   prevRiderIds: string[],
@@ -239,7 +258,8 @@ function restoreProtectedRiders(getEntity, landing, rideable) {
  *   getEntity(id: string): import("./truck_tick.js").WorldEntity | undefined,
  *   protectedRiders: Map<string, string>,
  *   jumpedRecently?(player: import("./truck_tick.js").WorldEntity): boolean,
- * }} frame dy: height change since last tick; heading: unit direction of travel;
+ * }} frame dy: height change since last tick; heading: unit direction of travel; facing: unit direction
+ *   the truck faces (its yaw), which the doors are fixed to;
  *   riderIds / prevRiderIds: seated rider ids this tick and last tick;
  *   jumpedRecently: the player holds Jump (Space) or did within the last few ticks, while Space can still
  *   dismount them (their Jump input is not locked).
@@ -250,6 +270,7 @@ export function stepLanding(truck, dimension, landing, frame) {
     dy,
     verticalVelocity,
     heading,
+    facing,
     rideable,
     prevRiderIds,
     inLiquid,
@@ -269,7 +290,8 @@ export function stepLanding(truck, dimension, landing, frame) {
 
   // Rider dismount management. Minecraft dismounts a rider who presses Space, the add-on's handbrake, and
   // detaches riders around drops (#32): both are undone unless the rider is sneaking. Any other exit on
-  // steady ground is Sneak: in the real client a Sneak exit never reads as sneaking on the riding player.
+  // steady ground that leaves the rider beside the seat is Sneak: in the real client a Sneak exit never
+  // reads as sneaking on the riding player. A rider who left to somewhere else was teleported and stays.
   const inDropWindow = falling || landing.isFalling ||
     Boolean(landing.riderRetentionUntil && tickNumber <= landing.riderRetentionUntil);
   if (prevRiderIds.length > riderIds.length) {
@@ -307,10 +329,9 @@ export function stepLanding(truck, dimension, landing, frame) {
             protectedRiders.delete(playerId);
             landing.protectedRiderIds?.delete(playerId);
           } else {
-            const isPassenger = prevRiderIds.indexOf(playerId) === 1;
-            const doorLanding = findDoorLanding(dimension, loc, heading, isPassenger);
-            if (doorLanding && player.teleport) {
-              player.teleport(doorLanding, { dimension });
+            if (leftBesideTheSeat(player, dimension, loc)) {
+              const isPassenger = prevRiderIds.indexOf(playerId) === 1;
+              player.teleport?.(findDoorLanding(dimension, loc, facing, isPassenger), { dimension });
             }
             protectedRiders.delete(playerId);
             landing.protectedRiderIds?.delete(playerId);
