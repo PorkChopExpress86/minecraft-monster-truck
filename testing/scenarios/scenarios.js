@@ -1,6 +1,7 @@
 import { Difficulty, Direction, EnchantmentType, GameMode, ItemStack, system, world, EntityDamageCause } from "@minecraft/server";
 import { driverInput } from "../main.js";
 import { DRIVING, headingVector } from "../driving.js";
+import { findDryLanding } from "../amphibious.js";
 import { HIT_COOLDOWN_TICKS, isInContactPerimeter } from "../contact.js";
 import { TRUCK_WIDTH } from "../geometry.js";
 import {
@@ -626,6 +627,58 @@ async function reseat_keeps_seats({ dimension, origin, driver, run, spawnPlayer 
   if (names().includes(driver.name)) throw new Error("Driver who left on steady ground was put back in the seat");
   checks.push("the same eject on steady ground, past the landing window, let the driver go");
   return checks;
+}
+
+// Over lava with no dry land in reach, a driver who leaves is kept in the Driver Seat with the passenger
+// still behind them. Restoring the seat order takes the passenger off for one tick over the lava, so the
+// passenger must come back unburnt (run 54b74e83 measured this before it became a scenario).
+async function lava_stay_keeps_seats({ dimension, origin, driver, run, spawnPlayer }) {
+  fill(dimension, at(origin, -11, 0, GROUND_Y - 3), at(origin, 11, 78, GROUND_Y - 1), "lava");
+  fill(dimension, at(origin, -7, 1, GROUND_Y - 3), at(origin, -6, 5, GROUND_Y - 1), "stone");
+  const truck = spawnTruck(dimension, run, at(origin, -4, 3));
+  await wait(30);
+  await board(driver, truck, 0, at(origin, -6, 3));
+  const passenger = spawnPlayer("SimulatedPassenger");
+  await wait(10);
+  await board(passenger, truck, 1, at(origin, -6, 3));
+  await drive(driver, 30);
+  await drive(driver, 30, { forward: 0 });
+  if (dimension.getBlock(truck.location)?.typeId !== "minecraft:lava") throw new Error("Truck is not afloat in lava");
+  if (findDryLanding(dimension, truck.location)) throw new Error("Dry land is in reach, so a driver who leaves would be set down, not kept");
+
+  const names = () => riders(truck).map(rider => rider?.name);
+  const expected = JSON.stringify([driver.name, passenger.name]);
+  const burns = [EntityDamageCause.lava, EntityDamageCause.fire, EntityDamageCause.fireTick];
+  const hurts = [];
+  const hurtListener = world.afterEvents.entityHurt.subscribe(event => {
+    if ([driver.id, passenger.id].includes(event.hurtEntity.id) && burns.includes(event.damageSource.cause)) {
+      hurts.push({ who: event.hurtEntity.name, cause: event.damageSource.cause, damage: event.damage });
+    }
+  });
+  const seated = [];
+  const passengerBlocks = new Set();
+  try {
+    truck.getComponent("minecraft:rideable").ejectRider(driver);
+    for (let tick = 0; tick < 60; tick++) {
+      await wait(1);
+      seated.push(names());
+      passengerBlocks.add(dimension.getBlock(passenger.location)?.typeId);
+    }
+  } finally {
+    world.afterEvents.entityHurt.unsubscribe(hurtListener);
+  }
+  const trace = seated.slice(0, 6).map((who, tick) => `+${tick + 1} [${who.join(",")}]`).join(" ");
+  const settledAt = seated.findIndex(who => JSON.stringify(who) === expected);
+  if (settledAt < 0 || settledAt > 3) throw new Error(`Driver who left over lava was not back ahead of the passenger within 4 ticks: ${trace}`);
+  if (seated.slice(settledAt).some(who => JSON.stringify(who) !== expected)) throw new Error(`Riders changed again after the driver was put back: ${trace}`);
+  const burning = [driver, passenger].filter(player => player.getComponent("minecraft:onfire")).map(player => player.name);
+  if (hurts.length || burning.length || passengerBlocks.has("minecraft:lava")) {
+    throw new Error(`Restoring the seats over lava burned a rider: ${JSON.stringify({ hurts, burning, passengerBlocks: [...passengerBlocks] })}`);
+  }
+  return [
+    `over lava with no dry land in reach, the driver who left was back ahead of the passenger ${settledAt + 1} ticks later (${trace}) and stayed for 60 ticks`,
+    `no lava or fire damage to either rider, nobody burning, passenger never in a lava block (${[...passengerBlocks].join(", ")})`,
+  ];
 }
 
 async function liquid_crossing({ dimension, origin, driver, run }, liquid) {
@@ -1424,5 +1477,5 @@ export const SCENARIOS = {
   smoke, seats, auto_step, steering, handbrake, crush_stomp, shock_absorption,
   flotation_water, flotation_lava, trample, demolition, foliage_shearing,
   dye_repaint, retrieval, retrieval_full_health, incline_pitch, spawn_sources, two_seat_drop,
-  liquid_start_water, liquid_start_lava, shoreline_wall, shoreline_step, seat_swap, door_dismount, reseat_keeps_seats,
+  liquid_start_water, liquid_start_lava, shoreline_wall, shoreline_step, seat_swap, door_dismount, reseat_keeps_seats, lava_stay_keeps_seats,
 };
