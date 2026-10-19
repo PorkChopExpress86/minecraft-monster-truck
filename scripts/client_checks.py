@@ -43,6 +43,9 @@ TRACE_SCORES = ("riding", "lost", "sneaking", "sneak_button", "jump")
 # long enough for a focus check of the Sneak hold, each with two queries (about one every 0.6 s, runs
 # 9d4bbbd3 and 42808732), to see the truck still in the air.
 DROP_HEIGHT = 32
+# querytarget reports a player's position at eye height, this far above their feet: a player standing on the
+# arena floor read +1.62 above it (Client Input Run 4736a428). Trucks and other entities read at their feet.
+PLAYER_EYE_HEIGHT = 1.62
 # The Sixteen-Color Palette in the entity's paint-event order (blake:paint_<color>), for palette_screenshots.
 PALETTE = tuple(event.removeprefix("blake:paint_") for event in json.loads(
     (Path(__file__).resolve().parents[1] / "behavior_packs/MonsterTruck_BP/entities/monster_truck.entity.json")
@@ -286,8 +289,9 @@ def sneak_dismounts(ctx):
     where = f"{out:+.2f} blocks out of the driver's door and {ahead:+.2f} ahead of the truck's middle"
     if not 1.4 <= out <= 2.3 or abs(ahead) > 1:
         raise CheckFailed(f"Sneak set the player down {where}, not beside the driver's door (1.5 to 2.2 out)")
-    if abs(player["y"] - ctx.base[1]) > 0.1:
-        raise CheckFailed(f"Sneak set the player down {where} but {player['y'] - ctx.base[1]:+.2f} blocks off the floor")
+    feet = player["y"] - PLAYER_EYE_HEIGHT
+    if abs(feet - ctx.base[1]) > 0.1:
+        raise CheckFailed(f"Sneak set the player down {where} but {feet - ctx.base[1]:+.2f} blocks off the floor")
     return f"Sneak got the player out of the truck, {where}; they stayed out, and Jump works again"
 
 
@@ -347,8 +351,9 @@ def sneak_exits_afloat(ctx):
     player = query_targets(ctx.run("querytarget @s"))[0]["position"]
     # Over liquid the add-on sets a Sneak exit down on the nearest dry land (amphibious.js findDryLanding):
     # here the grass around the pool, whose top is at the base height.
-    if player["y"] < by - 0.1:
-        raise CheckFailed(f"Sneak afloat dropped into the water: the player is {player['y'] - by:+.2f} blocks from "
+    feet = player["y"] - PLAYER_EYE_HEIGHT
+    if feet < by - 0.1:
+        raise CheckFailed(f"Sneak afloat dropped into the water: the player is {feet - by:+.2f} blocks from "
                           "the pool's grass edge")
     off = math.hypot(player["x"] - truck["x"], player["z"] - truck["z"])
     # The pool's nearest grass is 2.5 blocks from the truck's middle (half a block allowed for drift), and
