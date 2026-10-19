@@ -34,9 +34,23 @@ export async function assertAddon(player, run) {
   }
 }
 
+const SHOWCASE_HOME = "monster_truck_test:showcase_home";
+
 async function createShowcase(player, run) {
   const tag = "monster_truck_test_showcase";
+  // The showcase seats the player, which moves them. Each run starts where the first one did, so the
+  // ramp and ledge are rebuilt in place instead of on top of the last run's.
+  const home = world.getDynamicProperty(SHOWCASE_HOME);
+  if (home === undefined) world.setDynamicProperty(SHOWCASE_HOME, player.location);
+  try {
+    // Removing the truck below also unseats the player, so a seat that cannot be read is not an error.
+    player.getComponent("minecraft:riding")?.entityRidingOn?.getComponent("minecraft:rideable")?.ejectRider(player);
+  } catch {}
   for (const previous of player.dimension.getEntities({ tags: [tag] })) previous.remove();
+  if (home !== undefined) {
+    player.teleport(home);
+    await new Promise(resolve => system.runTimeout(resolve, 2));
+  }
   const origin = { x: Math.floor(player.location.x) + 8, y: Math.floor(player.location.y),
     z: Math.floor(player.location.z) + 4 };
   const colors = [
@@ -84,8 +98,14 @@ async function createShowcase(player, run) {
     entities.push(hill.truck);
     checks.push(hill.check);
     world.setTimeOfDay(6000);
-    player.onScreenDisplay.hideAllExcept([]);
+    // The rider's own view with the HUD on comes first, so frame review sees what a seated player sees.
+    if (!entities[0].getComponent("minecraft:rideable").addRider(player)) {
+      throw new Error("Player could not board the red showcase truck");
+    }
+    // null is the rider's view; it fills two 20-second slots so a capture lands in it when one fails.
     const views = [
+      null,
+      null,
       { location: { x: origin.x + 28, y: origin.y + 14, z: origin.z - 20 },
         facingLocation: { x: origin.x + 9, y: origin.y + 1, z: origin.z + 10 } },
       // Side-on view of the truck parked on the hill (Dynamic Incline Pitch).
@@ -96,11 +116,20 @@ async function createShowcase(player, run) {
       { location: { x: origin.x + 28, y: origin.y + 8, z: origin.z + 30 },
         facingLocation: { x: origin.x + 9, y: origin.y + 1, z: origin.z + 10 } },
     ];
+    const showView = (camera) => {
+      if (camera === null) {
+        player.camera.clear();
+        player.onScreenDisplay.resetHudElementsVisibility();
+      } else {
+        player.onScreenDisplay.hideAllExcept([]);
+        player.camera.setCamera("minecraft:free", camera);
+      }
+    };
     let view = 0;
-    player.camera.setCamera("minecraft:free", views[view]);
+    showView(views[view]);
     cameraTimer = system.runInterval(() => {
       view = (view + 1) % views.length;
-      player.camera.setCamera("minecraft:free", views[view]);
+      showView(views[view]);
     }, 400);
     // Showcase trucks remain for capture and are replaced by tag on the next run.
     return { checks, cleanup };
