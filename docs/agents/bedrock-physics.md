@@ -46,6 +46,8 @@ A driven truck's distance per tick in a liquid wobbles even while its commanded 
 
 ## Script runtimes
 
+Seats follow the rider list: `getRiders()[0]` sits in the Driver Seat, and when the driver leaves, the passenger slides into it (run bc1ec0a3: after `ejectRider(driver)` the passenger sat at +0.45, the driver's side). `addRider` appends and takes effect at once. `ejectRider` takes effect at the end of the tick: the rider stays in `getRiders()` until then, and `addRider` on them returns false, so a rider cannot be taken off and put back in the same tick (run bc1ec0a3). `reseat` in `landing.js` therefore puts the returning rider on, takes off the riders who sat behind them, and puts those back the next tick.
+
 A GameTest simulated player exists as a player object only in the script runtime that spawned it; other packs see `undefined` (ADR-0016). It never reports `inputInfo` movement or button state. Setting `isSneaking` on a seated simulated player does not dismount it; `sneakOut` (used by `seat_swap` and `door_dismount`) ejects the sneaking rider with `ejectRider`, so the add-on still sees a Sneak exit. Its item uses (`useItemOnBlock`) are rate-limited: a use right after a registered one returns false for up to 8 ticks, so `spawn_sources` retries every tick.
 
 ## The real client (Client Input Run)

@@ -41,6 +41,7 @@ function scene({ riders = [], truckAt = { x: 0.5, y: GROUND_Y, z: 0.5 }, isOnGro
       tick += 1;
       before?.(tick);
       tickTruck(truck, dimension, state, input, tick);
+      truck.endTick();
       return tick;
     },
   };
@@ -333,6 +334,88 @@ test("with Jump locked (#40) Space cannot dismount, so a rider who leaves holdin
   world.step();
   world.step(() => world.truck.detach(rider));
   assert.ok(!world.truck.seated.includes(rider), "handbrake held, then Shift: the rider is let go");
+});
+
+// A rider the add-on puts back returns to the seat they left. addRider appends and the engine seats riders
+// in list order (BDS run bc1ec0a3: ejecting the driver moved the passenger to the Driver Seat), so putting
+// the driver back behind a seated passenger would hand the passenger the controls.
+function twoSeats({ driverInput, isOnGround = true } = {}) {
+  const riders = [createFakePlayer({ id: "driver" }), createFakePlayer({ id: "passenger" })];
+  const world = scene({ riders, driverInput, isOnGround });
+  return { world, driver: riders[0], passenger: riders[1] };
+}
+const seatOrder = (world) => world.truck.seated.map((rider) => rider?.id);
+
+// One tick of full W from `pressing` alone, from rest: did the truck get a push?
+function drivesWhenPressing(world, pressing) {
+  world.input.driverInput = { movement: (player) => ({ x: 0, y: player.id === pressing ? 1 : 0 }), handbrake: () => false };
+  const seen = world.truck.impulses.length;
+  world.step();
+  return world.truck.impulses.length > seen;
+}
+
+function assertDriverHasTheControls(world) {
+  assert.equal(drivesWhenPressing(world, "passenger"), false, "the passenger's W does not move the truck");
+  assert.equal(drivesWhenPressing(world, "driver"), true, "the driver's W does");
+}
+
+test("a driver the engine detaches mid-drop with a passenger aboard is put back in the Driver Seat, ahead of the passenger", () => {
+  const { world, driver } = twoSeats();
+  world.step(() => world.truck.moveTo({ y: GROUND_Y + 6 }, { velocity: { y: 0 }, isOnGround: false }));
+  world.step(() => {
+    world.truck.moveTo({ y: GROUND_Y + 5.5 }, { velocity: { y: -0.5 }, isOnGround: false });
+    world.truck.detach(driver);
+  });
+  world.step(() => world.truck.moveTo({ y: GROUND_Y + 4.5 }, { velocity: { y: -1 }, isOnGround: false }));
+  assert.deepEqual(seatOrder(world), ["driver", "passenger"], "back in the seat they left within 2 ticks");
+  assert.equal(world.input.protectedRiders.get("passenger"), world.truck.id, "the passenger stays protected");
+  world.step(() => world.truck.moveTo({ y: GROUND_Y }, { velocity: { y: 0 }, isOnGround: true }));
+  assert.deepEqual(seatOrder(world), ["driver", "passenger"], "and lands that way");
+  assertDriverHasTheControls(world);
+});
+
+test("a driver put back after a Space dismount keeps the Driver Seat ahead of the passenger", () => {
+  const jumping = new Set(["driver"]);
+  const { world, driver } = twoSeats({ driverInput: jumpInput(jumping) });
+  world.step();
+  world.step(() => world.truck.detach(driver));
+  world.step();
+  assert.deepEqual(seatOrder(world), ["driver", "passenger"]);
+  assertDriverHasTheControls(world);
+});
+
+test("a driver kept seated over lava with no dry land keeps the Driver Seat ahead of the passenger", () => {
+  const { world, driver } = twoSeats({ isOnGround: false });
+  world.dimension.fillLayer(GROUND_Y, "minecraft:lava", 0, 0, 8);
+  world.step();
+  driver.isSneaking = true;
+  world.step(() => world.truck.detach(driver));
+  world.step();
+  assert.deepEqual(seatOrder(world), ["driver", "passenger"]);
+  assertDriverHasTheControls(world);
+});
+
+test("a driver the engine refuses to reseat for a while returns to the Driver Seat once accepted; the passenger is never unseated meanwhile", () => {
+  const { world, driver } = twoSeats();
+  dropFrom(world, GROUND_Y + 3);
+  const rideable = world.truck.getComponent("minecraft:rideable");
+  let refusing = true;
+  world.truck.getComponent = () => ({
+    getRiders: rideable.getRiders,
+    addRider: (rider) => (refusing && rider === driver ? false : rideable.addRider(rider)),
+    ejectRider: rideable.ejectRider,
+  });
+  const detachedAt = world.step(() => world.truck.detach(driver));
+  while (world.tick < detachedAt + 3) {
+    world.step();
+    assert.deepEqual(seatOrder(world), ["passenger"], `the passenger keeps the seat while the engine refuses the driver (+${world.tick - detachedAt})`);
+  }
+  assert.deepEqual(world.truck.ejections, [], "nobody is taken off for a reseat the engine refused");
+  refusing = false;
+  world.step();
+  world.step();
+  assert.deepEqual(seatOrder(world), ["driver", "passenger"], "2 ticks after the engine accepts the driver");
+  assertDriverHasTheControls(world);
 });
 
 test("a Sneak exit soon after a Space re-seat is let go: Space opens no drop window", () => {

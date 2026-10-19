@@ -43,6 +43,7 @@ import { createLandingState, releaseLanding, stepLanding } from "./landing.js";
  * @typedef {{
  *   getRiders(): WorldEntity[],
  *   addRider(rider: WorldEntity): boolean,
+ *   ejectRider(rider: WorldEntity): void,
  * }} Rideable
  * The truck's only component read is its rideable, typed so tsc checks the real
  * EntityRideableComponent against Rideable.
