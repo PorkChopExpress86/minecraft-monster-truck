@@ -57,7 +57,7 @@ Depending on the feature and acceptance criteria being verified, drive the add-o
 Runs GameTest scenarios with a Simulated Driver operating the truck through the production input seam (`driverInput`) on a disposable Bedrock Dedicated Server container.
 
 ```powershell
-# Run all 22 scenarios
+# Run every configured scenario
 powershell.exe -NoProfile -File .\Test-Addon.ps1 -Mode Scenarios
 
 # Run specific scenarios (e.g. auto_step, handbrake, flotation_water)
@@ -69,8 +69,7 @@ Or on Linux:
 ./test-addon.sh Scenarios --only auto_step
 ```
 
-Available scenarios in `testing/bedrock.json`:
-`smoke`, `seats`, `auto_step`, `steering`, `handbrake`, `crush_stomp`, `shock_absorption`, `flotation_water`, `flotation_lava`, `trample`, `demolition`, `foliage_shearing`, `dye_repaint`, `retrieval`, `incline_pitch`, `spawn_sources`, `two_seat_drop`, `liquid_start_water`, `liquid_start_lava`, `shoreline_wall`, `shoreline_step`, `seat_swap` (plus opt-in `retrieval_full_health`).
+The scenario names are `scenario_server.scenarios` in `testing/bedrock.json`; `opt_in_scenarios` there run only when named with `-Only`.
 
 ### 2. Static & Behavioral Suite
 Runs Script API TypeScript type checking, Node.js behavior unit tests (`node --test`), the full pytest suite (242+ tests), project validator, and package bundler.
