@@ -1373,11 +1373,14 @@ async function seat_swap({ dimension, origin, driver, run, spawnPlayer }) {
 // 1.5 to 2.2 blocks from the truck's middle, standing on a solid block with two blocks of air above.
 // Each rider boards from the side opposite their door, so the engine leaving them where they boarded
 // cannot pass. sneakOut fakes the Sneak (isSneaking, then ejectRider); sneak_dismounts is the client side.
+// The door is fixed to the truck's facing: a driver who leaves while the truck still rolls backward is set
+// down out of the driver's door, not the passenger's. A rider teleported away from the seat (player.teleport
+// and /tp both dismount, run bd5d8c33) is left where they went, not pulled back beside the truck.
 async function door_dismount({ dimension, origin, driver, run, spawnPlayer }) {
   const checks = [];
   const passenger = spawnPlayer("SimulatedPassenger");
   await wait(10);
-  for (const [leaving, seat, door] of [[driver, 0, 1], [passenger, 1, -1]]) {
+  const freshTruck = async () => {
     park(driver, origin);
     park(passenger, origin);
     resetArena(dimension, origin);
@@ -1386,6 +1389,10 @@ async function door_dismount({ dimension, origin, driver, run, spawnPlayer }) {
     const t = truck.location;
     await board(driver, truck, 0, { x: t.x - 2, y: t.y, z: t.z });
     await board(passenger, truck, 1, { x: t.x + 2, y: t.y, z: t.z });
+    return truck;
+  };
+  for (const [leaving, seat, door] of [[driver, 0, 1], [passenger, 1, -1]]) {
+    const truck = await freshTruck();
     const exit = await sneakOut(truck, leaving);
     leaving.isSneaking = false;
     await wait(5);
@@ -1411,6 +1418,66 @@ async function door_dismount({ dimension, origin, driver, run, spawnPlayer }) {
     }
     checks.push(`seat ${seat}: ${exit}; set down ${side.toFixed(2)} blocks out of the ${door > 0 ? "left (driver's)" : "right (passenger's)"} ` +
       `door, ${ahead.toFixed(2)} ahead of the middle, on ${below.typeId} with two air above; ${other.name} still seated`);
+    truck.remove();
+  }
+
+  // Reversing exit: 30 ticks of S, then the Sneak while the truck still rolls backward.
+  {
+    const truck = await freshTruck();
+    const parked = { ...truck.location };
+    await drive(driver, 30, { forward: -1 });
+    driver.isSneaking = true;
+    truck.getComponent("minecraft:rideable").ejectRider(driver);
+    let truckAtExit;
+    let stepAtExit = 0;
+    let prev = { ...truck.location };
+    for (let tick = 0; tick < 5 && !truckAtExit; tick++) {
+      await wait(1);
+      if (!riders(truck).some(rider => rider?.id === driver.id)) {
+        truckAtExit = { ...truck.location };
+        stepAtExit = horizontal(truck.location, prev);
+      }
+      prev = { ...truck.location };
+    }
+    driver.isSneaking = false;
+    if (!truckAtExit) throw new Error("reversing exit: the driver did not leave the truck");
+    const reversed = parked.z - truckAtExit.z;
+    if (reversed < 3 || stepAtExit < 0.1) {
+      throw new Error(`reversing exit: the truck had reversed ${reversed.toFixed(2)} blocks and moved ${stepAtExit.toFixed(2)} on the exit tick; it must still be rolling backward`);
+    }
+    await wait(5);
+    if (riders(truck)[0]?.id !== passenger.id) throw new Error("reversing exit: the passenger did not keep their seat");
+    const head = headingVector(yawOf(truck));
+    if (Math.abs(head.z - 1) > 0.05) throw new Error(`reversing exit: the truck turned while reversing straight (yaw ${yawOf(truck).toFixed(1)})`);
+    const p = driver.location;
+    const side = (p.x - truckAtExit.x) * head.z - (p.z - truckAtExit.z) * head.x;
+    const ahead = (p.x - truckAtExit.x) * head.x + (p.z - truckAtExit.z) * head.z;
+    const where = `at (${(p.x - truckAtExit.x).toFixed(2)}, ${(p.y - truckAtExit.y).toFixed(2)}, ${(p.z - truckAtExit.z).toFixed(2)}) from where the truck was at the exit`;
+    if (!(side >= 1.5 - 0.1 && side <= 2.2 + 0.1)) {
+      throw new Error(`reversing exit: ${driver.name} ${where}, ${side.toFixed(2)} blocks out of the driver's door (1.5 to 2.2): ` +
+        `set down ${side < 0 ? "out of the passenger's door" : "off the door line"} while the truck rolled backward`);
+    }
+    // The truck moves up to 0.4 blocks between the exit tick and the add-on's teleport.
+    if (Math.abs(ahead) > 1.5) throw new Error(`reversing exit: ${driver.name} ${where}, not beside the cab`);
+    checks.push(`reversing exit: the truck had reversed ${reversed.toFixed(2)} blocks and was still moving ${stepAtExit.toFixed(2)} blocks/tick when the driver left; ` +
+      `set down ${side.toFixed(2)} blocks out of the left (driver's) door, ${ahead.toFixed(2)} ahead of the middle; ${passenger.name} still seated`);
+    truck.remove();
+  }
+
+  // A seated driver teleported 30 blocks away is left there, not pulled back beside the truck.
+  {
+    const truck = await freshTruck();
+    const far = at(origin, 0, 34);
+    driver.teleport(far);
+    await wait(5);
+    if (riders(truck).some(rider => rider?.id === driver.id)) throw new Error("teleported driver is still listed as a rider");
+    const fromTruck = horizontal(driver.location, truck.location);
+    const fromFar = horizontal(driver.location, far);
+    if (fromFar > 1) {
+      throw new Error(`driver teleported ${horizontal(far, truck.location).toFixed(0)} blocks away was moved: now ${fromTruck.toFixed(2)} blocks from the truck, ${fromFar.toFixed(2)} from where they went`);
+    }
+    if (riders(truck)[0]?.id !== passenger.id) throw new Error("teleport exit: the passenger did not keep their seat");
+    checks.push(`a driver teleported ${fromTruck.toFixed(0)} blocks away left the seat and stayed ${fromFar.toFixed(2)} blocks from where they went; ${passenger.name} still seated`);
     truck.remove();
   }
   return checks;

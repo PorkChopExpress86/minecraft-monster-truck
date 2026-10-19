@@ -5,9 +5,10 @@
 
 const key = (x, y, z) => `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
 
-export function createFakeDimension() {
+export function createFakeDimension({ id = "minecraft:overworld" } = {}) {
   const blocks = new Map();
   const dimension = {
+    id,
     entities: [],
     particles: [],
     sounds: [],
@@ -72,6 +73,7 @@ export function createFakeEntity({ typeId = "minecraft:zombie", location = { x: 
     typeId,
     isValid: true,
     location: { ...location },
+    dimension: { id: "minecraft:overworld" },
     impulses: [],
     damage: [],
     fire: [],
@@ -123,10 +125,12 @@ export function createFakePlayer({ id, location = { x: 0, y: 0, z: 0 }, isSneaki
 
 // Seats follow the rider list: whoever is listed first sits in the Driver Seat. addRider appends at once;
 // ejectRider takes effect at the end of the tick (endTick), until when the rider stays listed and cannot
-// be added again (BDS run bc1ec0a3).
+// be added again (BDS run bc1ec0a3). A seated rider is where the truck is (the engine's seat offsets are
+// under a block); the truck's later moves do not carry the fake riders along.
 export function createFakeTruck({ location = { x: 0.5, y: 61, z: 0.5 }, yaw = 0, isOnGround = true, riders = [] } = {}) {
   const truck = createFakeEntity({ typeId: "blake:monster_truck", location });
   const seated = [...riders];
+  for (const rider of seated) if (rider) rider.location = { ...location };
   const leaving = [];
   Object.assign(truck, {
     velocity: { x: 0, y: 0, z: 0 },
