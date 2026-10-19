@@ -21,18 +21,20 @@ const CONTACT_DAMAGE = "contact";
  * This module's slice of truck state.
  * isFalling: a drop is in progress. fallStartY: where it began.
  * riderRetentionUntil: last tick of the reseat/protection window.
- * protectedRiderIds: riders this truck has put in protectedRiders.
+ * protectedRiderIds: riders this truck has put in protectedRiders, in seat order.
+ * reseatQueue: riders taken off by a reseat this tick, to put back in seat order next tick.
  * @typedef {{
  *   isFalling: boolean,
  *   fallStartY?: number,
  *   riderRetentionUntil?: number,
  *   protectedRiderIds: Set<string>,
+ *   reseatQueue: string[],
  * }} LandingState
  */
 
 /** @returns {LandingState} */
 export function createLandingState() {
-  return { isFalling: false, fallStartY: undefined, riderRetentionUntil: undefined, protectedRiderIds: new Set() };
+  return { isFalling: false, fallStartY: undefined, riderRetentionUntil: undefined, protectedRiderIds: new Set(), reseatQueue: [] };
 }
 
 export function isCrushStompLanding(dropHeight = 0) {
@@ -163,15 +165,55 @@ export function releaseLanding(landing, truckId, protectedRiders) {
   landing.protectedRiderIds = new Set();
 }
 
+/**
+ * Put a rider back in the seat they left. addRider appends and the engine seats riders in list
+ * order, so the riders who sat behind the returning one are taken off and queued to be put back
+ * behind them next tick: ejectRider takes effect at the end of the tick, until when the rider
+ * stays listed and cannot be added again (BDS run bc1ec0a3).
+ * @param {import("./truck_tick.js").Rideable} rideable
+ * @param {LandingState} landing
+ * @param {string[]} seatOrder rider ids in the seat order to restore
+ * @param {import("./truck_tick.js").WorldEntity} rider
+ * @returns {boolean} whether the engine accepted the rider
+ */
+function reseat(rideable, landing, seatOrder, rider) {
+  if (!rideable.addRider(rider)) return false;
+  const seat = seatOrder.indexOf(rider.id);
+  if (seat < 0) return true;
+  for (const other of rideable.getRiders()) {
+    if (!other || seatOrder.indexOf(other.id) <= seat) continue;
+    try {
+      rideable.ejectRider(other);
+      landing.reseatQueue.push(other.id);
+    } catch {}
+  }
+  return true;
+}
+
+/** The riders a reseat took off last tick go back behind the one it put in. Returns the ids seated again. */
+function reseatQueued(getEntity, landing, rideable) {
+  const queued = landing.reseatQueue;
+  landing.reseatQueue = [];
+  const seated = [];
+  for (const riderId of queued) {
+    try {
+      const rider = getEntity(riderId);
+      if (rider?.isValid && rideable?.addRider(rider)) seated.push(riderId);
+    } catch {}
+  }
+  return seated;
+}
+
 function restoreProtectedRiders(getEntity, landing, rideable) {
   if (!rideable?.addRider || !landing.protectedRiderIds?.size) return;
   const seated = new Set((rideable.getRiders?.() || []).map((rider) => rider?.id));
-  for (const riderId of landing.protectedRiderIds) {
+  const seatOrder = [...landing.protectedRiderIds];
+  for (const riderId of seatOrder) {
     if (seated.has(riderId)) continue;
     try {
       const rider = getEntity(riderId);
       if (rider?.isValid && rider.typeId === "minecraft:player" && !rider.isSneaking) {
-        rideable.addRider(rider);
+        reseat(rideable, landing, seatOrder, rider);
       }
     } catch {}
   }
@@ -209,7 +251,6 @@ export function stepLanding(truck, dimension, landing, frame) {
     verticalVelocity,
     heading,
     rideable,
-    riderIds,
     prevRiderIds,
     inLiquid,
     inLava,
@@ -223,6 +264,8 @@ export function stepLanding(truck, dimension, landing, frame) {
   const perpX = -dirZ;
   const perpZ = dirX;
   const falling = isFalling(dy, verticalVelocity);
+  // Riders a reseat took off last tick are seated again before anything reads them as gone.
+  const riderIds = [...frame.riderIds, ...reseatQueued(getEntity, landing, rideable)];
 
   // Rider dismount management. Minecraft dismounts a rider who presses Space, the add-on's handbrake, and
   // detaches riders around drops (#32): both are undone unless the rider is sneaking. Any other exit on
@@ -239,7 +282,7 @@ export function stepLanding(truck, dimension, landing, frame) {
           const spaceExit = Boolean(jumpedRecently?.(player));
           if (spaceExit && !inDropWindow && !player.isSneaking && rideable && rideable.addRider) {
             // The handbrake's Space dismount: reseat without opening a drop window, so Sneak works right after.
-            rideable.addRider(player);
+            reseat(rideable, landing, prevRiderIds, player);
           } else if (inDropWindow && !player.isSneaking && rideable && rideable.addRider) {
             // An engine detachment around a drop: reseat, tied to a bounded vehicle lifecycle.
             if (!landing.protectedRiderIds?.size) {
@@ -250,7 +293,7 @@ export function stepLanding(truck, dimension, landing, frame) {
               landing.isFalling = true;
               landing.fallStartY = loc.y - dy;
             }
-            rideable.addRider(player);
+            reseat(rideable, landing, prevRiderIds, player);
           } else if (inLiquid) {
             // Sneak over liquid: set down on the nearest dry land. With none in reach, lava keeps the rider
             // seated and water lets them swim.
@@ -258,7 +301,7 @@ export function stepLanding(truck, dimension, landing, frame) {
             if (dryLand) {
               player.teleport(dryLand, { dimension });
             } else if (inLava && rideable && rideable.addRider) {
-              rideable.addRider(player);
+              reseat(rideable, landing, prevRiderIds, player);
               continue;
             }
             protectedRiders.delete(playerId);
