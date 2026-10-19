@@ -548,22 +548,33 @@ async function reseat_keeps_seats({ dimension, origin, driver, run, spawnPlayer 
   let ejectedAt;
   let ejectedY;
   let landedAt;
-  await drive(driver, 90, {
-    forward: 0.3,
-    onTick: () => {
-      const y = truck.location.y - GROUND_Y;
-      if (ejectedAt === undefined) {
-        if (truck.isOnGround || y > height - 1.5 || y < 2) return false;
-        rideable.ejectRider(driver);
-        ejectedAt = system.currentTick;
-        ejectedY = y;
-        return false;
-      }
-      seated.push([system.currentTick - ejectedAt, names()]);
-      if (landedAt === undefined && truck.isOnGround && y < 0.05) landedAt = system.currentTick;
-      return landedAt !== undefined && system.currentTick - landedAt >= 10;
-    },
+  // Every hurt to a rider during the drop, with its cause: a Survival player who has been running
+  // scenarios for minutes can starve, which is not the drop's doing.
+  const hurts = [];
+  const hurtListener = world.afterEvents.entityHurt.subscribe(event => {
+    const who = [driver, passenger].find(player => player.id === event.hurtEntity.id);
+    if (who) hurts.push({ who: who.name, cause: event.damageSource.cause, damage: event.damage, tick: system.currentTick - (ejectedAt ?? system.currentTick) });
   });
+  try {
+    await drive(driver, 90, {
+      forward: 0.3,
+      onTick: () => {
+        const y = truck.location.y - GROUND_Y;
+        if (ejectedAt === undefined) {
+          if (truck.isOnGround || y > height - 1.5 || y < 2) return false;
+          rideable.ejectRider(driver);
+          ejectedAt = system.currentTick;
+          ejectedY = y;
+          return false;
+        }
+        seated.push([system.currentTick - ejectedAt, names()]);
+        if (landedAt === undefined && truck.isOnGround && y < 0.05) landedAt = system.currentTick;
+        return landedAt !== undefined && system.currentTick - landedAt >= 10;
+      },
+    });
+  } finally {
+    world.afterEvents.entityHurt.unsubscribe(hurtListener);
+  }
   if (ejectedAt === undefined) throw new Error(`Truck never fell free of the mesa: y=${(truck.location.y - GROUND_Y).toFixed(2)}`);
   if (landedAt === undefined) throw new Error(`Truck never landed after the ${height}-block drop: y=${(truck.location.y - GROUND_Y).toFixed(2)}`);
   const expected = JSON.stringify([driver.name, passenger.name]);
@@ -576,12 +587,13 @@ async function reseat_keeps_seats({ dimension, origin, driver, run, spawnPlayer 
     throw new Error(`Riders changed again after the driver was put back: ${trace}`);
   }
   const healths = { truck: health(truck), driver: health(driver), passenger: health(passenger) };
-  if (healths.truck !== TRUCK_MAX_HEALTH || healths.driver !== PLAYER_MAX_HEALTH || healths.passenger !== PLAYER_MAX_HEALTH) {
-    throw new Error(`The drop hurt someone: ${JSON.stringify(healths)}`);
+  const dropHurts = hurts.filter(hurt => hurt.cause !== EntityDamageCause.starve);
+  if (healths.truck !== TRUCK_MAX_HEALTH || dropHurts.length) {
+    throw new Error(`The drop hurt someone: ${JSON.stringify({ healths, hurts })}`);
   }
   checks.push(`driver ejected at y=${ejectedY.toFixed(2)} of the ${height}-block drop; riders read [driver, passenger] from ${settledAt} ticks after ` +
     `the eject through ${seated.at(-1)[0]} (${trace}); after landing truck ${healths.truck}/${TRUCK_MAX_HEALTH}, ` +
-    `driver and passenger ${PLAYER_MAX_HEALTH}/${PLAYER_MAX_HEALTH}`);
+    `driver ${healths.driver} and passenger ${healths.passenger} of ${PLAYER_MAX_HEALTH}, hurts during the drop ${JSON.stringify(hurts)}`);
 
   // Each sits on their own side of the cab: the driver on the truck's left, the passenger on its right.
   await wait(20);
