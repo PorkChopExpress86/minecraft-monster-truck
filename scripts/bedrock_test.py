@@ -115,11 +115,13 @@ def run_game(root, config, run_id, output, client=None):
         else:
             result["screenshot_note"] = attempts[-1]["error"]
     finally:
+        closing = time.monotonic()
         try:
             client.close(output)
             shutdown["status"] = "passed"
         except Exception as error:
             shutdown.update(status="failed", error=str(error))
+        shutdown["elapsed_seconds"] = round(time.monotonic() - closing, 3)
         write_json(output / "shutdown.json", shutdown)
     result = client.finish(result, config, run_id, output)
     required = bool(config.get("showcase"))

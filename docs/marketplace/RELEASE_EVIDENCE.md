@@ -34,7 +34,7 @@ The 11 Creator Tools warnings do not stop the packs loading. Seven `UNLINK` warn
 | `43a2463f` on `f6c0899` | Client Smoke Run | Gameplay 32 of 32, content logs clean, screenshots passed. Failed only because Minecraft took longer than 30 seconds to close. |
 | `08e233d6` on `f6c0899` | Client Smoke Run | Gameplay 32 of 32, content logs clean, shutdown passed. Failed only because 1 screenshot was captured and the showcase needs 2. |
 
-Both runs on the release commit passed every gameplay check with clean content logs. The screenshot and shutdown failures come from the capture tooling, which has timed out on this machine since September. That cause is still not established.
+Both runs on the release commit passed every gameplay check with clean content logs. The screenshot and shutdown failures come from the capture tooling, which has timed out on this machine since September. That cause is still not established. (Measured after release: a loaded CPU stalled the per-capture helper process before it reached the game; captures now run in-process. See "Why captures timed out" in `docs/WINDOWS_TESTING.md`.)
 
 The client screenshots show the new engine and suspension model with no missing-texture pattern.
 
@@ -48,8 +48,8 @@ The client screenshots show the new engine and suspension model with no missing-
 
 - Getting out beside tall grass, flowers, snow layers or carpet can set the player one block above the ground. They drop one block and take no damage.
 - Riding the truck shows its 1,000 health as a 10-row block of mount hearts on the HUD (Client Smoke Run screenshots).
-- The Client Smoke Run harness check "parked truck leaves mob unharmed" failed once in four real-client runs (`1ac43d79`). The cause was not caught. The same steps on BDS left the pig unharmed (`92ff6cf3`).
-- Several scenarios assert the Survival driver's health. Over a full run, hunger can cost the driver 1 point, so `reseat_keeps_seats` ignores starvation damage. The cause is inferred, not measured.
+- The Client Smoke Run harness check "parked truck leaves mob unharmed" failed once in four real-client runs (`1ac43d79`). The cause was not caught. The same steps on BDS left the pig unharmed (`92ff6cf3`). (After release it passed 18 more real-client runs; the check now names what hurt the pig. See "The parked-pig check" in `docs/WINDOWS_TESTING.md`.)
+- Several scenarios assert the Survival driver's health. Over a full run, hunger can cost the driver 1 point, so `reseat_keeps_seats` ignores starvation damage. The cause is inferred, not measured. (Measured after release: it was not hunger. The driver suffocated in the scenario's own build after a lost teleport; see "Removing a ridden truck" in `docs/agents/bedrock-physics.md`. The test setup is fixed and the assertion is strict again.)
 
 ## Not verified
 

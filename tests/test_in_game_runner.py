@@ -405,19 +405,38 @@ def test_windows_close_posts_a_normal_close_to_the_game_window(tmp_path):
     assert len(posted) == 1
 
 
-def test_capture_timeout_retains_last_stage(monkeypatch, tmp_path):
-    def timeout(*args, **kwargs):
-        raise subprocess.TimeoutExpired("capture", 20, stderr=b"capture stage: grab_pixels\n")
-    monkeypatch.setattr(clients.subprocess, "run", timeout)
-    with pytest.raises(runner.SetupError, match="grab_pixels"):
-        clients.WindowsClient().capture(tmp_path)
+def capture_port():
+    def client_rect(hwnd, rect):
+        rect._obj.right = 4
+        rect._obj.bottom = 4
+        return True
+    return window_port([(42, "Minecraft", True)], SetProcessDPIAware=lambda: True, IsIconic=lambda hwnd: False,
+                       GetClientRect=client_rect)
 
 
-def test_capture_helper_must_produce_a_file(monkeypatch, tmp_path):
-    monkeypatch.setattr(clients.subprocess, "run", lambda *a, **k:
-                        subprocess.CompletedProcess([], 0, str(tmp_path / "missing.png"), ""))
-    with pytest.raises(runner.SetupError, match="no capture file"):
-        clients.WindowsClient().capture(tmp_path)
+def test_windows_capture_saves_the_window_and_traces_each_stage(monkeypatch, tmp_path):
+    from PIL import Image, ImageGrab
+    image = Image.new("RGB", (4, 4))
+    image.putpixel((0, 0), (255, 0, 0))
+    monkeypatch.setattr(ImageGrab, "grab", lambda *, window: image)
+    path = clients.WindowsClient(user32=capture_port()).capture(tmp_path)
+    assert path == str(tmp_path / "minecraft.png") and Path(path).is_file()
+    trace = (tmp_path / "capture-trace.log").read_text(encoding="utf-8")
+    stages = [line.split()[2] for line in trace.splitlines()]
+    assert stages == ["import_imagegrab", "find_window", "client_rectangle", "grab_pixels", "validate_pixels",
+                      "save_png", "saved"]
+    assert all(line.split()[3].startswith("+") and line.endswith("s") for line in trace.splitlines())
+
+
+def test_windows_capture_failure_keeps_the_last_stage_in_its_trace(monkeypatch, tmp_path):
+    from PIL import ImageGrab
+    def hung(*, window):
+        raise OSError("grab failed")
+    monkeypatch.setattr(ImageGrab, "grab", hung)
+    with pytest.raises(OSError, match="grab failed"):
+        clients.WindowsClient(user32=capture_port()).capture(tmp_path)
+    assert (tmp_path / "capture-trace.log").read_text(encoding="utf-8").splitlines()[-1].startswith(
+        "capture stage: grab_pixels +")
 
 
 @pytest.mark.parametrize("mode", ["window", "uniform", "fallback", "lost_focus"])
