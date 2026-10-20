@@ -1,5 +1,5 @@
 // Behaviour tests for main.js: the driverInput seam, what it subscribes to, its tick loop, and
-// the before-hurt rules (Pneumatic Shock Absorption, thermal shielding, Vehicle Item retrieval).
+// the before-hurt rules (Pneumatic Shock Absorption, thermal shielding, Durability, Vehicle Item retrieval).
 // main.js is loaded against the fake @minecraft/server in fake_server.mjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -8,6 +8,7 @@ import { ButtonState, InputButton, InputPermissionCategory, ItemStack, fake, hur
 import { createFakeDimension, createFakeEntity, createFakePlayer, createFakeTruck } from "./fake_world.mjs";
 
 const main = await import("../../behavior_packs/MonsterTruck_BP/scripts/main.js");
+const { DURABILITY_PROPERTY } = await import("../../behavior_packs/MonsterTruck_BP/scripts/durability.js");
 
 const GROUND_Y = 61;
 const overworld = createFakeDimension();
@@ -100,48 +101,93 @@ test("seated riders are shielded from heat damage", () => {
   assert.equal(hurt(walker, "lava").cancel, false, "players on foot still burn");
 });
 
-test("a player's fatal blow returns exactly one Vehicle Item; other damage does not", () => {
-  const truck = addTruck({ location: { x: 160.5, y: GROUND_Y, z: 0.5 } });
-  const spawned = [];
-  truck.dimension = { spawnItem: (item, location) => spawned.push({ item, location }) };
-  truck.getComponent = (id) => (id === "minecraft:health" ? { currentValue: 100 } : undefined);
-  let removed = 0;
+// Durability (ADR-0020): the truck's minecraft:health is a one-row gauge; the hurt handler charges each hit
+// to the Durability stored on the truck and keeps the gauge in step.
+const durability = (truck) => truck.getDynamicProperty(DURABILITY_PROPERTY);
+
+function addRetrievalTruck(x, storedDurability) {
+  const truck = addTruck({ location: { x, y: GROUND_Y, z: 0.5 } });
+  if (storedDurability !== undefined) truck.setDynamicProperty(DURABILITY_PROPERTY, storedDurability);
+  truck.spawned = [];
+  truck.dimension = { spawnItem: (item, location) => truck.spawned.push({ item, location }) };
+  truck.removed = 0;
   truck.remove = () => {
-    removed += 1;
+    truck.removed += 1;
+    truck.isValid = false; // as the engine does for a removed entity
   };
-  const player = createFakePlayer({ id: "retriever" });
+  return truck;
+}
+
+function runScheduled(runsBefore) {
+  for (const run of fake.runs.slice(runsBefore)) run();
+}
+
+test("a hit the truck survives comes off its Durability, not its health, and moves the gauge", () => {
+  const truck = addRetrievalTruck(160.5);
   const zombie = createFakeEntity({ typeId: "minecraft:zombie" });
-
-  assert.equal(hurt(truck, "entityAttack", { damage: 50, damagingEntity: player }).cancel, false, "non-fatal hits damage the truck");
-  assert.equal(hurt(truck, "entityAttack", { damage: 100, damagingEntity: zombie }).cancel, false, "mob kills drop Scrap");
-  assert.equal(fake.runs.length, 0);
-
   const runsBefore = fake.runs.length;
-  assert.equal(hurt(truck, "entityAttack", { damage: 100, damagingEntity: player }).cancel, true);
-  assert.equal(fake.runs.length, runsBefore + 1);
-  fake.runs.at(-1)();
-  assert.equal(spawned.length, 1);
-  assert.ok(spawned[0].item instanceof ItemStack);
-  assert.equal(spawned[0].item.typeId, "blake:monster_truck_vehicle");
-  assert.equal(spawned[0].item.amount, 1);
-  assert.deepEqual(spawned[0].location, { x: 160.5, y: GROUND_Y, z: 0.5 });
-  assert.equal(removed, 1);
+  const event = hurt(truck, "entityAttack", { damage: 400, damagingEntity: zombie });
+  assert.equal(event.cancel, true, "the engine applies no damage");
+  runScheduled(runsBefore);
+  assert.equal(durability(truck), 900, "a quarter of 400");
+  assert.equal(truck.health, 18, "900 of 1000 shows as 9 hearts");
+  assert.equal(truck.spawned.length, 0);
+});
+
+test("a truck with no stored Durability, such as one placed before it existed, starts full", () => {
+  const truck = addRetrievalTruck(170.5);
+  const runsBefore = fake.runs.length;
+  hurt(truck, "lava", { damage: 4 });
+  runScheduled(runsBefore);
+  assert.equal(durability(truck), 996);
+});
+
+test("a player's blow that uses up the Durability returns exactly one Vehicle Item", () => {
+  const truck = addRetrievalTruck(180.5, 5);
+  const player = createFakePlayer({ id: "retriever" });
+  const runsBefore = fake.runs.length;
+  assert.equal(hurt(truck, "entityAttack", { damage: 40, damagingEntity: player }).cancel, true);
+  runScheduled(runsBefore);
+  assert.equal(truck.spawned.length, 1);
+  assert.ok(truck.spawned[0].item instanceof ItemStack);
+  assert.equal(truck.spawned[0].item.typeId, "blake:monster_truck_vehicle");
+  assert.equal(truck.spawned[0].item.amount, 1);
+  assert.deepEqual(truck.spawned[0].location, { x: 180.5, y: GROUND_Y, z: 0.5 });
+  assert.equal(truck.removed, 1);
+});
+
+test("a player's blow the truck survives returns nothing", () => {
+  const truck = addRetrievalTruck(190.5, 500);
+  const runsBefore = fake.runs.length;
+  hurt(truck, "entityAttack", { damage: 40, damagingEntity: createFakePlayer({ id: "puncher" }) });
+  runScheduled(runsBefore);
+  assert.equal(durability(truck), 490);
+  assert.equal(truck.spawned.length, 0);
+  assert.equal(truck.removed, 0);
+});
+
+test("a mob's or hazard's blow that uses up the Durability lets the engine destroy the truck for Scrap", () => {
+  const zombie = createFakeEntity({ typeId: "minecraft:zombie" });
+  for (const [cause, damagingEntity] of [["entityAttack", zombie], ["lava", undefined], ["lightning", undefined]]) {
+    const truck = addRetrievalTruck(200.5, 5);
+    const runsBefore = fake.runs.length;
+    const event = hurt(truck, cause, { damage: 40, damagingEntity });
+    runScheduled(runsBefore);
+    assert.equal(event.cancel, false, `${cause}: the engine applies the killing blow, so the loot table drops Scrap`);
+    assert.ok(event.damage >= truck.health, `${cause}: the blow is raised to kill the truck through its gauge`);
+    assert.equal(truck.spawned.length, 0, `${cause}: no Vehicle Item`);
+    assert.equal(truck.removed, 0, cause);
+  }
 });
 
 test("two fatal blows in one tick return one Vehicle Item, not two", () => {
-  const truck = addTruck({ location: { x: 180.5, y: GROUND_Y, z: 0.5 } });
-  const spawned = [];
-  truck.dimension = { spawnItem: (item) => spawned.push(item.typeId) };
-  truck.getComponent = (id) => (id === "minecraft:health" ? { currentValue: 100 } : undefined);
-  truck.remove = () => {
-    truck.isValid = false; // as the engine does for a removed entity
-  };
+  const truck = addRetrievalTruck(220.5, 5);
   const runsBefore = fake.runs.length;
   for (const id of ["retriever-a", "retriever-b"]) {
     assert.equal(hurt(truck, "entityAttack", { damage: 100, damagingEntity: createFakePlayer({ id }) }).cancel, true);
   }
-  for (const run of fake.runs.slice(runsBefore)) run();
-  assert.deepEqual(spawned, ["blake:monster_truck_vehicle"]);
+  runScheduled(runsBefore);
+  assert.deepEqual(truck.spawned.map((drop) => drop.item.typeId), ["blake:monster_truck_vehicle"]);
   assert.equal(truck.isValid, false);
 });
 

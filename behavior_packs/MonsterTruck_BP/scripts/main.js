@@ -7,12 +7,16 @@ import {
   ItemStack
 } from "@minecraft/server";
 import { shouldShieldRiderFromHeat } from "./amphibious.js";
+import { DURABILITY, DURABILITY_PROPERTY, gaugeHealth, hitCost } from "./durability.js";
 import { absorbsFallDamage } from "./landing.js";
 import { createTruckState, releaseTruck, tickTruck } from "./truck_tick.js";
 
 // Track state of each truck across ticks; a truck's state is dropped once it is gone.
 const truckStates = new Map();
 const protectedRiders = new Map();
+// Durability left and the immunity window of each truck hit this session, so hits in one tick see each other
+// before the stored value is written (ADR-0020).
+const truckDurability = new Map();
 let currentTick = 0;
 const DIMENSIONS = ["overworld", "nether", "the_end"];
 
@@ -110,6 +114,7 @@ function onTick() {
     if (presentTrucks.has(truckId)) continue;
     releaseTruck(truckId, state, tickInput);
     truckStates.delete(truckId);
+    truckDurability.delete(truckId);
   }
 }
 
@@ -131,19 +136,74 @@ function isThermallyShieldedRider(event) {
   }
 }
 
-function isDeliberateRetrieval(event) {
-  const truck = event.hurtEntity;
-  const player = event.damageSource?.damagingEntity;
-  if (truck?.typeId !== "blake:monster_truck" || player?.typeId !== "minecraft:player") {
-    return false;
+function durabilityState(truck) {
+  let state = truckDurability.get(truck.id);
+  if (!state) {
+    let stored;
+    try {
+      stored = truck.getDynamicProperty(DURABILITY_PROPERTY);
+    } catch {}
+    // A truck placed before Durability existed has none stored and starts full.
+    state = { durability: typeof stored === "number" ? stored : DURABILITY };
+    truckDurability.set(truck.id, state);
   }
+  return state;
+}
 
-  try {
-    const health = truck.getComponent("minecraft:health");
-    return event.damage >= health.currentValue;
-  } catch {
-    return false;
+function recordDurability(truck, durability) {
+  system.run(() => {
+    if (!truck.isValid) return;
+    try {
+      truck.setDynamicProperty(DURABILITY_PROPERTY, durability);
+    } catch {}
+    try {
+      truck.getComponent("minecraft:health")?.setCurrentValue(gaugeHealth(durability));
+    } catch {}
+  });
+}
+
+function retrieve(truck) {
+  const location = { ...truck.location };
+  const dimension = truck.dimension;
+  system.run(() => {
+    if (!truck.isValid) return;
+    dimension.spawnItem(new ItemStack("blake:monster_truck_vehicle", 1), location);
+    truck.remove();
+  });
+}
+
+// Charges a hit on a truck to its Durability. A hit it survives is cancelled and the gauge follows. The blow
+// that uses it up is a player's deliberate retrieval, which returns the Vehicle Item, or from anything else a
+// killing blow the engine applies with its own cause, so the loot table drops Scrap.
+function chargeTruckHit(event) {
+  const truck = event.hurtEntity;
+  const state = durabilityState(truck);
+  if (state.retrieving) {
+    event.cancel = true;
+    return;
   }
+  if (state.durability > 0) {
+    const tick = typeof system.currentTick === "number" ? system.currentTick : currentTick;
+    const cost = hitCost(state, event.damageSource?.cause, event.damage, tick);
+    if (cost === 0) {
+      event.cancel = true;
+      return;
+    }
+    state.durability -= cost;
+    if (state.durability > 0) {
+      event.cancel = true;
+      recordDurability(truck, state.durability);
+      return;
+    }
+    if (event.damageSource?.damagingEntity?.typeId === "minecraft:player") {
+      event.cancel = true;
+      state.retrieving = true;
+      retrieve(truck);
+      return;
+    }
+  }
+  // The gauge holds at most GAUGE_HEALTH, so a blow of the full Durability kills through it.
+  event.damage = Math.max(event.damage, DURABILITY);
 }
 
 if (world.beforeEvents && world.beforeEvents.entityHurt) {
@@ -151,16 +211,8 @@ if (world.beforeEvents && world.beforeEvents.entityHurt) {
     world.beforeEvents.entityHurt.subscribe((event) => {
       if (isPneumaticallyProtectedFall(event) || isThermallyShieldedRider(event)) {
         event.cancel = true;
-      } else if (isDeliberateRetrieval(event)) {
-        event.cancel = true;
-        const truck = event.hurtEntity;
-        const location = { ...truck.location };
-        const dimension = truck.dimension;
-        system.run(() => {
-          if (!truck.isValid) return;
-          dimension.spawnItem(new ItemStack("blake:monster_truck_vehicle", 1), location);
-          truck.remove();
-        });
+      } else if (event.hurtEntity?.typeId === "blake:monster_truck") {
+        chargeTruckHit(event);
       }
     });
   } catch {}

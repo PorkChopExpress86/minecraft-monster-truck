@@ -1,5 +1,6 @@
 import { system } from "@minecraft/server";
 import { driverInput } from "../main.js";
+import { DURABILITY, DURABILITY_PROPERTY } from "../durability.js";
 
 // Shared Scenario World helpers. The arena is a strip of the flat starter world
 // (bedrock -64, dirt -63..-62, grass -61) extending +Z (yaw 0) from the origin.
@@ -75,7 +76,9 @@ export async function drive(driver, ticks, { forward = 1, strafe = 0, handbrake 
   }
 }
 
+// A truck's health here is its Durability (ADR-0020); its minecraft:health is only the heart gauge.
 export function health(entity) {
+  if (entity.typeId === "blake:monster_truck") return entity.getDynamicProperty(DURABILITY_PROPERTY) ?? DURABILITY;
   return entity.getComponent("minecraft:health").currentValue;
 }
 

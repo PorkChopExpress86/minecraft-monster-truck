@@ -24,6 +24,10 @@ _Avoid_: Car block, generic spawn egg
 The raw metallic materials (such as iron ingots) dropped when a Monster Truck is fatally destroyed by environmental hazards or combat rather than retrieved.
 _Avoid_: Junk, debris, trash
 
+**Durability**:
+The 1,000 points of damage a Monster Truck absorbs before it is destroyed, after its armored chassis turns away 75% of combat, projectile and explosion damage and all fall damage. Riders see it as one row of 10 mount hearts.
+_Avoid_: Health, HP, hit points
+
 **Controlled Auto-Step**:
 The vehicle's mechanical ability to climb full 2-block vertical obstacles while actively driven, without requiring player jump input.
 _Avoid_: Jumping, vaulting, flying
