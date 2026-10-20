@@ -1,7 +1,7 @@
 import { system, world, GameMode } from "@minecraft/server";
 import { spawnSimulatedPlayer } from "@minecraft/server-gametest";
 import { run } from "./run_config.js";
-import { park, resetArena, wait } from "./arena.js";
+import { horizontal, park, parkSpot, resetArena, wait } from "./arena.js";
 import { SCENARIOS } from "./scenarios.js";
 
 // Test-only Scenario Run driver (ADR-0016). Never part of the distributable add-on.
@@ -34,6 +34,10 @@ world.afterEvents.worldLoad.subscribe(() => system.run(async () => {
     };
     await wait(20);
     for (const name of run.scenarios) {
+      // A teleport in the tick that removes the truck a player rides does not move them: they stay at the seat,
+      // where the next scenario may build (run e3e36d5b: the driver suffocated in reseat_keeps_seats' mesa).
+      // A scenario can end by removing the driver's truck, so park a tick later.
+      await wait(1);
       park(driver, origin);
       resetArena(dimension, origin);
       driver.getComponent("minecraft:health").resetToMaxValue();
@@ -42,6 +46,8 @@ world.afterEvents.worldLoad.subscribe(() => system.run(async () => {
       try {
         const scenario = SCENARIOS[name];
         if (!scenario) throw new Error("Unknown scenario: " + name);
+        const strayed = horizontal(driver.location, parkSpot(origin));
+        if (strayed > 1) throw new Error(`Simulated Driver started ${strayed.toFixed(2)} blocks from where it was parked`);
         const checks = await scenario({ dimension, origin, driver, run, wait, spawnPlayer });
         emit("PASS", { scenario: name, checks });
       } catch (error) {
