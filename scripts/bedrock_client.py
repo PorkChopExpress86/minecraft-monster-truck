@@ -13,13 +13,13 @@ WindowsClient passes on the harness [ADDON_TEST] marker in content logs ('gamepl
 LauncherClient (Linux flatpak mcpelauncher) never sees script output, so it passes on the world
 loading with every deployed pack ('world_load' stage) and leaves 'gameplay' not_verified (ADR-0016).
 """
+import contextlib
 import ctypes
 from ctypes import wintypes
 import json
 import os
 from pathlib import Path
 import re
-import subprocess
 import sys
 import time
 from urllib.parse import quote
@@ -262,8 +262,10 @@ def find_game_window(user32):
 
 
 def _capture_game(output, user32=None):
+    started = time.monotonic()
+
     def stage(name):
-        print(f"capture stage: {name}", file=sys.stderr, flush=True)
+        print(f"capture stage: {name} +{time.monotonic() - started:.2f}s", file=sys.stderr, flush=True)
 
     stage("import_imagegrab")
     from PIL import ImageGrab
@@ -344,30 +346,11 @@ class WindowsClient(ContentLogClient):
         return await_result(self.logs, config, run_id, output, on_poll=on_poll)
 
     def capture(self, directory):
-        """Capture in a helper process with a hard timeout, so a hung Win32/Pillow call cannot stall the run."""
-        command = (
-            "import sys; from pathlib import Path; from bedrock_client import _capture_game; "
-            "print(_capture_game(Path(sys.argv[1])))"
-        )
-        try:
-            completed = subprocess.run(
-                [sys.executable, "-c", command, str(Path(directory).resolve())],
-                cwd=Path(__file__).resolve().parent, capture_output=True, text=True,
-                timeout=20, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-        except subprocess.TimeoutExpired as error:
-            diagnostic = error.stderr or b""
-            if isinstance(diagnostic, bytes):
-                diagnostic = diagnostic.decode("utf-8", errors="replace")
-            (Path(directory) / "capture-trace.log").write_text(diagnostic, encoding="utf-8")
-            raise SetupError(f"Minecraft screenshot capture exceeded 20 seconds; {diagnostic.strip() or 'helper did not start'}") from error
-        (Path(directory) / "capture-trace.log").write_text(completed.stderr, encoding="utf-8")
-        if completed.returncode:
-            raise SetupError(completed.stderr.strip().splitlines()[-1] if completed.stderr else "Screenshot helper failed")
-        path = Path(completed.stdout.strip())
-        if not path.is_file() or path.parent.resolve() != Path(directory).resolve():
-            raise SetupError("Screenshot helper returned no capture file in the requested directory")
-        return str(path)
+        """Capture in this process. A per-capture helper process spent up to its whole 20 s limit starting Python
+        and importing Pillow on a loaded PC, while the grab itself took under 0.6 s (docs/WINDOWS_TESTING.md)."""
+        with open(Path(directory) / "capture-trace.log", "w", encoding="utf-8") as trace, \
+                contextlib.redirect_stderr(trace):
+            return _capture_game(Path(directory), self.user32)
 
     def close(self, output):
         """Request a normal close only for the client launched by this run."""

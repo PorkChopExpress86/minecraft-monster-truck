@@ -598,16 +598,8 @@ class WindowsClientPort:
         return windows_input.SendInputDevice()
 
     def capture(self, directory):
-        # In process: the smoke run's per-capture helper process can stall importing Pillow past its 20 s limit
-        # (run 9b2e3425), and chat detection captures every 0.4 s. No key is held while capturing.
-        if __package__:
-            from .bedrock_client import _capture_game
-        else:
-            from bedrock_client import _capture_game
-        # Its stage lines go to the capture's trace log, as the helper's do.
-        with open(Path(directory) / "capture-trace.log", "w", encoding="utf-8") as trace, \
-                contextlib.redirect_stderr(trace):
-            return _capture_game(Path(directory), self.client.user32)
+        # Chat detection captures every 0.4 s. No key is held while capturing.
+        return self.client.capture(directory)
 
     def close(self, work_dir):
         self.client.close(work_dir)
