@@ -549,8 +549,7 @@ async function reseat_keeps_seats({ dimension, origin, driver, run, spawnPlayer 
   let ejectedAt;
   let ejectedY;
   let landedAt;
-  // Every hurt to a rider during the drop, with its cause: a Survival player who has been running
-  // scenarios for minutes can starve, which is not the drop's doing.
+  // Every hurt to a rider during the drop, with its cause, so a failure names what hurt them.
   const hurts = [];
   const hurtListener = world.afterEvents.entityHurt.subscribe(event => {
     const who = [driver, passenger].find(player => player.id === event.hurtEntity.id);
@@ -588,13 +587,13 @@ async function reseat_keeps_seats({ dimension, origin, driver, run, spawnPlayer 
     throw new Error(`Riders changed again after the driver was put back: ${trace}`);
   }
   const healths = { truck: health(truck), driver: health(driver), passenger: health(passenger) };
-  const dropHurts = hurts.filter(hurt => hurt.cause !== EntityDamageCause.starve);
-  if (healths.truck !== TRUCK_MAX_HEALTH || dropHurts.length) {
+  if (healths.truck !== TRUCK_MAX_HEALTH || healths.driver !== PLAYER_MAX_HEALTH || healths.passenger !== PLAYER_MAX_HEALTH ||
+      hurts.length) {
     throw new Error(`The drop hurt someone: ${JSON.stringify({ healths, hurts })}`);
   }
   checks.push(`driver ejected at y=${ejectedY.toFixed(2)} of the ${height}-block drop; riders read [driver, passenger] from ${settledAt} ticks after ` +
     `the eject through ${seated.at(-1)[0]} (${trace}); after landing truck ${healths.truck}/${TRUCK_MAX_HEALTH}, ` +
-    `driver ${healths.driver} and passenger ${healths.passenger} of ${PLAYER_MAX_HEALTH}, hurts during the drop ${JSON.stringify(hurts)}`);
+    `driver and passenger ${PLAYER_MAX_HEALTH}/${PLAYER_MAX_HEALTH}, no hurt to either`);
 
   // Each sits on their own side of the cab: the driver on the truck's left, the passenger on its right.
   await wait(20);

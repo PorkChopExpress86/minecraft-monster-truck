@@ -25,9 +25,11 @@ export function resetArena(dimension, origin) {
   }
 }
 
-// Park a player clear of every arena build so fills never entomb it.
+// Where a player is parked: clear of every arena build so fills never entomb it.
+export const parkSpot = origin => ({ x: origin.x - 10, y: -60, z: origin.z - 4 });
+
 export function park(player, origin) {
-  player.teleport({ x: origin.x - 10, y: -60, z: origin.z - 4 });
+  player.teleport(parkSpot(origin));
 }
 
 export function spawnTruck(dimension, run, location, yaw = 0) {
