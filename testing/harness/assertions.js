@@ -243,6 +243,30 @@ async function checkHeavyDuty(player, run, origin) {
   const pig = dimension.spawnEntity("minecraft:pig", { ...location, x: location.x + 1.5 });
   const wait = ticks => new Promise(resolve => system.runTimeout(resolve, ticks));
   const blocks = [];
+  // Every hurt to the pig while the truck is parked, with its cause, so a failure names what hurt it.
+  const pigHurts = [];
+  const pigHurtListener = world.afterEvents.entityHurt.subscribe(event => {
+    pigHurts.push({ cause: event.damageSource.cause, damage: event.damage, by: event.damageSource.damagingEntity?.typeId,
+      tick: system.currentTick, pig: { ...event.hurtEntity.location },
+      truck: truck.isValid ? { at: { ...truck.location }, velocity: truck.getVelocity() } : "gone" });
+  }, { entities: [pig] });
+  // The parked truck's peak horizontal speed, read as truck_tick.js reads it (the larger of its move and its
+  // velocity; trample needs over 0.08), and the pig's nearest approach, every tick until the parked check.
+  const parked = { peakSpeed: 0, nearestPig: Infinity };
+  let last = { ...truck.location };
+  let sampler = system.runInterval(() => {
+    if (!truck.isValid || !pig.isValid) return;
+    const at = truck.location;
+    const velocity = truck.getVelocity();
+    parked.peakSpeed = Math.max(parked.peakSpeed, Math.hypot(at.x - last.x, at.z - last.z), Math.hypot(velocity.x, velocity.z));
+    parked.nearestPig = Math.min(parked.nearestPig, Math.hypot(pig.location.x - at.x, pig.location.z - at.z));
+    last = { ...at };
+  });
+  const stopSampling = () => {
+    if (sampler !== undefined) system.clearRun(sampler);
+    sampler = undefined;
+  };
+  const parkedText = () => `parked truck peak speed ${parked.peakSpeed.toFixed(3)} blocks/tick, pig nearest ${parked.nearestPig.toFixed(2)} blocks`;
   try {
     await wait(10);
     const health = truck.getComponent("minecraft:health");
@@ -263,9 +287,13 @@ async function checkHeavyDuty(player, run, origin) {
     truck.applyDamage(40, { cause: EntityDamageCause.fire });
     await wait(2);
     if (health.currentValue !== 910) throw new Error("Fire hazard damage failed: " + health.currentValue);
-    if (!pig.isValid || pig.getComponent("minecraft:health").currentValue !== 10) {
-      throw new Error("Parked truck damaged a mob");
+    stopSampling();
+    if (!pig.isValid) throw new Error(`Pig beside the parked truck is gone; ${parkedText()}; hurts ${JSON.stringify(pigHurts)}`);
+    const pigHealth = pig.getComponent("minecraft:health").currentValue;
+    if (pigHealth !== 10 || pigHurts.length) {
+      throw new Error(`Parked truck damaged a mob: pig health ${pigHealth}/10; ${parkedText()}; hurts ${JSON.stringify(pigHurts)}`);
     }
+    const parkedCheck = `parked truck leaves mob unharmed (${parkedText()})`;
     // Move the actual entity through the target; damage comes from the production pack.
     for (let tick = 0; tick < 30 && pig.isValid && pig.getComponent("minecraft:health").currentValue > 0; tick++) {
       pig.teleport({ ...location, x: truck.location.x + 1.5 });
@@ -355,13 +383,15 @@ async function checkHeavyDuty(player, run, origin) {
       "75% melee damage reduction",
       "fall damage immunity",
       "fire and lava remain catastrophic Scrap-producing hazards",
-      "parked truck leaves mob unharmed",
+      parkedCheck,
       "moving truck kills mob",
       "momentum-gated wood demolition clears path and preserves stationary wood",
       "heavy entity collision halts low-speed truck and shoves with damage at top speed",
       "amphibious flotation buoyancy configured for water and lava"
     ];
   } finally {
+    stopSampling();
+    world.afterEvents.entityHurt.unsubscribe(pigHurtListener);
     for (const [block, permutation] of blocks) block.setPermutation(permutation);
     if (pig.isValid) pig.remove();
     if (truck.isValid) truck.remove();
