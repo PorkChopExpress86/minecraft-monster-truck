@@ -45,7 +45,7 @@ The recipe returns one **Monster Truck Vehicle Item**. Using it deploys a red tr
 
 - **Top Speed**: about 22 blocks per second (1.1 blocks per tick), the same on land, water, and lava! (Its engine movement attribute is 0.55.)
 - **Auto-Step**: 2 Full Blocks (Controlled Auto-Step drives straight up ledges without jumping!)
-- **Health**: 1,000 HP (Armored monster chassis taking only 25% damage from attacks!)
+- **Durability**: 1,000 points, shown as one row of 10 hearts while you ride (Armored monster chassis taking only 25% damage from attacks!)
 - **Fall Damage**: None (100% Pneumatic Shock Absorption on all drops!)
 - **Seats**: 2 Players (1 Driver in Seat 0 + 1 Passenger in Seat 1 for buddy road trips!)
 - **Abilities**: Controlled Auto-Step, Wood Demolition, Foliage Shearing, Handbrake Drift, Crush Stomp, Amphibious Flotation, 16-Color Customization.

@@ -20,18 +20,18 @@ def test_readme_and_recipe_guide_stats_match_entity_json():
     movement_value = components["minecraft:movement"]["value"]
     step_value = components["minecraft:variable_max_auto_step"]["controlled_value"]
 
-    assert max_health == 1000
+    assert max_health == 20  # the heart gauge; Durability is 1,000 (ADR-0020)
     assert movement_value == 0.55
     assert step_value == 2.0
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "1,000 HP" in readme
+    assert "1,000 points" in readme
     assert "0.55" in readme
     assert "2 blocks" in readme
     assert "sixteen paint colors" in readme
 
     recipe_guide = (ROOT / "docs/RECIPE_GUIDE.md").read_text(encoding="utf-8")
-    assert "1,000 HP" in recipe_guide
+    assert "1,000 points" in recipe_guide
     assert "0.55" in recipe_guide
     assert "2 Full Blocks" in recipe_guide
 

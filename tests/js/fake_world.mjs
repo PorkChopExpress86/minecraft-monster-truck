@@ -132,7 +132,14 @@ export function createFakeTruck({ location = { x: 0.5, y: 61, z: 0.5 }, yaw = 0,
   const seated = [...riders];
   for (const rider of seated) if (rider) rider.location = { ...location };
   const leaving = [];
+  const dynamicProperties = new Map();
   Object.assign(truck, {
+    health: 20, // minecraft:health, the one-row heart gauge
+    getDynamicProperty: (identifier) => dynamicProperties.get(identifier),
+    setDynamicProperty(identifier, value) {
+      if (value === undefined) dynamicProperties.delete(identifier);
+      else dynamicProperties.set(identifier, value);
+    },
     velocity: { x: 0, y: 0, z: 0 },
     rotation: { x: 0, y: yaw },
     isOnGround,
@@ -156,6 +163,17 @@ export function createFakeTruck({ location = { x: 0.5, y: 61, z: 0.5 }, yaw = 0,
       truck.properties[name] = value;
     },
     getComponent(componentId) {
+      if (componentId === "minecraft:health") {
+        return {
+          get currentValue() {
+            return truck.health;
+          },
+          setCurrentValue(value) {
+            truck.health = value;
+            return true;
+          },
+        };
+      }
       if (componentId !== "minecraft:rideable") return undefined;
       return {
         getRiders: () => [...seated],

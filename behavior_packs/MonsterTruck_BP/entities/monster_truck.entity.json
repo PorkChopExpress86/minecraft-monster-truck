@@ -416,8 +416,8 @@
         ]
       },
       "minecraft:health": {
-        "value": 1000,
-        "max": 1000
+        "value": 20,
+        "max": 20
       },
       "minecraft:collision_box": {
         "width": 2.25,
@@ -513,26 +513,6 @@
           {
             "cause": "lava",
             "deals_damage": "yes"
-          },
-          {
-            "cause": "entity_attack",
-            "deals_damage": "yes",
-            "damage_multiplier": 0.25
-          },
-          {
-            "cause": "projectile",
-            "deals_damage": "yes",
-            "damage_multiplier": 0.25
-          },
-          {
-            "cause": "entity_explosion",
-            "deals_damage": "yes",
-            "damage_multiplier": 0.25
-          },
-          {
-            "cause": "block_explosion",
-            "deals_damage": "yes",
-            "damage_multiplier": 0.25
           }
         ]
       }

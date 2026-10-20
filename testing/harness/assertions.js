@@ -98,7 +98,9 @@ async function createShowcase(player, run) {
     entities.push(hill.truck);
     checks.push(hill.check);
     world.setTimeOfDay(6000);
-    // The rider's own view with the HUD on comes first, so frame review sees what a seated player sees.
+    // The rider's own view with the HUD on comes first, so frame review sees what a seated player sees. The
+    // red truck has 300 of its 1000 Durability knocked off, so its heart gauge shows 7 of 10 hearts.
+    entities[0].applyDamage(1200, { cause: EntityDamageCause.entityAttack });
     if (!entities[0].getComponent("minecraft:rideable").addRider(player)) {
       throw new Error("Player could not board the red showcase truck");
     }
@@ -298,24 +300,28 @@ async function checkHeavyDuty(player, run, origin) {
   const parkedText = () => `parked truck peak speed ${parked.peakSpeed.toFixed(3)} blocks/tick, pig nearest ${parked.nearestPig.toFixed(2)} blocks`;
   try {
     await wait(10);
+    // The production script charges hits to the truck's 1000 Durability and shows it on minecraft:health, a
+    // 20-point gauge (ADR-0020). Dynamic properties belong to the pack that set them, so this pack reads the
+    // gauge: one point per 50 Durability, and each hit below moves it by whole points.
     const health = truck.getComponent("minecraft:health");
-    if (health.effectiveMax !== 1000) throw new Error("Truck must have 1000 health");
+    const gauge = () => health.currentValue;
+    if (health.effectiveMax !== 20) throw new Error("Truck gauge must have 20 health");
     if (truck.getComponent("minecraft:buoyant")) {
       // Buoyant component registered and exposed in Script API
     }
-    truck.applyDamage(40, { cause: EntityDamageCause.entityAttack });
+    truck.applyDamage(400, { cause: EntityDamageCause.entityAttack });
     await wait(2);
-    if (health.currentValue !== 990) throw new Error("Combat armor failed: " + health.currentValue);
+    if (gauge() !== 18) throw new Error("Combat armor failed: 400 melee left the gauge at " + gauge() + ", not 18");
     await wait(12);
-    truck.applyDamage(40, { cause: EntityDamageCause.fall });
+    truck.applyDamage(400, { cause: EntityDamageCause.fall });
     await wait(2);
-    if (health.currentValue !== 990) throw new Error("Fall protection failed");
-    truck.applyDamage(40, { cause: EntityDamageCause.lava });
+    if (gauge() !== 18) throw new Error("Fall protection failed: gauge " + gauge());
+    truck.applyDamage(100, { cause: EntityDamageCause.lava });
     await wait(12);
-    if (health.currentValue !== 950) throw new Error("Lava hazard damage failed: " + health.currentValue);
-    truck.applyDamage(40, { cause: EntityDamageCause.fire });
+    if (gauge() !== 16) throw new Error("Lava hazard damage failed: gauge " + gauge());
+    truck.applyDamage(100, { cause: EntityDamageCause.fire });
     await wait(2);
-    if (health.currentValue !== 910) throw new Error("Fire hazard damage failed: " + health.currentValue);
+    if (gauge() !== 14) throw new Error("Fire hazard damage failed: gauge " + gauge());
     stopSampling();
     if (!pig.isValid) throw new Error(`Pig beside the parked truck is gone; ${parkedText()}; hurts ${JSON.stringify(pigHurts)}`);
     const pigHealth = pig.getComponent("minecraft:health").currentValue;
@@ -408,7 +414,7 @@ async function checkHeavyDuty(player, run, origin) {
 
     return [
       "two-block ledge traversed with horizontal impulses",
-      "1000 health",
+      "1000 Durability shown on a 20-health gauge",
       "75% melee damage reduction",
       "fall damage immunity",
       "fire and lava remain catastrophic Scrap-producing hazards",

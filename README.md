@@ -27,7 +27,7 @@ Colors change the body, hood, roof, and wheel-hub accents. Tires stay dark, with
 
 | Stat | Value |
 |---|---|
-| Health | 1,000 HP (500 hearts) |
+| Durability | 1,000 points, shown to riders as one row of 10 hearts |
 | Damage received (melee, projectile, explosion) | 25% of normal |
 | Fall damage | None (100% Pneumatic Shock Absorption) |
 | Movement attribute | 0.55 |

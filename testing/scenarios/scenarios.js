@@ -4,6 +4,7 @@ import { DRIVING, headingVector } from "../driving.js";
 import { findDryLanding } from "../amphibious.js";
 import { HIT_COOLDOWN_TICKS, isInContactPerimeter } from "../contact.js";
 import { TRUCK_WIDTH } from "../geometry.js";
+import { DURABILITY, DURABILITY_PROPERTY } from "../durability.js";
 import {
   board, drive, fill, health, horizontal, park, resetArena, riders, spawnTruck, wait,
 } from "./arena.js";
@@ -14,7 +15,7 @@ import {
 
 const GROUND_Y = -60;            // walking surface of the flat starter (grass top at -61)
 const PLAYER_MAX_HEALTH = 20;
-const TRUCK_MAX_HEALTH = 1000;
+const TRUCK_MAX_HEALTH = DURABILITY;
 const PITCH_TOLERANCE = 5;       // degrees, agreed in #33
 const PITCH_CLAMP = 35;          // degrees, ADR-0014
 const PITCH_MAX_STEP = 15;       // degrees per tick: 0.2 smoothing of a full 70 degree swing, rounded up
@@ -1184,8 +1185,8 @@ async function spawn_sources({ dimension, origin, driver, run }) {
 function retrievalBench({ dimension, origin, run }) {
   const location = at(origin, 0, 6);
   const clear = () => dimension.getEntities({ type: "minecraft:item", location, maxDistance: 6 }).forEach(item => item.remove());
-  // A killed entity can stay valid through its death animation.
-  const dead = truck => !truck.isValid || health(truck) <= 0;
+  // A killed entity can stay valid through its death animation, its gauge at 0.
+  const dead = truck => !truck.isValid || truck.getComponent("minecraft:health").currentValue <= 0;
   // Items are counted as they spawn, so drops that land in fire (lightning ignites the ground)
   // still count. kill(truck) destroys the truck and resolves once it is gone.
   const destroy = async kill => {
@@ -1200,7 +1201,7 @@ function retrievalBench({ dimension, origin, run }) {
       const truck = spawnTruck(dimension, run, location);
       await wait(5);
       await kill(truck);
-      if (!dead(truck)) throw new Error("truck survived: health " + health(truck));
+      if (!dead(truck)) throw new Error("truck survived: Durability " + health(truck));
       await wait(10);
     } finally {
       world.afterEvents.entitySpawn.unsubscribe(spawned);
@@ -1235,7 +1236,7 @@ async function retrieval({ dimension, origin, driver, run }) {
   // kill it returns the Vehicle Item. retrieval_full_health swings from full health (opt-in: 2 minutes).
   let swings = 0;
   const retrieved = await destroy(async truck => {
-    truck.getComponent("minecraft:health").setCurrentValue(1);
+    truck.setDynamicProperty(DURABILITY_PROPERTY, 1);
     for (let tick = 0; tick < 100 && !dead(truck); tick++) {
       if (driver.attackEntity(truck)) swings++;
       await wait(1);
@@ -1268,7 +1269,7 @@ async function retrieval({ dimension, origin, driver, run }) {
   });
   try {
     scrapOnly(await destroy(async truck => {
-      truck.getComponent("minecraft:health").setCurrentValue(1);
+      truck.setDynamicProperty(DURABILITY_PROPERTY, 1);
       dimension.spawnEntity("minecraft:lightning_bolt", truck.location);
       for (let tick = 0; tick < 40 && !dead(truck); tick++) await wait(1);
     }), "a lightning kill");
@@ -1285,7 +1286,7 @@ async function retrieval_full_health({ dimension, origin, driver, run }) {
   // Real swings from a Survival player take a fresh truck from full health to the fatal blow,
   // which returns the Vehicle Item. Measured (run 2849f48e): one hit lands every 10 ticks (the
   // damage immunity window; attackEntity returns false in between). A fist deals 1 (about 500 s
-  // from full); after the 0.25 entity_attack multiplier a netherite sword deals 2.25 and a
+  // from full); after the 0.25 combat multiplier (durability.js) a netherite sword deals 2.25 and a
   // Sharpness V netherite sword 3.75: 266 swings, 2666 ticks (about 133 s, run 11fa266d). The
   // Sharpness V sword keeps the Scenario Run bounded. Over that long, slimes and other hostile
   // mobs spawned, knocked the driver about (some swings landed as 5.625 critical hits) and killed
@@ -1312,12 +1313,12 @@ async function retrieval_full_health({ dimension, origin, driver, run }) {
     inventory.setItem(driver.selectedSlotIndex, undefined);
     world.setDifficulty(difficulty);
   }
-  if (startHealth !== TRUCK_MAX_HEALTH) throw new Error(`Retrieval truck started at ${startHealth} health, not full`);
+  if (startHealth !== TRUCK_MAX_HEALTH) throw new Error(`Retrieval truck started at ${startHealth} Durability, not full`);
   // No entityDie fires: main.js cancels a player's fatal blow and removes the truck itself, and only that
   // path drops a Vehicle Item, so the drop below also shows the fatal blow was the driver's.
   oneVehicleItem(retrieved, "Player-fatal retrieval from full health");
   return [`a player's swings (Sharpness V netherite sword, ${swings} swings over ` +
-    `${system.currentTick - startTick} ticks from ${startHealth} health) ` +
+    `${system.currentTick - startTick} ticks from ${startHealth} Durability) ` +
     "return exactly one Vehicle Item and no Scrap"];
 }
 

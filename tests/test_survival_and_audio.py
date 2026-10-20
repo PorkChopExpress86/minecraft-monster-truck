@@ -27,8 +27,9 @@ def test_durability_and_loot():
         data = json.load(f)
         
     comps = data["minecraft:entity"]["components"]
-    assert comps["minecraft:health"]["value"] == 1000, "Health must be 1000 HP"
-    assert comps["minecraft:health"]["max"] == 1000
+    # One row of mount hearts; the 1000 Durability is script-tracked (ADR-0020).
+    assert comps["minecraft:health"]["value"] == 20, "Health must be the 20-point heart gauge"
+    assert comps["minecraft:health"]["max"] == 20
     
     loot_path = REPO_ROOT / "behavior_packs" / "MonsterTruck_BP" / "loot_tables" / "entities" / "monster_truck.json"
     assert loot_path.exists(), "Loot table for monster truck must exist"
