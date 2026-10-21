@@ -123,6 +123,16 @@ def check_archive(archive, label, max_file_size=None):
             raise ValueError("Unexpectedly large file in " + label)
 
 
+def repository(root):
+    """The main checkout of the repository at root, so every git worktree of it owns the same test world."""
+    root = Path(root).resolve()
+    pointer = root / ".git"
+    if not pointer.is_file():
+        return root
+    gitdir = Path(pointer.read_text(encoding="utf-8").removeprefix("gitdir:").strip())
+    return (gitdir / (gitdir / "commondir").read_text(encoding="utf-8").strip()).resolve().parent
+
+
 def create_world(root, config, data_root=None):
     root = Path(root).resolve()
     data_root = Path(data_root).resolve() if data_root else account_root()
@@ -131,7 +141,7 @@ def create_world(root, config, data_root=None):
         raise ValueError("Refusing redirected minecraftWorlds directory")
     worlds.mkdir(parents=True, exist_ok=True)
     world = worlds / ("addon-test-" + str(uuid.UUID(config["harness_uuid"])))
-    provenance = {"repository": str(root), "harness_uuid": config["harness_uuid"],
+    provenance = {"repository": str(repository(root)), "harness_uuid": config["harness_uuid"],
                   "source_url": WORLD_URL, "sha256": WORLD_SHA256}
     if world.exists():
         marker = world / SOURCE_MARKER
@@ -162,7 +172,7 @@ def create_world(root, config, data_root=None):
 
 
 def owner_data(root, config):
-    return {"repository": str(root.resolve()), "harness_uuid": config["harness_uuid"]}
+    return {"repository": str(repository(root)), "harness_uuid": config["harness_uuid"]}
 
 
 def validate_world(world):
