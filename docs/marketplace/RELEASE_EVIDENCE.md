@@ -25,6 +25,8 @@ Version 1.0.14, checked October 18, 2026, America/Chicago. This replaces the Sep
 
 The 11 Creator Tools warnings do not stop the packs loading. Seven `UNLINK` warnings name vanilla items the recipe uses. Two `JSON 192` warnings say `item_texture.json` uses a string where the schema expects an array; the game accepts both. `COMJSON 134` asks for a `uv_anim` key the game does not require, and `FORMATVER 238` says the animation controller format is newer than the schema expects.
 
+A Creator Tools pass carries little weight. Given a build whose behavior pack manifest was cut off mid-object, `validate all` still reported "Manifest Validation completed successfully", raised no error and exited 0 (checked October 21 against the 1.0.15 build). `scripts/validate_project.py` parses both manifests and is the check that catches a broken one.
+
 ## Real Windows client
 
 | Run | Mode | Result |
