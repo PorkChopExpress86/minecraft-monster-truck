@@ -12,10 +12,10 @@ import zipfile
 
 try:
     from .addon_packs import AddonPacks
-    from .bedrock_world import check_archive, customize_level, template_bytes
+    from .bedrock_world import check_archive, customize_level, repository, template_bytes
 except ImportError:
     from addon_packs import AddonPacks
-    from bedrock_world import check_archive, customize_level, template_bytes
+    from bedrock_world import check_archive, customize_level, repository, template_bytes
 
 
 MARKER = "[SCENARIO]"
@@ -34,8 +34,9 @@ def docker(*args):
 
 
 def server_zip(root, server):
-    """The pinned official server archive, downloaded once and verified on every use."""
-    cached = root / "dist/bedrock-tests/cache" / f"bedrock-server-{server['version']}.zip"
+    """The pinned official server archive, downloaded once per repository (git worktrees share the main checkout's
+    copy) and verified on every use."""
+    cached = repository(root) / "dist/bedrock-tests/cache" / f"bedrock-server-{server['version']}.zip"
     if not cached.exists():
         cached.parent.mkdir(parents=True, exist_ok=True)
         partial = cached.with_suffix(".partial")

@@ -1,4 +1,5 @@
 """Headless Scenario Run orchestration (ADR-0016), with Docker replaced by a fake."""
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -277,3 +278,20 @@ def test_diag_is_rejected_outside_client_mode(tmp_path):
     assert bedrock_test.main(["scenarios", "--diag", "x.py"], root=root) == 2
     report = json.loads((root / "dist/bedrock-tests/latest.json").read_text())
     assert report["error"] == "--diag is only accepted by client"
+
+
+def test_a_worktree_uses_the_server_archive_its_main_checkout_downloaded(tmp_path):
+    root = tmp_path / "repo"
+    (root / ".git/worktrees/wt").mkdir(parents=True)
+    (root / ".git/worktrees/wt/commondir").write_text("../..\n")
+    cached = root / "dist/bedrock-tests/cache/bedrock-server-1.2.3.zip"
+    cached.parent.mkdir(parents=True)
+    cached.write_bytes(b"server")
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    (worktree / ".git").write_text(f"gitdir: {root.as_posix()}/.git/worktrees/wt\n")
+    server = {"version": "1.2.3", "url": "http://invalid.test/never-fetched",
+              "sha256": hashlib.sha256(b"server").hexdigest()}
+
+    assert scenarios.server_zip(worktree, server) == cached.resolve()
+    assert not (worktree / "dist").exists()

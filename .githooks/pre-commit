@@ -11,7 +11,13 @@ if git grep --cached -nI 'TEMP-DIAGNOSTIC' -- . ':!docs' ':!.githooks'; then
 fi
 
 git ls-files -z 'behavior_packs/*.js' 'testing/scenarios/*.js' 'testing/harness/*.js' | xargs -0 -n1 node --check
-node_modules/.bin/tsc -p jsconfig.json
-python=.venv-testing/bin/python
-[[ -x "$python" ]] || python=.venv-testing/Scripts/python.exe  # Windows venv layout
+# A git worktree has no node_modules or venv of its own; it uses the main checkout's.
+main=$(cd "$(git rev-parse --git-common-dir)/.." && pwd)
+tsc=node_modules/.bin/tsc
+[[ -x "$tsc" ]] || tsc=$main/node_modules/.bin/tsc
+venv=.venv-testing
+[[ -d "$venv" ]] || venv=$main/.venv-testing
+"$tsc" -p jsconfig.json
+python=$venv/bin/python
+[[ -x "$python" ]] || python=$venv/Scripts/python.exe  # Windows venv layout
 REQUIRE_NODE=1 "$python" -m pytest -q
