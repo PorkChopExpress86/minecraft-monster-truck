@@ -22,6 +22,14 @@ A check whose pass is an absence (the rider stays seated, nothing takes damage, 
 
 A test proves only what its world models. A scenario that writes state the engine sets from player input (`isSneaking`, rider lists, button state), or a node test whose fake world allows what the engine may not (a player standing on an entity, a key that dismounts), proves only the add-on's reaction. Its row in `docs/ACCEPTANCE_COVERAGE.md` names the Client Input Run check that proves the engine side, or says it has none. Both slipped through before: `two_seat_drop` set `isSneaking`, which the real client never reports on a rider, and a node test asserted a rider set down on the truck's roof, which does not hold a player in the client.
 
+## A client check lands with a real Client Input Run
+
+A new or changed check in `scripts/client_checks.py` lands with a real Client Input Run that ran it, named by run id in the commit or PR. The fake client world in `tests/test_client_input.py` proves the check's logic only against what the fake models. `sneak_dismounts` passed every fake test and failed in the real client, because `querytarget` reports a player at eye height and the fake did not (run 4736a428, fixed in 2a7896c).
+
+## A fix commit quotes its failing test
+
+The pre-commit hook runs every test, so a failing test cannot land in a commit of its own. The test and its fix share one commit, and its message quotes the test's failure on the unfixed code: the assertion diff and the pass/fail counts.
+
 ## Driver input enters through `driverInput`
 
 Read driver keys and buttons only through `driverInput` in `main.js`. Scenario Runs supply a Simulated Driver's input through that seam (ADR-0016); input read anywhere else is invisible to them.
