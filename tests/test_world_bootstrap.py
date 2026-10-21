@@ -61,6 +61,19 @@ def test_world_creation_is_automatic_isolated_and_repeatable(starter):
     assert len(list((root / "dist/bedrock-tests/setup").glob("*/options.txt"))) == 1
 
 
+def test_a_worktree_finds_the_world_its_main_checkout_created(starter, tmp_path):
+    root, data_root, config, _ = starter
+    (root / ".git/worktrees/wt").mkdir(parents=True)
+    (root / ".git/worktrees/wt/commondir").write_text("../..\n")
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    (worktree / ".git").write_text(f"gitdir: {root.as_posix()}/.git/worktrees/wt\n")
+    result = world.create_world(root, config, data_root)
+    assert world.create_world(worktree, config, data_root) == result
+    with pytest.raises(ValueError, match="already exists"):
+        world.create_world(tmp_path / "other-repo", config, data_root)
+
+
 def test_world_creation_refuses_existing_unowned_destination(starter):
     root, data_root, config, _ = starter
     target = data_root / "minecraftWorlds" / ("addon-test-" + config["harness_uuid"])
