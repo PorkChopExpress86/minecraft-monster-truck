@@ -279,6 +279,23 @@ def test_refuses_unowned_world(project):
     assert not (world / "behavior_packs").exists()
 
 
+def test_a_worktree_deploys_into_the_world_its_main_checkout_owns(project, tmp_path):
+    root, config, world, logs = project
+    (root / ".git/worktrees/wt").mkdir(parents=True)
+    (root / ".git/worktrees/wt/commondir").write_text("../..\n")
+    worktree = tmp_path / "worktree"
+    shutil.copytree(root, worktree, ignore=shutil.ignore_patterns(".git"))
+    (worktree / ".git").write_text(f"gitdir: {root.as_posix()}/.git/worktrees/wt\n")
+    clone = tmp_path / "clone"
+    shutil.copytree(root, clone)
+    worlds.configure(root, config, world, logs, FakeClient())
+    worlds.deploy(worktree, config, world, "from-worktree")
+    generated = world / f"behavior_packs/addon-harness-{config['harness_uuid']}/scripts/run_config.js"
+    assert '"run_id": "from-worktree"' in generated.read_text()
+    with pytest.raises(runner.SetupError, match="ownership"):
+        worlds.deploy(clone, config, world, "from-clone")
+
+
 def test_rejects_redirected_metadata_before_writing(project, monkeypatch):
     root, config, world, logs = project
     metadata = world / "world_behavior_packs.json"
