@@ -1,6 +1,7 @@
 {
   "name": "minecraft-monster-truck-dev",
   "private": true,
+  "type": "module",
   "description": "Dev-only tooling: Script API types and type checking. Not part of the shipped packs.",
   "scripts": {
     "typecheck": "tsc -p jsconfig.json"
